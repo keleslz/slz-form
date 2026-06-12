@@ -1,5 +1,5 @@
 import type { BehaviorContext } from "./BehaviorContext";
-import type { UIFlag } from "../hook/ui/use-field/UiFlag";
+import type { UIFlag } from "./UIFlag";
 
 export type BehaviorResult = UIFlag[] | Promise<UIFlag[]>;
 

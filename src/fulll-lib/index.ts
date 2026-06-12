@@ -1,1 +1,1 @@
-export * from "./react-slz-form"
+export * from "./form-core"

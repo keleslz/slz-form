@@ -1,6 +1,6 @@
 import type { IValidator, ValidatorState } from "../validator";
 import type { BehaviorContext, IBehavior } from "../behavior";
-import type { UIFlag } from "../hook/ui/use-field";
+import type { UIFlag } from "../behavior";
 
 export interface FieldSnapshot {
     value: string;

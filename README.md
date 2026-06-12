@@ -19,7 +19,7 @@ Ce découpage garantit que la logique n'est écrite qu'une fois dans le core et 
 
 ## À quoi ça sert
 
-`slz-form-event` vise à éliminer le code répétitif qu'on réécrit à chaque fois qu'on construit un input dans une application frontend : gestion du `value`/`onChange`, du `touched`/`blur`, de l'état de validation (pristine / loading / valid / error / idle), du verrouillage pendant un appel async, du prefill depuis une API, du spinner, du `disabled` pendant la soumission, etc.
+`slz-form-event` vise à éliminer le code répétitif qu'on réécrit à chaque fois qu'on construit un input dans une application frontend : gestion du `value`/`onChange`, du `touched`/`blur`, de l'état de validation (pristine / loading / valid / error), du verrouillage pendant un appel async, du prefill depuis une API, du spinner, du `disabled` pendant la soumission, etc.
 
 L'idée : déclarer **ce que le champ est** et **les comportements qu'on lui branche** (validation, prefill, lock, fetch d'options…), et laisser le core orchestrer le reste, quel que soit le framework utilisé côté consommateur.
 
