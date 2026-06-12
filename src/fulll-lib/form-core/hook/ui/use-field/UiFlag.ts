@@ -1,0 +1,1 @@
+export type UIFlag = "pristine" | "loading" | "locked" | "error" | "valid";
