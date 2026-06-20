@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { lockedFetchBehavior, useField } from "../../slz-lib";
+import { useField } from "../../slz-lib";
 import type { SelectFieldProps, SelectOption } from "./props";
+import { lockedFetchBehavior } from "../../slz-lib/core";
 
 /**
  * Select-specific wrapper around `useField`. Owns the async options state,

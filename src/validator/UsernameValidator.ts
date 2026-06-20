@@ -1,4 +1,4 @@
-import { IValidator } from "../slz-lib/react-slz-form/validator/IValidator";
+import { IValidator } from "../slz-lib/core";
 
 export class UsernameValidator extends IValidator<string> {
     public validate(value: string){

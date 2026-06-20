@@ -1,9 +1,10 @@
-import { FORM_1, useAppSelector } from "../../redux";
+import { useAppSelector } from "../../redux";
+import { CAR_CONFIGURATION_FORM } from "../../redux/form/car-configuration-form";
 import type { ActionButtonProps } from "./props";
 
 // Component required to show the form status and prevent multiple re-renders while input typed or submitted
 export function ActionButton(props: ActionButtonProps) { 
-    const form = useAppSelector((state) => state.form[FORM_1.id]);
+    const form = useAppSelector((state) => state.form[CAR_CONFIGURATION_FORM.id]);
     if(!form) {
         return null
     }

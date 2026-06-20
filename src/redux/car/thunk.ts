@@ -1,10 +1,11 @@
 import { createAsyncThunk } from "@reduxjs/toolkit";
-import { FORM_1, formSlice } from "../form";
+import { formSlice } from "../form";
+import { CAR_CONFIGURATION_FORM } from "../form/car-configuration-form";
 
 export const createCarThunk = createAsyncThunk(
     "car/create",
-    async (_, { dispatch, extra }) => {
-        dispatch(formSlice.actions.submitting({ formId: FORM_1.id }));
+    async (_, { dispatch }) => {
+        dispatch(formSlice.actions.submitting({ formId: CAR_CONFIGURATION_FORM.id }));
         try {
             // Simulate API call
             await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -12,10 +13,10 @@ export const createCarThunk = createAsyncThunk(
             if (response instanceof Error) {
                 throw response;
             }
-            dispatch(formSlice.actions.submitted({ formId: FORM_1.id }));
-        } catch (error) {
+            dispatch(formSlice.actions.submitted({ formId: CAR_CONFIGURATION_FORM.id }));
+        } catch {
             // Trigger your global ui error handling here, e.g. using a toast notification
             // dispatch(formSlice.actions.submissionFailed({ formId: FORM_1.id }));  
-            dispatch(formSlice.actions.error({ formId: FORM_1.id }));
+            dispatch(formSlice.actions.error({ formId: CAR_CONFIGURATION_FORM.id }));
         }
     });

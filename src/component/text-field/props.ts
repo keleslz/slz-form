@@ -1,6 +1,5 @@
-import type { IBehavior } from "../../slz-lib/react-slz-form/behavior/IBehavior";
 import type { FieldStateId, FormStateId } from "../../redux";
-import type { IValidator } from "../../slz-lib/react-slz-form/validator/IValidator";
+import type { IBehavior, IValidator } from "../../slz-lib/core";
 
 export type TextFieldProps = {
     name: FieldStateId
@@ -9,6 +8,6 @@ export type TextFieldProps = {
     value?: string;
     required?: boolean;
     formId: FormStateId;
-    validator: IValidator<string>;
+    validator?: IValidator<string>;
     behaviors?: IBehavior[]
 }

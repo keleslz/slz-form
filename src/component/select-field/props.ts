@@ -1,6 +1,6 @@
 import type { IBehavior } from "../../slz-lib";
 import type { FieldStateId, FormStateId } from "../../redux";
-import type { IValidator } from "../../slz-lib/react-slz-form/validator/IValidator";
+import type { IValidator } from "../../slz-lib/react-core/validator/IValidator";
 
 export type SelectOption = { label: string; value: string };
 

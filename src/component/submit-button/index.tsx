@@ -1,6 +1,6 @@
 import { Button } from "@mui/material";
 import { useAppDispatch, useAppSelector } from "../../redux";
-import { hasFieldError } from "../../slz-lib/form-core/util/hasFieldError";
+import { hasFieldError } from "../../slz-lib/core/util/hasFieldError";
 import type { SubmitButtonProps } from "./props";
 import { createCarThunk } from "../../redux/car/thunk";
 
