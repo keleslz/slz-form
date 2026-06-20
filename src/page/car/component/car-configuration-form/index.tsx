@@ -1,7 +1,7 @@
 import { Stack, Typography } from "@mui/material";
-import { TextField } from "../../../../component/text-field";
 import { CAR_CONFIGURATION_FORM } from "../../../../redux/form/car-configuration-form";
 import { RedirectOnFormStatusChange } from "../../../../slz-lib";
+import { TextFieldV2 } from "../../../../component/text-field-v2";
 
 export function CarConfigurationForm() {
     /**
@@ -11,10 +11,10 @@ export function CarConfigurationForm() {
     return <Stack spacing={2}>
         <Typography variant='h6'>Configurez votre véhicule</Typography>
         
-        <TextField
+        <TextFieldV2
             formId={CAR_CONFIGURATION_FORM.id}
             name='name'
-            label=''
+            label='Versions'
         />
 
         <RedirectOnFormStatusChange

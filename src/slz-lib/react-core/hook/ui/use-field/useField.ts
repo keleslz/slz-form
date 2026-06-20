@@ -16,8 +16,8 @@ export type FieldStatus = FieldState<string>["status"];
 export function useField(props: UseFieldProps) {
     const { formId, fieldId, validator, value, required, behaviors } = props;
     const dispatch = useAppDispatch();
-    const formStatus = useAppSelector((s) => s.form[formId]?.status);
-    const existingField = useAppSelector((s) => getFormFieldById(s.form[formId], fieldId));
+    const formStatus = useAppSelector((s) => s.forms[formId]?.status);
+    const existingField = useAppSelector((s) => getFormFieldById(s.forms[formId], fieldId));
 
     const controller = useMemo(
         () => new FieldController({

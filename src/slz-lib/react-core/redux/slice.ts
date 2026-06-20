@@ -20,6 +20,7 @@ export const createFormSlice = <Fo extends string, Fi extends string>(name: stri
                 const { formId } = action.payload;
                 const form = s[formId];
                 if (!form) {
+                    console.error("Form not found")
                     return;
                 }
 
@@ -32,6 +33,7 @@ export const createFormSlice = <Fo extends string, Fi extends string>(name: stri
                 const { formId } = action.payload;
                 const form = s[formId];
                 if (!form) {
+                    console.error("Form not found")
                     return;
                 }
 
@@ -49,15 +51,18 @@ export const createFormSlice = <Fo extends string, Fi extends string>(name: stri
                 const form = s[formId];
 
                 if (!form) {
+                    console.error("Form not found")
                     return;
                 }
 
                 if (!hasField(form)) {
+                    console.error("No field referenced")
                     return;
                 }
 
                 const field = form.fields[fieldId];
                 if (!field) {
+                    console.error("Field not found")
                     return;
                 }
 
@@ -78,7 +83,14 @@ export const createFormSlice = <Fo extends string, Fi extends string>(name: stri
                 const s = state as FormState<string, string>;
                 const { formId, fieldId, status, errors } = action.payload;
                 const form = s[formId];
-                if (!form || !hasField(form)) return;
+                if (!form) {
+                    console.error('Form not found')
+                    return;
+                }
+                if (!hasField(form)) {
+                    console.error("No field referenced")
+                    return;
+                }
                 const field = form.fields[fieldId];
                 if (!field) return;
                 if (field.status.value === status) {
@@ -130,6 +142,7 @@ export const createFormSlice = <Fo extends string, Fi extends string>(name: stri
                 const { formId } = action.payload;
                 const form = s[formId];
                 if (!form) {
+                    console.error("Form not found")
                     return;
                 }
 
