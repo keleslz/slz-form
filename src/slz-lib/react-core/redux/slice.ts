@@ -1,5 +1,6 @@
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import { hasField, hasFieldError, type FieldState, type FormState } from "../../core";
+import type { FieldValue } from "../../../slz-lib-2/core/ui/FieldValue";
 
 /**
  * Fo = form id type, Fi = field id type. Both are string unions.
@@ -8,7 +9,7 @@ import { hasField, hasFieldError, type FieldState, type FormState } from "../../
  * a known TypeScript/Immer limitation. We cast `state` to `FormState<string>` internally
  * to work around this. The public API (actions, selectors) remains typed with `T`.
  */
-export const createFormSlice = <Fo extends string, Fi extends string>(name: string, initialState = {} as FormState<Fo, Fi>) => {
+export const createFormSlice = <Fo extends string, Fi extends FieldValue>(name: string, initialState = {} as FormState<Fo, Fi>) => {
     return createSlice({
         name: name,
         initialState,
@@ -39,39 +40,45 @@ export const createFormSlice = <Fo extends string, Fi extends string>(name: stri
 
                 form.status = { value: "submitted" };
             },
+            /**
+             * Upsert a field: creates the form and/or the field when they don't
+             * exist yet, otherwise updates the existing field in place. Replaces
+             * the former register/update split.
+             */
             updateField: (state, action: PayloadAction<{
                 formId: Fo;
                 fieldId: Fi;
-                value: string;
+                value: FieldValue;
                 status: "idle" | "valid" | "error";
                 errors?: string[];
             }>) => {
                 const s = state as FormState<string, string>;
                 const { formId, fieldId, value, status, errors } = action.payload;
-                const form = s[formId];
+                const fieldStatus = status === "error"
+                    ? { value: "error" as const, errors: errors || [] }
+                    : { value: status };
 
+                let form = s[formId];
                 if (!form) {
-                    console.error("Form not found")
-                    return;
-                }
-
-                if (!hasField(form)) {
-                    console.error("No field referenced")
-                    return;
+                    form = {
+                        id: formId,
+                        name: formId,
+                        status: status === "error" ? { value: "error", errors: [] } : { value: "idle" },
+                        fields: {},
+                    };
+                    s[formId] = form;
                 }
 
                 const field = form.fields[fieldId];
                 if (!field) {
-                    console.error("Field not found")
-                    return;
+                    form.fields[fieldId] = { id: fieldId, value, status: fieldStatus };
+                } else {
+                    field.value = value;
+                    field.status = fieldStatus;
                 }
 
-                field.value = value;
-                field.status = status === "error" ? { value: "error", errors: errors || [] } : { value: status };
-                const hasError = hasFieldError(form);
-                if (hasError) {
+                if (hasFieldError(form)) {
                     form.status = { value: "error", errors: errors || [] };
-                    return;
                 }
             },
             updateFieldStatus: (state, action: PayloadAction<{
@@ -102,26 +109,6 @@ export const createFormSlice = <Fo extends string, Fi extends string>(name: stri
                 if (hasFieldError(form)) {
                     form.status = { value: "error", errors: errors ?? [] };
                 }
-            },
-            registerField: (state, action: PayloadAction<{
-                formId: Fo;
-                field: FieldState<Fi>;
-                errors?: string[];
-            }>) => {
-                const s = state as FormState<string, string>;
-                const { formId, field } = action.payload;
-                if (!s[formId]) {
-                    s[formId] = {
-                        id: formId,
-                        name: formId,
-                        status: field.status.value === "error" ? { value: "error", errors: [] } : { value: "idle" },
-                        fields: {
-                            [field.id]: field
-                        }
-                    };
-                    return;
-                }
-                s[formId].fields[field.id] = field;
             },
             unregisterField: (state, action: PayloadAction<{
                 formId: Fo;

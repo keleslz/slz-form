@@ -1,12 +1,14 @@
+import type { FieldValue } from "../ui/FieldValue";
+import type { ValidatorState } from "./ValidatorState";
+
 export type ValidationOption = {
     required?: boolean;
 }
 
-export type ValidatorState = { status: "idle" | "loading" | "valid" } | { status: "error", errors: string[] };
 export type ValidatorListener = () => void;
 
 export abstract class IValidator {
-    private value?: string|string[];
+    private value?: FieldValue;
     private errors: Map<number, string | null> = new Map();
     private options?: ValidationOption;
     private state: ValidatorState = { status: "idle" };
@@ -38,7 +40,7 @@ export abstract class IValidator {
         this.listeners.forEach(l => l());
     }
 
-    public hasError(): boolean {
+    public get hasError() {
         return Array.from(this.errors.values()).some(v => v !== null);
     }
 
@@ -46,8 +48,12 @@ export abstract class IValidator {
         return Array.from(this.errors.values()).filter((e): e is string => e !== null);
     }
 
-    public getFirstError(): string | null {
-        for (const e of this.errors.values()) if (e !== null) return e;
+    public get firstError(): string | null {
+        for (const e of this.errors.values()) {
+            if (e !== null) {
+                return e;
+            }
+        }
         return null;
     }
 
@@ -62,16 +68,20 @@ export abstract class IValidator {
         }
     }
 
-    protected abstract validate(value?: T): void;
+    protected abstract validate(value?: FieldValue): void;
 
-    protected isEmpty(value?: T): boolean {
-        if (value === undefined || value === null) return true;
-        if (typeof value === 'string') return value.trim() === '';
+    protected isEmpty(value?: FieldValue): boolean {
+        if (value === undefined || value === null) {
+            return true;
+        }
+        if (typeof value === 'string') {
+            return value.trim() === '';
+        }
         return false;
     }
 
     /** Synchronous validation — sets state directly. */
-    public handle(value?: T) {
+    public handle(value?: FieldValue) {
         this.value = value;
         this.errors = new Map();
 
@@ -95,12 +105,12 @@ export abstract class IValidator {
     }
 
     /** Async-aware validation. Sync validators just delegate to handle(). */
-    public async handleAsync(value?: T): Promise<this> {
+    public async handleAsync(value?: FieldValue): Promise<this> {
         this.handle(value);
         return this;
     }
 
-    public getValue(): T | undefined {
+    public getValue(): FieldValue | undefined {
         return this.value;
     }
 }

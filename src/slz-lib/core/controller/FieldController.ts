@@ -22,11 +22,7 @@ type Listener = () => void;
 type SyncHook = "onMount" | "onChange" | "onBlur" | "onSubmit" | "onValidationResolved";
 
 /**
- * Framework-agnostic orchestrator: owns the field's local state (value, touched,
- * submitting), runs the lifecycle hooks of its behaviors, mirrors the validator,
- * and exposes a subscribe/getSnapshot pair for any external store binding
- * (React `useSyncExternalStore`, Vue ref, Solid signal, ...).
- *
+ * Framework-agnostic orchestrator
  * Knows nothing about React, Redux, MUI, or the form-level state.
  */
 export class FieldController {

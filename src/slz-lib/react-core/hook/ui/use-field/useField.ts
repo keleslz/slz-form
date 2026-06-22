@@ -35,17 +35,19 @@ export function useField(props: UseFieldProps) {
         () => controller.getSnapshot(),
     );
 
-    // mount/unmount + initial registerField
+    // mount/unmount + initial upsert
     useEffect(() => {
         controller.mount();
         const initial = controller.getSnapshot();
-        dispatch(formSlice.actions.registerField({
+        dispatch(formSlice.actions.updateField({
             formId,
-            field: {
-                id: fieldId,
-                value: initial.value,
-                status: toFieldStatus(initial.validatorStatus, initial.errors),
-            },
+            fieldId,
+            value: initial.value,
+            status: toVerdict({
+                status: initial.validatorStatus,
+                errors: initial.errors,
+            }),
+            errors: initial.errors,
         }));
         return () => controller.unmount();
     }, [controller, dispatch, formId, fieldId]);

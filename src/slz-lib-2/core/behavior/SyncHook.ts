@@ -1,0 +1,1 @@
+export type SyncHook = "onMount" | "onChange" | "onFocus" | "onBlur"

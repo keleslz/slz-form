@@ -1,62 +1,64 @@
 import { TextField as MuiTextField, Stack, CircularProgress, InputAdornment } from "@mui/material";
 import type { TextFieldProps } from "./props";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { Controller } from "../../slz-lib-2/core/Controller";
-import { useAppSelector } from "../../redux";
-// import { getFormFieldById } from "../../slz-lib-2/core/util";
+import { formSlice, useAppDispatch, useAppSelector } from "../../redux";
 
 export function TextFieldV2(props: TextFieldProps) {
+    const dispatch = useAppDispatch()
     const existingField = useAppSelector((s) => s.forms[props.formId]?.fields[props.fieldId]);
 
     const controller = useMemo(() => new Controller({
         validator: props.validator,
         behaviors: props.behaviors,
+        dispatch: (field) => {
+            const status = field.validator?.getState().status;
+            dispatch(formSlice.actions.updateField({
+                formId: props.formId,
+                fieldId: props.fieldId,
+                value: field.value,
+                status: status === "error" ? "error" : status === "valid" ? "valid" : "idle",
+                errors: field.validator?.getErrors(),
+            }));
+        },
         field: {
             name: props.fieldId,
             initialValue: props.value ?? existingField?.value ?? "",
-            required: props.required,
-        },
+            required: props.required
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [props.formId, props.fieldId])
 
-    /**
-     *     const snap = useSyncExternalStore(
-             (cb) => controller.subscribe(cb),
-             () => controller.getSnapshot(),
-         );
-     */
-
-    // mount/unmount + initial registerField
-    useEffect(() => {
-        controller.lifecycle.mount();
-    }, [])
+    const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
 
     useEffect(() => {
-        const value = props.value
-        if (value !== undefined) {
-            console.log()
-        }
-    })
-    // return <Stack spacing={2}>
-    //     <MuiTextField
-    //         label={props.label}
-    //         placeholder={props.placeholder}
-    //         variant="outlined"
-    //         value={controller.field?.value ?? ""}
-    //         onChange={(e) => controller.onChange(e.target.value)}
-    //         onBlur={controller.onBlur}
-    //         error={controller.showError}
-    //         helperText={controller.showError ? controller.errorMessage : undefined}
-    //         disabled={controller.isSubmitting}
-    //         slotProps={{
-    //             input: {
-    //                 // `readOnly` (not `disabled`) keeps the input focusable while
-    //                 // the field is locked — avoids losing focus on every loading flip.
-    //                 readOnly: controller.isLocked,
-    //                 endAdornment: controller.isLoading ? (
-    //                     <InputAdornment position="end"><CircularProgress size={20} /></InputAdornment>
-    //                 ) : undefined,
-    //             },
-    //         }}
-    //     />
-    // </Stack>;
+        controller.mount(props.value);
+        return () => controller.unmount();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [controller]);
+
+    const flags = snapshot.flags;
+    const isLoading = flags.includes("loading");
+    const showError = flags.includes("error");
+
+    return <Stack spacing={2}>
+        <MuiTextField
+            label={props.label}
+            placeholder={props.placeholder}
+            variant="outlined"
+            value={typeof snapshot.value === "string" ? snapshot.value : ""}
+            onChange={(e) => controller.change(e.target.value)}
+            onBlur={controller.blur}
+            error={showError}
+            helperText={showError ? controller.field.validator?.firstError : undefined}
+            disabled={controller.form.isSubmit}
+            slotProps={{
+                input: {
+                    endAdornment: isLoading ? (
+                        <InputAdornment position="end"><CircularProgress size={20} /></InputAdornment>
+                    ) : undefined,
+                },
+            }}
+        />
+    </Stack>;
 }

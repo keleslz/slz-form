@@ -1,7 +1,7 @@
-import type { StateFlags } from "../state/StateFlag";
+import type { FieldValue } from "../ui/FieldValue";
 import type { BehaviorContext } from "./BehaviorContext";
+import type { BehaviorResult } from "./BehaviorResult";
 
-export type BehaviorResult = StateFlags | Promise<StateFlags>;
 
 /**
  * Lifecycle-driven behavior contract. Every hook is optional; the controller
@@ -10,9 +10,9 @@ export type BehaviorResult = StateFlags | Promise<StateFlags>;
  */
 export interface IBehavior {
     onMount?(ctx: BehaviorContext): BehaviorResult;
-    onChange?(value: string, ctx: BehaviorContext): BehaviorResult;
+    onChange?(ctx: BehaviorContext, value: FieldValue): BehaviorResult;
+    onFocus?(ctx: BehaviorContext): BehaviorResult;
     onBlur?(ctx: BehaviorContext): BehaviorResult;
     onSubmit?(ctx: BehaviorContext): BehaviorResult;
-    onValidationResolved?(ctx: BehaviorContext): BehaviorResult;
     onUnmount?(ctx: BehaviorContext): void;
 }
