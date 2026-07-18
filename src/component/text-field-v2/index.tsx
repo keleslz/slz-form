@@ -1,35 +1,29 @@
 import { TextField as MuiTextField, Stack, CircularProgress, InputAdornment } from "@mui/material";
 import type { TextFieldProps } from "./props";
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo } from "react";
 import { Controller } from "../../slz-lib-2/core/Controller";
 import { formSlice, useAppDispatch, useAppSelector } from "../../redux";
+import { useFieldSelector } from "../../slz-lib-2/react-core/hook/useFieldSelector";
 
 export function TextFieldV2(props: TextFieldProps) {
     const dispatch = useAppDispatch()
-    const existingField = useAppSelector((s) => s.forms[props.formId]?.fields[props.fieldId]);
+    const field = useFieldSelector({
+        fieldId: props.fieldId,
+        formId: props.formId,
+    })
 
+    /**
+     * TODO - Internalize registration logic in Controller. It should keep Form and Field state. The goal it's to minimize input and slice implementation to make it easily movable on other framework
+     */
     const controller = useMemo(() => new Controller({
         validator: props.validator,
         behaviors: props.behaviors,
-        dispatch: (field) => {
-            const status = field.validator?.getState().status;
-            dispatch(formSlice.actions.updateField({
-                formId: props.formId,
-                fieldId: props.fieldId,
-                value: field.value,
-                status: status === "error" ? "error" : status === "valid" ? "valid" : "idle",
-                errors: field.validator?.getErrors(),
-            }));
-        },
         field: {
             name: props.fieldId,
-            initialValue: props.value ?? existingField?.value ?? "",
+            initialValue: props.value,
             required: props.required
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [props.formId, props.fieldId])
-
-    const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+        },
+    }), [props])
 
     useEffect(() => {
         controller.mount(props.value);
@@ -37,24 +31,22 @@ export function TextFieldV2(props: TextFieldProps) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [controller]);
 
-    const flags = snapshot.flags;
-    const isLoading = flags.includes("loading");
-    const showError = flags.includes("error");
+    const snapshot = controller.getSnapshot()
 
     return <Stack spacing={2}>
         <MuiTextField
             label={props.label}
             placeholder={props.placeholder}
             variant="outlined"
-            value={typeof snapshot.value === "string" ? snapshot.value : ""}
-            onChange={(e) => controller.change(e.target.value)}
-            onBlur={controller.blur}
-            error={showError}
-            helperText={showError ? controller.field.validator?.firstError : undefined}
-            disabled={controller.form.isSubmit}
+            value={snapshot.getValue() ?? undefined}
+            onChange={(e) => controller.update(e.target.value)}
+            onBlur={controller.onBlur}
+            error={snapshot.hasFlags("error")}
+            helperText={controller.getValidator()?.firstError}
+            disabled={snapshot.hasFlags('loading')}
             slotProps={{
                 input: {
-                    endAdornment: isLoading ? (
+                    endAdornment: snapshot.hasFlags("loading") ? (
                         <InputAdornment position="end"><CircularProgress size={20} /></InputAdornment>
                     ) : undefined,
                 },

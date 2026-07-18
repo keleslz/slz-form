@@ -11,7 +11,7 @@ export abstract class IValidator {
     private value?: FieldValue;
     private errors: Map<number, string | null> = new Map();
     private options?: ValidationOption;
-    private state: ValidatorState = { status: "idle" };
+    private state: ValidatorState = { status: "pristine" };
     private listeners: Set<ValidatorListener> = new Set();
 
     public setOptions(options: ValidationOption) {
@@ -68,7 +68,7 @@ export abstract class IValidator {
         }
     }
 
-    protected abstract validate(value?: FieldValue): void;
+    protected abstract validate(value?: FieldValue): Promise<void> | void;
 
     protected isEmpty(value?: FieldValue): boolean {
         if (value === undefined || value === null) {
@@ -94,11 +94,12 @@ export abstract class IValidator {
         }
 
         if (!empty) {
+            console.log(this.validate)
             this.validate(value);
         }
 
         this.setState(
-            this.hasError()
+            this.hasError
                 ? { status: "error", errors: this.getErrors() }
                 : { status: "valid" });
         return this;
