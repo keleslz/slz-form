@@ -1,12 +1,7 @@
-import { Stack } from '@mui/material'
-import { DebugPanel } from './component/debug-panel'
-import { CarConfigurationForm } from './page/car/component/car-configuration-form'
+import { Showcase } from './page/showcase'
 
 function App() {
-  return <Stack spacing={4} direction="row">
-    <CarConfigurationForm />
-    <DebugPanel  />
-  </Stack>
+  return <Showcase />
 }
 
 export default App
