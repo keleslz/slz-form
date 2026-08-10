@@ -6,3 +6,4 @@ export * from "./ConsentValidator";
 export * from "./FileValidator";
 export * from "./NotInThePastValidator";
 export * from "./TimeWindowValidator";
+export * from "./UsernameValidator";

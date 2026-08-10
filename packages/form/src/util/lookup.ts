@@ -1,0 +1,95 @@
+import type { BehaviorContext, IBehavior } from "../behavior";
+import type { BehaviorState } from "../state";
+import { createDebouncer, type Debouncer } from "./debounce";
+
+export interface LookupParams {
+    /**
+     * Champs déclencheurs. Vide → le lookup part sur la frappe du champ lui-même
+     * (normalisation, complétion). Renseigné → il part quand l'un d'eux change.
+     */
+    watch?: readonly string[];
+    /** Attente avant l'appel, en ms. 0 = immédiat. */
+    debounce?: number;
+    /** Verrouiller le champ pendant l'appel. Défaut `true`. */
+    lock?: boolean;
+}
+
+/**
+ * Behavior asynchrone qui **écrit** : il appelle une API et remplace la valeur
+ * du champ par ce qu'elle renvoie.
+ *
+ * C'est le pendant de la validation asynchrone, et l'autre moitié du besoin. Un
+ * validator *juge* une valeur et ne peut pas y toucher ; un behavior *écrit* et
+ * ne peut pas se prononcer sur la validité. Aucun des deux ne remplace l'autre.
+ *
+ * ```ts
+ * // le champ « ville » se remplit à partir du code postal
+ * lookup((ctx) => fetchCity(ctx.watched("postcode")?.value as string), {
+ *     watch: ["postcode"],
+ *     debounce: 400,
+ * })
+ * ```
+ *
+ * L'écriture passe par `ctx.setValue`, qui ne marque pas le champ touché : une
+ * valeur venue d'une API n'est pas une interaction utilisateur, le champ reste
+ * `pristine` tant que l'utilisateur ne l'a pas modifiée.
+ *
+ * Le champ cible est toujours **celui qui porte le behavior** : un champ ne peut
+ * écrire que dans son propre état (invariants 5, 6, 20). Pour remplir B depuis
+ * A, c'est B qui observe A, jamais A qui pousse vers B.
+ */
+export function lookup<T = string>(
+    fetcher: (ctx: BehaviorContext<T>) => Promise<T | undefined>,
+    params: LookupParams = {},
+): IBehavior<T> {
+    const watch = params.watch ?? [];
+    const delay = params.debounce ?? 0;
+    const lock = params.lock ?? true;
+
+    // Une fenêtre d'attente par champ : l'instance de behavior ne porte ainsi
+    // que de la configuration et reste partageable entre plusieurs champs.
+    const debouncers = new Map<string, Debouncer>();
+    const debouncerOf = (name: string): Debouncer => {
+        const existing = debouncers.get(name);
+        if (existing) {
+            return existing;
+        }
+        const created = createDebouncer();
+        debouncers.set(name, created);
+        return created;
+    };
+
+    const run = async (ctx: BehaviorContext<T>): Promise<BehaviorState> => {
+        // `loading` dès la frappe, sans attendre la fin du délai : l'utilisateur
+        // voit tout de suite que quelque chose est en cours.
+        ctx.push(lock ? ctx.state.loading().lock() : ctx.state.loading());
+
+        if (!(await debouncerOf(ctx.name).wait(delay))) {
+            // Remplacé par un déclenchement plus récent : celui-ci prend la main
+            // et rendra la main sur l'état.
+            return ctx.state;
+        }
+        if (ctx.signal.aborted) {
+            return ctx.state;
+        }
+
+        try {
+            const value = await fetcher(ctx);
+            if (!ctx.signal.aborted && value !== undefined) {
+                ctx.setValue(value);
+            }
+        } catch {
+            // Un lookup qui échoue laisse la valeur en place : ce n'est pas une
+            // erreur de validation, et le Validator reste seul juge.
+        }
+
+        return ctx.state.idle().unlock();
+    };
+
+    return {
+        watch,
+        onChange: watch.length === 0 ? (ctx) => run(ctx) : undefined,
+        onDependencyChanged: watch.length > 0 ? (ctx) => run(ctx) : undefined,
+        onUnmount: (ctx) => debouncers.get(ctx.name)?.cancel(),
+    };
+}

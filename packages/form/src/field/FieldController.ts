@@ -158,13 +158,20 @@ export class FieldController<T = string> {
         this.focused = false;
         this.touched = true;
         this.run("onBlur");
-        void this.revalidate();
+        // `flush` après avoir lancé la revalidation : une validation différée
+        // part sans attendre son délai. Quitter un champ doit trancher tout de
+        // suite, pas 400 ms plus tard.
+        const pending = this.revalidate();
+        this.validator.flush();
+        void pending;
     }
 
     async submit(): Promise<void> {
         this.touched = true;
         this.run("onSubmit");
-        await this.revalidate();
+        const pending = this.revalidate();
+        this.validator.flush();
+        await pending;
     }
 
     setSubmitting(submitting: boolean): void {

@@ -9,6 +9,7 @@ import {
     validatePlateFormat,
     validateRange,
     validateTimeWindow,
+    validateUsernameFormat,
 } from "../../validation";
 import { REQUIRED_FIELDS, type FieldName, type Values } from "./values";
 
@@ -36,6 +37,8 @@ export function validateField(name: FieldName, values: Values): string | undefin
             return isEmpty(value) ? undefined : validateEmail(values.email) ?? undefined;
         case "plate":
             return isEmpty(value) ? undefined : validatePlateFormat(values.plate) ?? undefined;
+        case "username":
+            return isEmpty(value) ? undefined : validateUsernameFormat(values.username) ?? undefined;
         case "packs":
             return maxTwoPacks(values.packs) ?? undefined;
         case "mileage":

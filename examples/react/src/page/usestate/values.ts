@@ -4,6 +4,9 @@ export interface Values {
     plate: string;
     customerReference: string;
     comment: string;
+    username: string;
+    postcode: string;
+    city: string;
     brand: string;
     model: string;
     otherBrand: string;
@@ -25,6 +28,9 @@ export const INITIAL_VALUES: Values = {
     plate: "",
     customerReference: "",
     comment: "",
+    username: "",
+    postcode: "",
+    city: "",
     brand: "",
     model: "",
     otherBrand: "",
@@ -40,5 +46,5 @@ export const INITIAL_VALUES: Values = {
 
 /** Kept in sync by hand with the JSX below — nothing enforces it. */
 export const REQUIRED_FIELDS: readonly FieldName[] = [
-    "fullName", "email", "plate", "brand", "model", "fuel", "mileage", "deliveryDate", "licence",
+    "fullName", "email", "plate", "username", "brand", "model", "fuel", "mileage", "deliveryDate", "licence",
 ];

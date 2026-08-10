@@ -100,12 +100,61 @@ check("Overlay fermé au départ", !(await overlayOpen()));
 await page.locator(".overlay__toggle").click();
 await page.waitForTimeout(350);
 check("Overlay ouvert par le toggle", await overlayOpen());
-check("Overlay liste les champs", (await page.locator(".debug__table tr").count()) === 16,
+check("Overlay liste les champs", (await page.locator(".debug__table tr").count()) === 19,
     `${await page.locator(".debug__table tr").count()} lignes`);
 if (SCREENSHOT_DIR) await page.screenshot({ path: `${SCREENSHOT_DIR}/tab-slz.png`, fullPage: true });
 await page.locator(".overlay__toggle").click();
 await page.waitForTimeout(300);
 check("Overlay refermé", !(await overlayOpen()));
+
+console.log("\n── asynchrone différé ──");
+// Une salve de frappe ne doit déclencher qu'un seul appel réseau.
+const apiCalls = async () => {
+    const opened = await overlayOpen();
+    if (!opened) await page.locator(".overlay__toggle").click();
+    await page.waitForTimeout(150);
+    const text = await page.getByTestId("api-calls").textContent();
+    if (!opened) { await page.locator(".overlay__toggle").click(); await page.waitForTimeout(250); }
+    return text;
+};
+
+const username = field("Identifiant").locator("input");
+await username.click();
+for (const ch of "adalovelace") { await username.press(ch); await page.waitForTimeout(45); }
+await page.waitForTimeout(120);
+check("`loading` pendant la fenêtre d'attente", (await flags("Identifiant")).includes("loading"),
+    (await flags("Identifiant")).join(","));
+await page.waitForTimeout(1400);
+check("identifiant libre → valid", (await flags("Identifiant")).includes("valid"),
+    (await flags("Identifiant")).join(","));
+
+await username.fill("");
+await username.pressSequentially("ada", { delay: 40 });
+await page.waitForTimeout(1400);
+check("identifiant pris → error", (await flags("Identifiant")).includes("error"),
+    (await flags("Identifiant")).join(","));
+
+// lookup : le code postal remplit la ville, sans marquer le champ touché
+const postcode = field("Code postal").locator("input");
+await postcode.click();
+for (const ch of "75001") { await postcode.press(ch); await page.waitForTimeout(45); }
+await page.waitForTimeout(200);
+check("la ville est `loading` + `locked` pendant l'attente",
+    (await flags("Ville")).includes("loading") && (await flags("Ville")).includes("locked"),
+    (await flags("Ville")).join(","));
+await page.waitForTimeout(1500);
+check("la ville a été écrite", (await field("Ville").locator("input").inputValue()) === "Paris",
+    await field("Ville").locator("input").inputValue());
+check("l'écriture laisse la ville `pristine`", (await flags("Ville")).includes("pristine"),
+    (await flags("Ville")).join(","));
+
+const counts = await apiCalls();
+const parsed = counts.match(/(\d+) identifiant · (\d+) ville/);
+const usernameCalls = Number(parsed?.[1] ?? -1);
+const cityCalls = Number(parsed?.[2] ?? -1);
+// Sans debounce, taper « adalovelace » puis « ada » coûterait ~14 appels.
+check("2 salves de frappe → au plus 3 appels d'identifiant", usernameCalls >= 1 && usernameCalls <= 3, counts);
+check("1 code postal saisi → au plus 2 appels de ville", cityCalls >= 1 && cityCalls <= 2, counts);
 
 console.log("\n── onglet 2 : useState ──");
 await tab("useState").click();
@@ -139,7 +188,7 @@ check("Debugger présent sur la baseline aussi", (await page.locator(".overlay__
 await page.locator(".overlay__toggle").click();
 await page.waitForTimeout(350);
 check("Overlay baseline ouvert", await overlayOpen());
-check("Overlay baseline liste les champs", (await page.locator(".debug__table tr").count()) === 16);
+check("Overlay baseline liste les champs", (await page.locator(".debug__table tr").count()) === 19);
 if (SCREENSHOT_DIR) await page.screenshot({ path: `${SCREENSHOT_DIR}/tab-usestate.png`, fullPage: true });
 
 const usBefore = { comment: await renders("Commentaire"), mileage: await renders("Kilométrage") };

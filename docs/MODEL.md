@@ -150,6 +150,7 @@ Couvrent les cas courants sans écrire de behavior :
 | `loadOptions(fetcher, { watch, lock, resetOnReload })` | charge les options en API ; `watch` en fait un select dépendant |
 | `prefill(fetcher)` | remplit le champ au montage, verrouillé et `loading`, sans le marquer touché |
 | `lockWhile(condition, watch)` | verrouillage conditionnel, y compris inter-champs |
+| `lookup(fetcher, { watch, debounce })` | appelle une API et **écrit** la valeur du champ |
 | `hideWhen(watch, predicate)` | émet `invisible` |
 | `dependsOn(watch, effect)` | échappatoire générique pour toute réaction inter-champs |
 | `createBehavior(def)` | typage d'un littéral de behavior |
@@ -265,8 +266,11 @@ inchangés).
 2. **Champs dynamiques** (field arrays, champs répétés). `addField`/`removeField`
    existent (`form.field()` / `form.remove()`), mais aucun cas d'usage n'est
    encore éprouvé.
-3. **Debounce.** Il n'y a pas encore de `DebouncedValidator` ; la validation part
-   à chaque `change`. À ajouter comme util si le besoin se confirme.
+3. ~~**Debounce.**~~ Fait. Deux mécanismes distincts, parce qu'ils tombent sur
+   deux axes différents et qu'aucun ne peut faire le travail de l'autre :
+   `DebouncedValidator` diffère un validator (qui *juge* une valeur), `lookup`
+   diffère un behavior (qui *écrit* une valeur). `IValidator.flush()` permet au
+   FieldController de trancher sans attendre au blur et à la soumission.
 4. **Packaging.** Le core est isolé mais pas encore un package séparé : pas de
    `exports`/`main`, pas de build lib. C'est l'étape qui rend `slz-form-event`
    réellement publiable indépendamment des adapters.

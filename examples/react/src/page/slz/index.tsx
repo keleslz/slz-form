@@ -1,12 +1,14 @@
 import { CAR_CONFIGURATION_FORM } from "../../form";
 import {
     brandOptions,
+    cityFromPostcode,
     customerReferencePrefill,
     lockedUntilConsent,
     modelOptions,
     onlyWhenBrandIsOther,
     packOptions,
 } from "../../form/behavior";
+import { DebouncedValidator } from "slz-form";
 import {
     ConsentValidator,
     EmailValidator,
@@ -16,6 +18,7 @@ import {
     PlateValidator,
     SelectionCountValidator,
     TimeWindowValidator,
+    UsernameValidator,
 } from "../../form/validator";
 import { DebugOverlay } from "../shared/DebugOverlay";
 import { FUEL_OPTIONS } from "../shared/fuelOptions";
@@ -62,6 +65,23 @@ export function SlzCarForm() {
                         hint="Prefill API : verrouillé et `loading`, reste `pristine`" />
 
                     <TextAreaField form={FORM} name="comment" label="Commentaire" rows={3} />
+                </section>
+
+                <section className="panel">
+                    <h2>Asynchrone différé</h2>
+
+                    <TextField form={FORM} name="username" label="Identifiant" required
+                        validator={new DebouncedValidator(new UsernameValidator(), 400)}
+                        placeholder="ada, grace et alan sont pris"
+                        hint="Validation async différée : une salve de frappe = un seul appel API" />
+
+                    <TextField form={FORM} name="postcode" label="Code postal"
+                        placeholder="75001, 69001, 13001, 33000"
+                        hint="Déclencheur du lookup ci-dessous" />
+
+                    <TextField form={FORM} name="city" label="Ville"
+                        behaviors={[cityFromPostcode]}
+                        hint="Behavior async qui écrit : rempli depuis le code postal, reste `pristine`" />
                 </section>
 
                 <section className="panel">

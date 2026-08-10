@@ -9,12 +9,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isPlateAvailable } from "../../api/check-plate-availability";
+import { isUsernameAvailable } from "../../api/check-username-availability";
+import { fetchCityByPostcode } from "../../api/fetch-city-by-postcode";
 import { fetchBrands } from "../../api/fetch-brands";
 import { fetchCustomerReference } from "../../api/fetch-customer-reference";
 import { fetchModels } from "../../api/fetch-models";
 import { fetchOptionPacks } from "../../api/fetch-option-packs";
 import type { Option } from "../../api/types";
-import { PLATE_TAKEN, validatePlateFormat } from "../../validation";
+import { PLATE_TAKEN, USERNAME_TAKEN, validatePlateFormat, validateUsernameFormat } from "../../validation";
 import { DebugOverlay } from "../shared/DebugOverlay";
 import { FieldShell } from "../shared/FieldShell";
 import { FUEL_OPTIONS } from "../shared/fuelOptions";
@@ -62,6 +64,18 @@ export function UseStateCarForm() {
     const [plateChecking, setPlateChecking] = useState(false);
     const [plateAsyncError, setPlateAsyncError] = useState<string>();
     const plateRun = useRef(0);
+
+    // Validation asynchrone différée, à la main : un timer, un jeton de course,
+    // un état de chargement et un état d'erreur — pour un seul champ.
+    const [usernameChecking, setUsernameChecking] = useState(false);
+    const [usernameAsyncError, setUsernameAsyncError] = useState<string>();
+    const usernameRun = useRef(0);
+    const usernameTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+    // Lookup différé qui écrit une valeur : encore un timer, encore un jeton.
+    const [cityLoading, setCityLoading] = useState(false);
+    const cityRun = useRef(0);
+    const cityTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
     const [submitting, setSubmitting] = useState(false);
 
@@ -134,14 +148,63 @@ export function UseStateCarForm() {
             .finally(() => { if (run === plateRun.current) setPlateChecking(false); });
     }, [values.plate]);
 
+    // vérification de disponibilité, différée de 400 ms
+    useEffect(() => {
+        clearTimeout(usernameTimer.current);
+        if (values.username === "" || validateUsernameFormat(values.username)) {
+            setUsernameAsyncError(undefined);
+            setUsernameChecking(false);
+            return;
+        }
+        const run = usernameRun.current + 1;
+        usernameRun.current = run;
+        setUsernameChecking(true);
+        usernameTimer.current = setTimeout(() => {
+            isUsernameAvailable(values.username)
+                .then((available) => {
+                    if (run !== usernameRun.current) return;
+                    setUsernameAsyncError(available ? undefined : USERNAME_TAKEN);
+                })
+                .catch(() => undefined)
+                .finally(() => { if (run === usernameRun.current) setUsernameChecking(false); });
+        }, 400);
+        return () => clearTimeout(usernameTimer.current);
+    }, [values.username]);
+
+    // ville déduite du code postal, différée de 400 ms
+    useEffect(() => {
+        clearTimeout(cityTimer.current);
+        if (values.postcode.length < 5) {
+            return;
+        }
+        const run = cityRun.current + 1;
+        cityRun.current = run;
+        setCityLoading(true);
+        cityTimer.current = setTimeout(() => {
+            fetchCityByPostcode(values.postcode)
+                .then((city) => {
+                    if (run !== cityRun.current || city === undefined) return;
+                    // Écriture directe, sans passer par `set()` : une valeur venue
+                    // d'une API ne doit pas marquer le champ touché. À ne pas oublier.
+                    setValues((current) => ({ ...current, city }));
+                })
+                .catch(() => undefined)
+                .finally(() => { if (run === cityRun.current) setCityLoading(false); });
+        }, 400);
+        return () => clearTimeout(cityTimer.current);
+    }, [values.postcode]);
+
     // ── derived ──────────────────────────────────────────────────────────
     const errors = useMemo(() => {
         const computed = validateAll(values);
         if (!computed.plate && plateAsyncError) {
             computed.plate = plateAsyncError;
         }
+        if (!computed.username && usernameAsyncError) {
+            computed.username = usernameAsyncError;
+        }
         return computed;
-    }, [values, plateAsyncError]);
+    }, [values, plateAsyncError, usernameAsyncError]);
 
     const isValid = Object.keys(errors).length === 0;
 
@@ -180,7 +243,10 @@ export function UseStateCarForm() {
         setValues(INITIAL_VALUES);
         setTouched({});
         setPlateAsyncError(undefined);
+        setUsernameAsyncError(undefined);
         plateRun.current += 1;
+        usernameRun.current += 1;
+        cityRun.current += 1;
     }
 
     // ── render ───────────────────────────────────────────────────────────
@@ -230,6 +296,41 @@ export function UseStateCarForm() {
                         <TextAreaInput
                             value={values.comment} rows={3} disabled={submitting}
                             onChange={(v) => set("comment", v)} onBlur={() => blur("comment")}
+                        />
+                    </FieldShell>
+                </section>
+
+                <section className="panel">
+                    <h2>Asynchrone différé</h2>
+
+                    <FieldShell
+                        {...shell("username")} label="Identifiant" required
+                        isLoading={usernameChecking}
+                        hint="Timer, jeton de course et deux états, à la main. Le blur n'écourte pas le délai."
+                    >
+                        <TextInput
+                            value={values.username} placeholder="ada, grace et alan sont pris"
+                            disabled={submitting}
+                            onChange={(v) => set("username", v)} onBlur={() => blur("username")}
+                        />
+                    </FieldShell>
+
+                    <FieldShell {...shell("postcode")} label="Code postal"
+                        hint="Déclencheur du lookup ci-dessous">
+                        <TextInput
+                            value={values.postcode} placeholder="75001, 69001, 13001, 33000"
+                            disabled={submitting}
+                            onChange={(v) => set("postcode", v)} onBlur={() => blur("postcode")}
+                        />
+                    </FieldShell>
+
+                    <FieldShell
+                        {...shell("city")} label="Ville" isLoading={cityLoading}
+                        hint="Écriture directe dans `values` pour ne pas marquer le champ touché"
+                    >
+                        <TextInput
+                            value={values.city} disabled={cityLoading || submitting}
+                            onChange={(v) => set("city", v)} onBlur={() => blur("city")}
                         />
                     </FieldShell>
                 </section>
@@ -362,6 +463,8 @@ export function UseStateCarForm() {
                     errors={errors}
                     submitting={submitting}
                     loading={{
+                        username: usernameChecking,
+                        city: cityLoading,
                         brands: brandsLoading,
                         models: modelsLoading,
                         packs: packsLoading,

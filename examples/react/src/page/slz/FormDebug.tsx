@@ -1,5 +1,7 @@
 import { CAR_CONFIGURATION_FORM } from "../../form";
 import { useForm } from "slz-react-form";
+import { cityLookupCalls } from "../../api/fetch-city-by-postcode";
+import { usernameCheckCalls } from "../../api/check-username-availability";
 
 function display(value: unknown): string {
     if (value instanceof File) {
@@ -23,6 +25,9 @@ export function FormDebug() {
                     {snapshot.isValid ? "valide" : "incomplet"}
                 </span>
                 <span className="chip">{snapshot.fields.length} champs</span>
+                <span className="chip" data-testid="api-calls">
+                    API : {usernameCheckCalls()} identifiant · {cityLookupCalls()} ville
+                </span>
             </div>
 
             <table className="debug__table">

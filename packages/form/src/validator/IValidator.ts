@@ -104,6 +104,17 @@ export abstract class IValidator<T = string> {
         return this.state;
     }
 
+    /**
+     * Fait partir sans attendre une validation différée en cours.
+     *
+     * Sans effet ici : seuls les validators qui diffèrent leur exécution le
+     * redéfinissent. Le FieldController l'appelle au blur et à la soumission,
+     * pour ne jamais statuer sur une valeur périmée.
+     */
+    flush(): void {
+        // no-op
+    }
+
     reset(): void {
         this.run += 1;
         this.setState({ status: "pristine", errors: [] });

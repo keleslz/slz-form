@@ -8,3 +8,4 @@ export * from "./consent";
 export * from "./file";
 export * from "./future-date";
 export * from "./time-window";
+export * from "./username";

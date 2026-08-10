@@ -1,3 +1,5 @@
+import { usernameCheckCalls } from "../../api/check-username-availability";
+import { cityLookupCalls } from "../../api/fetch-city-by-postcode";
 import type { Errors } from "./validate";
 import type { FieldName, Values } from "./values";
 
@@ -39,6 +41,9 @@ export function FormDebug({ values, touched, errors, submitting, loading }: Form
                     {invalid.length === 0 ? "valide" : "incomplet"}
                 </span>
                 <span className="chip">{names.length} champs</span>
+                <span className="chip" data-testid="api-calls">
+                    API : {usernameCheckCalls()} identifiant · {cityLookupCalls()} ville
+                </span>
                 {pending.map((key) => <span key={key} className="chip chip--loading">{key}</span>)}
             </div>
 
