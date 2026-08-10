@@ -7,6 +7,7 @@ export interface Values {
     username: string;
     postcode: string;
     city: string;
+    citySearch: string;
     brand: string;
     model: string;
     otherBrand: string;
@@ -31,6 +32,7 @@ export const INITIAL_VALUES: Values = {
     username: "",
     postcode: "",
     city: "",
+    citySearch: "",
     brand: "",
     model: "",
     otherBrand: "",

@@ -1,6 +1,7 @@
 import type { BehaviorContext, IBehavior } from "../behavior";
 import type { BehaviorState } from "../state";
 import { createDebouncer, type Debouncer } from "./debounce";
+import { lockedWhilePending, type PendingState } from "./pending";
 
 export interface LookupParams {
     /**
@@ -10,8 +11,11 @@ export interface LookupParams {
     watch?: readonly string[];
     /** Attente avant l'appel, en ms. 0 = immédiat. */
     debounce?: number;
-    /** Verrouiller le champ pendant l'appel. Défaut `true`. */
-    lock?: boolean;
+    /**
+     * État porté pendant le travail. Défaut : `loading` + `locked`, parce qu'on
+     * s'apprête à écrire dans le champ.
+     */
+    pending?: PendingState;
 }
 
 /**
@@ -44,7 +48,7 @@ export function lookup<T = string>(
 ): IBehavior<T> {
     const watch = params.watch ?? [];
     const delay = params.debounce ?? 0;
-    const lock = params.lock ?? true;
+    const pending = params.pending ?? lockedWhilePending;
 
     // Une fenêtre d'attente par champ : l'instance de behavior ne porte ainsi
     // que de la configuration et reste partageable entre plusieurs champs.
@@ -60,9 +64,9 @@ export function lookup<T = string>(
     };
 
     const run = async (ctx: BehaviorContext<T>): Promise<BehaviorState> => {
-        // `loading` dès la frappe, sans attendre la fin du délai : l'utilisateur
-        // voit tout de suite que quelque chose est en cours.
-        ctx.push(lock ? ctx.state.loading().lock() : ctx.state.loading());
+        // L'état d'attente est posé dès le déclenchement, sans attendre la fin
+        // du délai : l'utilisateur voit tout de suite que quelque chose est en cours.
+        ctx.push(pending(ctx.state));
 
         if (!(await debouncerOf(ctx.name).wait(delay))) {
             // Remplacé par un déclenchement plus récent : celui-ci prend la main
@@ -73,9 +77,17 @@ export function lookup<T = string>(
             return ctx.state;
         }
 
+        const before = ctx.getValue();
+
         try {
             const value = await fetcher(ctx);
-            if (!ctx.signal.aborted && value !== undefined) {
+            if (ctx.signal.aborted) {
+                return ctx.state;
+            }
+            // Si l'utilisateur a repris la main pendant l'appel, sa saisie gagne.
+            // Sans verrouillage cette collision est réelle : une réponse tardive
+            // écraserait ce qu'il est en train de taper.
+            if (value !== undefined && Object.is(ctx.getValue(), before)) {
                 ctx.setValue(value);
             }
         } catch {
@@ -83,7 +95,7 @@ export function lookup<T = string>(
             // erreur de validation, et le Validator reste seul juge.
         }
 
-        return ctx.state.idle().unlock();
+        return ctx.state.idle().unlock().show();
     };
 
     return {

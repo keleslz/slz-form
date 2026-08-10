@@ -147,10 +147,10 @@ Couvrent les cas courants sans écrire de behavior :
 
 | Fonction | Rôle |
 |---|---|
-| `loadOptions(fetcher, { watch, lock, resetOnReload })` | charge les options en API ; `watch` en fait un select dépendant |
+| `loadOptions(fetcher, { on, watch, debounce, pending })` | charge les options en API : au montage, sur dépendance, ou sur la frappe (champ de recherche) |
 | `prefill(fetcher)` | remplit le champ au montage, verrouillé et `loading`, sans le marquer touché |
 | `lockWhile(condition, watch)` | verrouillage conditionnel, y compris inter-champs |
-| `lookup(fetcher, { watch, debounce })` | appelle une API et **écrit** la valeur du champ |
+| `lookup(fetcher, { watch, debounce, pending })` | appelle une API et **écrit** la valeur du champ |
 | `hideWhen(watch, predicate)` | émet `invisible` |
 | `dependsOn(watch, effect)` | échappatoire générique pour toute réaction inter-champs |
 | `createBehavior(def)` | typage d'un littéral de behavior |

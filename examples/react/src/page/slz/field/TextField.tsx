@@ -3,8 +3,10 @@ import { FieldShell } from "../../shared/FieldShell";
 import { TextInput, type TextKind } from "../../shared/input";
 import { REQUIRED_MESSAGE, shellId, type SlzFieldProps } from "./props";
 
-export function TextField(props: SlzFieldProps<string> & { kind?: TextKind; placeholder?: string }) {
-    const { label, hint, kind, placeholder, ...params } = props;
+export function TextField(
+    props: SlzFieldProps<string> & { kind?: TextKind; placeholder?: string; suggest?: boolean },
+) {
+    const { label, hint, kind, placeholder, suggest, ...params } = props;
     const field = useField<string>({ requiredMessage: REQUIRED_MESSAGE, ...params });
 
     if (!field.isVisible) {
@@ -20,6 +22,7 @@ export function TextField(props: SlzFieldProps<string> & { kind?: TextKind; plac
             <TextInput
                 kind={kind} placeholder={placeholder}
                 value={field.value ?? ""} disabled={field.isLocked}
+                suggestions={suggest ? field.options : undefined}
                 onChange={field.onChange} onBlur={field.onBlur} onFocus={field.onFocus}
             />
         </FieldShell>

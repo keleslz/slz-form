@@ -2,6 +2,7 @@ import { CAR_CONFIGURATION_FORM } from "../../form";
 import {
     brandOptions,
     cityFromPostcode,
+    citySuggestions,
     customerReferencePrefill,
     lockedUntilConsent,
     modelOptions,
@@ -81,7 +82,12 @@ export function SlzCarForm() {
 
                     <TextField form={FORM} name="city" label="Ville"
                         behaviors={[cityFromPostcode]}
-                        hint="Behavior async qui écrit : rempli depuis le code postal, reste `pristine`" />
+                        hint="Behavior async qui **écrit** : verrouillé pendant l'appel pour ne pas écraser la saisie" />
+
+                    <TextField form={FORM} name="citySearch" label="Recherche de ville" suggest
+                        behaviors={[citySuggestions]}
+                        placeholder="tapez au moins 2 lettres"
+                        hint="Champ de recherche : `loading` sans `locked`, la frappe n'est jamais interrompue" />
                 </section>
 
                 <section className="panel">

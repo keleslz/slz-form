@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { isPlateAvailable } from "../../api/check-plate-availability";
 import { isUsernameAvailable } from "../../api/check-username-availability";
 import { fetchCityByPostcode } from "../../api/fetch-city-by-postcode";
+import { searchCities } from "../../api/search-cities";
 import { fetchBrands } from "../../api/fetch-brands";
 import { fetchCustomerReference } from "../../api/fetch-customer-reference";
 import { fetchModels } from "../../api/fetch-models";
@@ -76,6 +77,12 @@ export function UseStateCarForm() {
     const [cityLoading, setCityLoading] = useState(false);
     const cityRun = useRef(0);
     const cityTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+    // Champ de recherche : encore un timer, encore un jeton, encore deux états.
+    const [citySuggestions, setCitySuggestions] = useState<readonly Option[]>([]);
+    const [citySearchLoading, setCitySearchLoading] = useState(false);
+    const citySearchRun = useRef(0);
+    const citySearchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
     const [submitting, setSubmitting] = useState(false);
 
@@ -194,6 +201,26 @@ export function UseStateCarForm() {
         return () => clearTimeout(cityTimer.current);
     }, [values.postcode]);
 
+    // suggestions de villes, différées de 300 ms
+    useEffect(() => {
+        clearTimeout(citySearchTimer.current);
+        if (values.citySearch.trim().length < 2) {
+            setCitySuggestions([]);
+            setCitySearchLoading(false);
+            return;
+        }
+        const run = citySearchRun.current + 1;
+        citySearchRun.current = run;
+        setCitySearchLoading(true);
+        citySearchTimer.current = setTimeout(() => {
+            searchCities(values.citySearch)
+                .then((options) => { if (run === citySearchRun.current) setCitySuggestions(options); })
+                .catch(() => { if (run === citySearchRun.current) setCitySuggestions([]); })
+                .finally(() => { if (run === citySearchRun.current) setCitySearchLoading(false); });
+        }, 300);
+        return () => clearTimeout(citySearchTimer.current);
+    }, [values.citySearch]);
+
     // ── derived ──────────────────────────────────────────────────────────
     const errors = useMemo(() => {
         const computed = validateAll(values);
@@ -247,6 +274,8 @@ export function UseStateCarForm() {
         plateRun.current += 1;
         usernameRun.current += 1;
         cityRun.current += 1;
+        citySearchRun.current += 1;
+        setCitySuggestions([]);
     }
 
     // ── render ───────────────────────────────────────────────────────────
@@ -331,6 +360,18 @@ export function UseStateCarForm() {
                         <TextInput
                             value={values.city} disabled={cityLoading || submitting}
                             onChange={(v) => set("city", v)} onBlur={() => blur("city")}
+                        />
+                    </FieldShell>
+
+                    <FieldShell
+                        {...shell("citySearch")} label="Recherche de ville"
+                        isLoading={citySearchLoading}
+                        hint="Non verrouillé : c'est au développeur d'y penser, rien ne l'y oblige"
+                    >
+                        <TextInput
+                            value={values.citySearch} placeholder="tapez au moins 2 lettres"
+                            disabled={submitting} suggestions={citySuggestions}
+                            onChange={(v) => set("citySearch", v)} onBlur={() => blur("citySearch")}
                         />
                     </FieldShell>
                 </section>
@@ -465,6 +506,7 @@ export function UseStateCarForm() {
                     loading={{
                         username: usernameChecking,
                         city: cityLoading,
+                        citySearch: citySearchLoading,
                         brands: brandsLoading,
                         models: modelsLoading,
                         packs: packsLoading,

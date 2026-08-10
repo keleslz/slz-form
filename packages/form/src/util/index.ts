@@ -1,4 +1,5 @@
 export * from "./debounce";
+export * from "./pending";
 export * from "./createBehavior";
 export * from "./loadOptions";
 export * from "./prefill";

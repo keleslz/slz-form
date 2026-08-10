@@ -5,3 +5,4 @@ export * from "./customerReferencePrefill";
 export * from "./onlyWhenBrandIsOther";
 export * from "./lockedUntilConsent";
 export * from "./cityFromPostcode";
+export * from "./citySuggestions";

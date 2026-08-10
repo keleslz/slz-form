@@ -100,7 +100,7 @@ check("Overlay fermé au départ", !(await overlayOpen()));
 await page.locator(".overlay__toggle").click();
 await page.waitForTimeout(350);
 check("Overlay ouvert par le toggle", await overlayOpen());
-check("Overlay liste les champs", (await page.locator(".debug__table tr").count()) === 19,
+check("Overlay liste les champs", (await page.locator(".debug__table tr").count()) === 20,
     `${await page.locator(".debug__table tr").count()} lignes`);
 if (SCREENSHOT_DIR) await page.screenshot({ path: `${SCREENSHOT_DIR}/tab-slz.png`, fullPage: true });
 await page.locator(".overlay__toggle").click();
@@ -148,6 +148,22 @@ check("la ville a été écrite", (await field("Ville").locator("input").inputVa
 check("l'écriture laisse la ville `pristine`", (await flags("Ville")).includes("pristine"),
     (await flags("Ville")).join(","));
 
+// champ de recherche : loader, mais jamais verrouillé
+const searchInput = field("Recherche de ville").locator("input");
+await searchInput.click();
+for (const ch of "bord") { await searchInput.press(ch); await page.waitForTimeout(45); }
+await page.waitForTimeout(120);
+const searchFlags = await flags("Recherche de ville");
+check("le champ de recherche est `loading`", searchFlags.includes("loading"), searchFlags.join(","));
+check("mais il n'est jamais verrouillé", !searchFlags.includes("locked"), searchFlags.join(","));
+check("il reste éditable pendant l'appel", await searchInput.isEnabled());
+await page.waitForTimeout(900);
+check("les suggestions sont arrivées",
+    (await page.getByTestId("suggestions").locator("option").count()) === 1,
+    `${await page.getByTestId("suggestions").locator("option").count()} suggestion(s)`);
+check("la saisie n'a pas été touchée", (await searchInput.inputValue()) === "bord",
+    await searchInput.inputValue());
+
 const counts = await apiCalls();
 const parsed = counts.match(/(\d+) identifiant · (\d+) ville/);
 const usernameCalls = Number(parsed?.[1] ?? -1);
@@ -188,7 +204,7 @@ check("Debugger présent sur la baseline aussi", (await page.locator(".overlay__
 await page.locator(".overlay__toggle").click();
 await page.waitForTimeout(350);
 check("Overlay baseline ouvert", await overlayOpen());
-check("Overlay baseline liste les champs", (await page.locator(".debug__table tr").count()) === 19);
+check("Overlay baseline liste les champs", (await page.locator(".debug__table tr").count()) === 20);
 if (SCREENSHOT_DIR) await page.screenshot({ path: `${SCREENSHOT_DIR}/tab-usestate.png`, fullPage: true });
 
 const usBefore = { comment: await renders("Commentaire"), mileage: await renders("Kilométrage") };
