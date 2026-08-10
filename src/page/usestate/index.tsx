@@ -15,6 +15,7 @@ import { fetchModels } from "../../api/fetch-models";
 import { fetchOptionPacks } from "../../api/fetch-option-packs";
 import type { Option } from "../../api/types";
 import { PLATE_TAKEN, validatePlateFormat } from "../../validation";
+import { DebugOverlay } from "../shared/DebugOverlay";
 import { FieldShell } from "../shared/FieldShell";
 import { FUEL_OPTIONS } from "../shared/fuelOptions";
 import {
@@ -29,6 +30,7 @@ import {
     TextInput,
 } from "../shared/input";
 import { countRender } from "../shared/renderCounter";
+import { FormDebug } from "./FormDebug";
 import { validateAll } from "./validate";
 import { INITIAL_VALUES, type FieldName, type Values } from "./values";
 
@@ -352,6 +354,22 @@ export function UseStateCarForm() {
                 <button type="button" className="ghost" onClick={reset}>Réinitialiser</button>
                 <span className="chip chip--renders" title="rendus du composant formulaire">↻ {renders}</span>
             </div>
+
+            <DebugOverlay title="État du formulaire — useState">
+                <FormDebug
+                    values={values}
+                    touched={touched}
+                    errors={errors}
+                    submitting={submitting}
+                    loading={{
+                        brands: brandsLoading,
+                        models: modelsLoading,
+                        packs: packsLoading,
+                        reference: referenceLoading,
+                        plate: plateChecking,
+                    }}
+                />
+            </DebugOverlay>
         </>
     );
 }

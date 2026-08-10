@@ -7,7 +7,7 @@ import "./shared/layout.css";
 const TABS: readonly TabDefinition[] = [
     { id: "slz", label: "slz-lib-v5", caption: "moteur" },
     { id: "usestate", label: "useState", caption: "baseline" },
-    { id: "third", label: "Onglet 3", caption: "à venir", disabled: true },
+    { id: "complex", label: "Implémentation réelle complexe", caption: "specs à venir", disabled: true },
 ];
 
 /**

@@ -376,3 +376,16 @@ body:has(.overlay.is-open) .page {
 .debug__table .is-unmounted {
     opacity: .4;
 }
+
+.debug__note {
+    margin: 1rem 0 0;
+    padding-top: .75rem;
+    border-top: 1px solid var(--border);
+    font-size: .7rem;
+    line-height: 1.5;
+    color: var(--muted);
+}
+
+.debug__note code {
+    color: var(--accent);
+}
