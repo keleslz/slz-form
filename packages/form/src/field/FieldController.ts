@@ -139,6 +139,27 @@ export class FieldController<T = string> {
         return this.lifecycle.isUnmounted;
     }
 
+    /**
+     * Un travail asynchrone est en cours : un behavior en vol, ou le validator.
+     *
+     * C'est le signal sur lequel le FormController s'appuie pour ne pas
+     * soumettre un formulaire dont toutes les valeurs ne sont pas encore posées.
+     */
+    get isBusy(): boolean {
+        return this.current.ui.activity === "loading";
+    }
+
+    /**
+     * Revalide tout de suite, sans attendre un éventuel délai.
+     *
+     * Appelé par le FormController après qu'un behavior a écrit une valeur
+     * pendant la soumission : la nouvelle valeur doit être jugée, pas l'ancienne.
+     */
+    async validateNow(): Promise<void> {
+        this.validator.flush();
+        await this.revalidate();
+    }
+
     // ── events ───────────────────────────────────────────────────────────
     /** A user interaction: marks the field touched, unlike a programmatic write. */
     change(next: T | undefined): void {
@@ -356,11 +377,12 @@ export class FieldController<T = string> {
         if (this.current.equals(next)) {
             return;
         }
+        const valueChanged = !Object.is(this.current.value, next.value);
         this.current = next;
         for (const listener of this.listeners) {
             listener();
         }
-        this.host?.notifyFieldChanged(this.name);
+        this.host?.notifyFieldChanged(this.name, valueChanged);
     }
 
     private buildSnapshot(): FieldSnapshot<T> {

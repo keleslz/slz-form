@@ -207,6 +207,8 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 15 | `touched` | posé au `change` **et** au `blur` | validation vivante ; `pristine` garde son sens |
 | 16 | Écriture programmatique | `ctx.setValue` ne marque pas touché | un prefill n'est pas une interaction utilisateur |
 | 17 | Stabilité du snapshot | même référence tant que rien ne change | exigé par `useSyncExternalStore` ; sert l'invariant 22 |
+| 18 | Déclenchement d'une dépendance | sur la **valeur** observée, pas sur son état | sinon revalider ou toucher un champ rejoue les lookups qui l'observent |
+| 19 | Soumission et travail asynchrone | `submit()` fait partir le différé puis **attend** que plus rien ne soit en vol | toutes les valeurs doivent être posées avant qu'on juge le formulaire |
 
 ---
 
@@ -227,7 +229,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 11 | Réactivité locale | chaque champ a ses propres listeners |
 | 12 | UI states composables | c'est exactement le découpage en axes |
 | 13 | Validators déterminent la validité | les Behaviors ne peuvent pas émettre l'axe validité |
-| 14 | Behaviors orchestrent les réactions | hooks de cycle de vie + `onDependencyChanged` |
+| 14 | Behaviors orchestrent les réactions | hooks de cycle de vie + `onDependencyChanged`, déclenché sur la **valeur** observée uniquement |
 | 15 | Adapters sans logique métier | `react/` = provider + 2 hooks, zéro règle |
 | 16 | Pas d'abstraction inutile | pas de couche « Field » séparée du Controller ; utils = fonctions nues |
 | 17 | Configuration concise | un seul objet, `name` seul obligatoire |

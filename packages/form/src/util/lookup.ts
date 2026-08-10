@@ -90,6 +90,11 @@ export function lookup<T = string>(
         watch,
         onChange: watch.length === 0 ? (ctx) => run(ctx) : undefined,
         onDependencyChanged: watch.length > 0 ? (ctx) => run(ctx) : undefined,
+        // Soumettre ne doit pas attendre la fin du délai : la fenêtre en attente
+        // part tout de suite, et le FormController attend ensuite l'appel.
+        onSubmit: (ctx) => {
+            debouncers.get(ctx.name)?.flush();
+        },
         onUnmount: (ctx) => debouncers.get(ctx.name)?.cancel(),
     };
 }

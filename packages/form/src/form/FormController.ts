@@ -8,8 +8,17 @@ import type { FormStatus, FormView } from "./FormView";
 type Listener = () => void;
 type AnyField = FieldController<any>;
 
+/** Passes de convergence avant d'abandonner : couvre les lookups en chaîne. */
+const MAX_SETTLE_ROUNDS = 5;
+
 export interface FormParams {
     name: string;
+    /**
+     * Temps maximum accordé, à la soumission, pour que tout travail asynchrone
+     * en cours se termine. Dépassé, la soumission échoue au lieu de partir avec
+     * des valeurs incomplètes. Défaut : 10 s.
+     */
+    settleTimeout?: number;
 }
 
 /**
@@ -33,6 +42,7 @@ export class FormController implements FieldHost {
     private readonly listeners = new Set<Listener>();
     private readonly readOnlyView: FormView;
 
+    private readonly settleTimeout: number;
     private status: FormStatus = "idle";
     private current: FormSnapshot;
     /** Re-entrancy guard: a propagation must not trigger another propagation. */
@@ -40,6 +50,7 @@ export class FormController implements FieldHost {
 
     constructor(params: FormParams) {
         this.name = params.name;
+        this.settleTimeout = params.settleTimeout ?? 10_000;
         this.current = this.buildSnapshot();
 
         // eslint-disable-next-line @typescript-eslint/no-this-alias -- object-literal getters need the instance captured
@@ -111,10 +122,14 @@ export class FormController implements FieldHost {
         return this.readOnlyView;
     }
 
-    notifyFieldChanged(name: string): void {
+    notifyFieldChanged(name: string, valueChanged: boolean): void {
         this.commit();
 
-        if (this.propagating) {
+        // Une dépendance se déclenche sur la *valeur* observée, pas sur l'état
+        // du champ observé. Sans ça, toucher un champ ou le revalider rejouait
+        // les lookups qui l'observent — au point de relancer un appel réseau
+        // pendant la soumission.
+        if (!valueChanged || this.propagating) {
             return;
         }
         const observers = this.graph.observersOf(name);
@@ -161,7 +176,17 @@ export class FormController implements FieldHost {
     }
 
     // ── submission ───────────────────────────────────────────────────────
-    /** Touches and revalidates every mounted field. Resolves to the form's validity. */
+    /**
+     * Marque tous les champs montés comme touchés, fait partir sans attendre
+     * tout travail différé, **attend que plus rien ne soit en vol**, puis statue.
+     *
+     * L'attente est le point important : un behavior asynchrone qui écrit une
+     * valeur doit avoir fini avant qu'on juge le formulaire, sinon on soumet une
+     * valeur qui n'est pas encore posée.
+     *
+     * Renvoie `false` si le formulaire est invalide **ou** si les valeurs n'ont
+     * pas convergé dans le temps imparti — dans les deux cas, rien n'est soumis.
+     */
     async submit(): Promise<boolean> {
         this.setStatus("submitting");
         const mounted = [...this.fields.values()].filter((field) => field.isMounted);
@@ -169,12 +194,18 @@ export class FormController implements FieldHost {
         for (const field of mounted) {
             field.setSubmitting(true);
         }
+
+        // `field.submit()` touche le champ, déclenche `onSubmit` — ce qui fait
+        // partir les fenêtres différées — et revalide.
         await Promise.all(mounted.map((field) => field.submit()));
+
+        const settled = await this.settle(mounted);
+
         for (const field of mounted) {
             field.setSubmitting(false);
         }
 
-        const valid = this.buildSnapshot().isValid;
+        const valid = settled && this.buildSnapshot().isValid;
         this.setStatus(valid ? "submitted" : "idle");
         return valid;
     }
@@ -211,6 +242,58 @@ export class FormController implements FieldHost {
     }
 
     // ── internals ────────────────────────────────────────────────────────
+    /**
+     * Attend que plus aucun champ ne soit en vol, puis revalide : une valeur
+     * écrite pendant l'attente doit être jugée, pas celle qu'elle a remplacée.
+     *
+     * Boucle, parce qu'une écriture peut en déclencher une autre — un lookup en
+     * chaîne (code postal → ville → région). Bornée en passes et dans le temps.
+     */
+    private async settle(fields: readonly AnyField[]): Promise<boolean> {
+        const deadline = Date.now() + this.settleTimeout;
+
+        for (let round = 0; round < MAX_SETTLE_ROUNDS; round += 1) {
+            if (!(await this.waitIdle(fields, deadline))) {
+                return false;
+            }
+            await Promise.all(fields.map((field) => field.validateNow()));
+            if (!fields.some((field) => field.isBusy)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private waitIdle(fields: readonly AnyField[], deadline: number): Promise<boolean> {
+        if (!fields.some((field) => field.isBusy)) {
+            return Promise.resolve(true);
+        }
+
+        return new Promise<boolean>((resolve) => {
+            const unsubscribes: (() => void)[] = [];
+
+            const done = (settled: boolean) => {
+                clearTimeout(timer);
+                for (const unsubscribe of unsubscribes) {
+                    unsubscribe();
+                }
+                resolve(settled);
+            };
+
+            // Un champ qui cesse d'être en vol modifie forcément son snapshot,
+            // donc notifie : pas besoin de scruter.
+            for (const field of fields) {
+                unsubscribes.push(field.listen(() => {
+                    if (!fields.some((f) => f.isBusy)) {
+                        done(true);
+                    }
+                }));
+            }
+
+            const timer = setTimeout(() => done(false), Math.max(0, deadline - Date.now()));
+        });
+    }
+
     private setStatus(status: FormStatus): void {
         if (this.status === status) {
             return;

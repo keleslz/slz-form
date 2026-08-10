@@ -9,5 +9,11 @@ import type { FormView } from "../form/FormView";
  */
 export interface FieldHost {
     formView(): FormView;
-    notifyFieldChanged(name: string): void;
+    /**
+     * @param valueChanged  seule une vraie modification de valeur propage aux
+     *                      champs observateurs. Un changement de validité, de
+     *                      `touched` ou de `submitting` met à jour le formulaire
+     *                      sans rejouer les dépendances.
+     */
+    notifyFieldChanged(name: string, valueChanged: boolean): void;
 }
