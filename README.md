@@ -264,6 +264,31 @@ moteur recharge la démo à chaud, sans rebuild.
 
 ---
 
+## Contribuer et publier
+
+La CI (`.github/workflows/ci.yml`) vérifie chaque PR : typecheck, lint, build des
+packages et de la démo, contenu réellement publié (`npm pack --dry-run`), et une
+passe end-to-end de la démo dans Chromium.
+
+```bash
+npm run test:e2e        # 29 assertions dans un vrai navigateur
+```
+
+Les versions sont gérées par [changesets](https://github.com/changesets/changesets) :
+
+```bash
+npm run changeset          # décrire le changement et son niveau de bump
+npm run version:packages   # applique les bumps et écrit les CHANGELOG
+npm run release            # build puis publication npm
+```
+
+Un changement du core bumpe automatiquement les adapters qui en dépendent —
+c'est tout l'intérêt du dépôt unique. Le workflow `release.yml` est en
+déclenchement **manuel** et requiert un secret `NPM_TOKEN` ; il propose une
+simulation avant toute publication réelle.
+
+---
+
 ## Utiliser les packages dans un autre projet
 
 ```bash

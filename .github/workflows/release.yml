@@ -1,0 +1,52 @@
+name: Release
+
+# Déclenchement manuel volontaire : tant que le rythme de publication n'est pas
+# établi, on ne publie pas sur npm à chaque merge. Pour automatiser plus tard,
+# ajouter `push: { branches: [master] }` et laisser changesets/action ouvrir la
+# PR « Version Packages ».
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Simuler sans publier"
+        type: boolean
+        default: true
+
+# Requiert le secret NPM_TOKEN (jeton npm « Automation »), à créer dans
+# Settings → Secrets and variables → Actions.
+jobs:
+  release:
+    name: Publier les packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - name: Garde-fous
+        run: |
+          npm run typecheck
+          npm run lint
+
+      - name: Construire les packages
+        run: npm run build:packages
+
+      - name: Simulation
+        if: inputs.dry_run
+        run: npm pack --dry-run -w packages/form -w packages/react-form
+
+      - name: Publier
+        if: ${{ !inputs.dry_run }}
+        run: npx changeset publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

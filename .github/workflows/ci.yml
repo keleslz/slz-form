@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master, v5]
+
+# Une PR qui reçoit un nouveau push annule le run précédent.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck · lint · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build packages et démo
+        run: npm run build
+
+      - name: Vérifier le contenu réellement publié
+        run: |
+          npm pack --dry-run -w packages/form -w packages/react-form
+
+      # Informatif : signale une PR qui touche un package sans changeset,
+      # sans bloquer — à passer en bloquant quand le rythme de release est établi.
+      - name: Changeset manquant ?
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: npx changeset status --since=origin/${{ github.base_ref }}
+
+  e2e:
+    name: Démo dans un navigateur
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Installer Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Construire la démo
+        run: npm run build
+
+      - name: Servir puis tester
+        working-directory: examples/react
+        env:
+          BASE_URL: http://localhost:4173
+          SCREENSHOT_DIR: e2e/output
+        run: |
+          mkdir -p e2e/output
+          npx vite preview --port 4173 &
+          npm run test:e2e
+
+      - name: Captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures
+          path: examples/react/e2e/output
+          if-no-files-found: ignore
