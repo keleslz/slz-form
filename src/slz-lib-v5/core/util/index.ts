@@ -1,4 +1,6 @@
 export * from "./createBehavior";
 export * from "./loadOptions";
 export * from "./prefill";
-export * from "./conditional";
+export * from "./lockWhile";
+export * from "./hideWhen";
+export * from "./dependsOn";

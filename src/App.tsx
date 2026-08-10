@@ -1,7 +1,7 @@
-import { Showcase } from './page/showcase'
+import { Page } from './page'
 
 function App() {
-  return <Showcase />
+  return <Page />
 }
 
 export default App
