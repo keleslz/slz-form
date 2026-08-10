@@ -1,0 +1,25 @@
+{
+  "name": "@slz-examples/react",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "D\u00e9mo React : le m\u00eame formulaire \u00e9crit avec slz-form et en useState, c\u00f4te \u00e0 c\u00f4te",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "slz-form": "^0.1.0",
+    "slz-react-form": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "vite": "^8.0.12"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // À la publication, `slz-form` doit se résoudre vers le **package** (ses
+    // .d.ts publiés), pas vers les sources : sinon les types du core seraient
+    // recopiés dans ceux de l'adapter au lieu d'être importés.
+    "paths": {}
+  }
+}

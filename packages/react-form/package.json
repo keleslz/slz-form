@@ -1,0 +1,50 @@
+{
+  "name": "slz-react-form",
+  "version": "0.1.0",
+  "description": "Adapter React de slz-form : un provider et deux hooks, aucune logique m\u00e9tier.",
+  "keywords": [
+    "form",
+    "forms",
+    "react",
+    "validation",
+    "headless",
+    "useSyncExternalStore"
+  ],
+  "author": "elhabibmhadjou-slz (https://github.com/elhabibmhadjou-slz)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keleslz/slz-form-event.git",
+    "directory": "packages/react-form"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "slz-form": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "react": "^19.2.6",
+    "slz-form": "^0.1.0"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

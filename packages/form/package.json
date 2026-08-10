@@ -1,0 +1,41 @@
+{
+  "name": "slz-form",
+  "version": "0.1.0",
+  "description": "Moteur de formulaires agnostique de tout framework : l'UI est pilot\u00e9e par des flags group\u00e9s par axe, la validit\u00e9 a une autorit\u00e9 unique, les d\u00e9pendances entre champs sont d\u00e9clar\u00e9es.",
+  "keywords": [
+    "form",
+    "forms",
+    "validation",
+    "state-machine",
+    "framework-agnostic",
+    "headless"
+  ],
+  "author": "elhabibmhadjou-slz (https://github.com/elhabibmhadjou-slz)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keleslz/slz-form-event.git",
+    "directory": "packages/form"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

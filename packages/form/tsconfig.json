@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // `DOM` is here for the ambient WHATWG globals only — `AbortController` and
+    // `AbortSignal`, which TypeScript ships in lib.dom.d.ts. The engine touches
+    // no DOM API (verified: no document/window/navigator anywhere in src), so it
+    // still runs unchanged under Node, Deno, Bun or a worker.
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["src"]
+}

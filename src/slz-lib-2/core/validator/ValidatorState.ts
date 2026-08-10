@@ -1,1 +1,0 @@
-export type ValidatorState = { status: "pristine" | "loading" | "valid" } | { status: "error", errors: string[] };

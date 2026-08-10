@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    // The example runs against the packages' source, so the editor and `tsc`
+    // resolve the same files Vite aliases at dev time.
+    "paths": {
+      "slz-form": ["../../packages/form/src/index.ts"],
+      "slz-react-form": ["../../packages/react-form/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}

@@ -1,6 +1,7 @@
 # slz-form-event
 
-> ⚠️ **POC** — pas encore publié en package. Ce repo valide l'API et l'architecture avant extraction.
+> ⚠️ **Pré-publication** — les packages sont construits et prêts, rien n'est encore sur npm.
+> L'API peut encore bouger.
 
 Un moteur de formulaires **agnostique de tout framework**, où l'interface est
 pilotée par l'état plutôt que par des conditions éparpillées dans le JSX.
@@ -139,7 +140,7 @@ Le formulaire est déclaré dans un module, enregistré une fois, publié à
 l'application — le même découpage qu'une slice, un root reducer et un store :
 
 ```ts
-// src/form/car-configuration-form.ts     (≈ une slice)
+// src/form/car-configuration-form.ts   (≈ une slice)
 export const CAR_FORM = "car-configuration";
 export const carForm = new FormController({ name: CAR_FORM });
 
@@ -186,8 +187,8 @@ Dire ce qu'un outil ne fait pas évite d'en attendre ce qu'il ne donnera pas.
 - **Ce n'est pas une abstraction de React.** Le cœur ignore l'existence de
   React. L'adapter React est mince et remplaçable, pas une couche de compatibilité.
 
-- **Ce n'est pas encore un package.** Aucun `npm install` aujourd'hui : le core
-  est isolé mais pas publié, et l'API peut encore bouger.
+- **Ce n'est pas encore publié.** Les packages existent et se construisent, mais
+  aucun n'est sur npm à ce jour, et l'API peut encore bouger.
 
 ---
 
@@ -207,46 +208,80 @@ Les comportements courants sont fournis en fonctions nues, sans rien à écrire 
 `loadOptions`, `prefill`, `lockWhile`, `hideWhen`, `dependsOn`.
 
 📄 La modélisation complète, les arbitrages et les 25 invariants d'architecture
-sont dans **[`src/slz-lib-v5/core/MODEL.md`](src/slz-lib-v5/core/MODEL.md)**.
+sont dans **[`docs/MODEL.md`](docs/MODEL.md)**.
 
 ---
 
-## Lancer le POC
+## Structure du repo
 
-```bash
-npm install
-npm run dev
+Un dépôt, quatre packages publiables, une démo par framework.
+
+```
+packages/
+  form/            → slz-form           moteur agnostique, zéro dépendance
+  react-form/      → slz-react-form     adapter React (provider + 2 hooks)
+  angular-form/    → slz-angular-form   à implémenter (contrat dans son README)
+  vue-form/        → slz-vue-form       à implémenter (contrat dans son README)
+
+examples/
+  react/           démo React : le même formulaire avec le moteur et en useState
+
+docs/MODEL.md      modélisation, arbitrages, invariants
 ```
 
-La page de démonstration monte **tous les types de champ dans une seule vue** —
-texte, email, textarea, nombre, select, select dépendant, multi-select, radio,
-checkbox, fichier, date, heure, datetime, champ conditionnel, champ prérempli —
-et affiche les flags de chaque champ en direct, ainsi qu'un compteur de rendus
-qui montre l'isolation.
+| Tu fais du… | Lance | Le code est dans | L'adapter est dans |
+|---|---|---|---|
+| **React** | `npm run dev:react` | `examples/react` | `packages/react-form` |
+| **Angular** | *à venir* | — | `packages/angular-form` |
+| **Vue** | *à venir* | — | `packages/vue-form` |
+| **Rien / autre** | — | — | `packages/form` s'utilise seul |
+
+---
+
+## Démarrer
 
 ```bash
+npm install     # workspaces npm : tout est lié localement
+npm run dev     # ouvre la démo React
+```
+
+La démo monte **tous les types de champ dans une seule vue** — texte, email,
+textarea, nombre, select, select dépendant, multi-select, radio, checkbox,
+fichier, date, heure, datetime, champ conditionnel, champ prérempli. Un onglet
+montre l'implémentation avec le moteur, l'autre la même chose écrite en
+`useState`, et un compteur de rendus par champ rend l'écart visible.
+
+```bash
+npm run typecheck      # les 3 workspaces
 npm run lint
-npm run build   # ⚠️ voir ci-dessous
+npm run build          # packages (tsup) puis démo (vite)
 ```
 
-> `npm run build` échoue aujourd'hui, pour une raison antérieure à ce moteur :
-> les itérations précédentes conservées dans `src/slz-lib` et `src/slz-lib-2`
-> portent 43 erreurs TypeScript. `npm run dev` fonctionne, et `tsc` comme
-> `eslint` sont verts sur l'intégralité de `src/slz-lib-v5`. Le build
-> redeviendra vert à la suppression des anciennes itérations.
+En développement, la démo pointe vers les **sources** des packages : modifier le
+moteur recharge la démo à chaud, sans rebuild.
 
 **Prérequis :** Node.js ≥ 20.19, npm.
 
 ---
 
-## État du repo
+## Utiliser les packages dans un autre projet
 
-| Dossier | Statut |
-|---|---|
-| `src/slz-lib-v5/core` | Moteur agnostique. Actif. |
-| `src/slz-lib-v5/react` | Adapter React (provider + 2 hooks). Actif. |
-| `src/form`, `src/page/showcase` | Démonstration côté application. |
-| `src/slz-lib`, `src/slz-lib-2` | Itérations précédentes, conservées le temps de valider le modèle. À supprimer ensuite. |
+```bash
+npm install slz-form slz-react-form
+```
+
+`slz-form` et `react` sont des **peer dependencies** de l'adapter : ton
+application doit en résoudre une seule copie de chaque. Deux copies de React
+cassent les hooks ; deux copies de `slz-form` cassent le test
+`instanceof BehaviorState` du moteur, et les flags sont alors silencieusement
+ignorés. Le README de chaque package détaille le point.
+
+> Rien n'est encore publié sur npm. Les noms `slz-form`, `slz-react-form`,
+> `slz-angular-form` et `slz-vue-form` sont libres.
+
+## Licence
+
+MIT — voir [LICENSE](LICENSE).
 
 ## Auteur
 
