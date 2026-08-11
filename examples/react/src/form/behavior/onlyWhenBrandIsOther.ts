@@ -1,7 +1,7 @@
-import { hideWhen } from "slz-form";
+import { hideWhen } from "../car-configuration-form";
 
-/** Emits `invisible`: the view stops rendering the input by reading the flag. */
-export const onlyWhenBrandIsOther = hideWhen(
-    ["brand"],
-    (form) => form.field("brand")?.value !== "other",
-);
+/** Émet `invisible` : la vue cesse de rendre le champ en lisant le flag. */
+export const onlyWhenBrandIsOther = hideWhen({
+    watch: ["brand"],
+    when: ({ brand }) => brand !== "other",
+});

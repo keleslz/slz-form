@@ -1,11 +1,13 @@
-import { useField } from "slz-react-form";
+import { useField } from "../../../form/car-configuration-form";
 import { FieldShell } from "../../shared/FieldShell";
 import { NumberInput } from "../../shared/input";
-import { REQUIRED_MESSAGE, shellId, type SlzFieldProps } from "./props";
+import { REQUIRED_MESSAGE, shellId, type FieldsOfType, type SlzFieldProps } from "./props";
 
-export function NumberField(props: SlzFieldProps<number> & { min?: number; max?: number; step?: number }) {
+export function NumberField(
+    props: SlzFieldProps<FieldsOfType<number>> & { min?: number; max?: number; step?: number },
+) {
     const { label, hint, min, max, step, ...params } = props;
-    const field = useField<number>({ requiredMessage: REQUIRED_MESSAGE, ...params });
+    const field = useField({ requiredMessage: REQUIRED_MESSAGE, ...params });
 
     if (!field.isVisible) {
         return null;

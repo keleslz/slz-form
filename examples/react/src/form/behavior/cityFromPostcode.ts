@@ -1,13 +1,13 @@
 import { fetchCityByPostcode } from "../../api/fetch-city-by-postcode";
-import { lookup } from "slz-form";
+import { lookup } from "../car-configuration-form";
 
 /**
- * Behavior asynchrone qui **écrit** : la ville se remplit depuis le code postal.
- *
- * C'est bien le champ « ville » qui porte ce behavior et observe « postcode » —
- * jamais l'inverse. Un champ n'écrit que dans son propre état.
+ * Behavior asynchrone qui **écrit**. C'est bien « ville » qui observe
+ * « postcode » — jamais l'inverse : un champ n'écrit que dans son propre état.
  */
-export const cityFromPostcode = lookup(
-    (ctx) => fetchCityByPostcode(ctx.watched("postcode")?.value as string | undefined),
-    { watch: ["postcode"], debounce: 400 },
-);
+export const cityFromPostcode = lookup({
+    field: "city",
+    watch: ["postcode"],
+    debounce: 400,
+    fetch: ({ postcode }) => fetchCityByPostcode(postcode),
+});

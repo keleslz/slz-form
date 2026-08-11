@@ -1,5 +1,4 @@
-import { CAR_CONFIGURATION_FORM } from "../../form";
-import { useForm } from "slz-react-form";
+import { useForm } from "../../form/car-configuration-form";
 import { cityLookupCalls } from "../../api/fetch-city-by-postcode";
 import { usernameCheckCalls } from "../../api/check-username-availability";
 
@@ -15,7 +14,7 @@ function display(value: unknown): string {
  * else to gather — the engine already holds the form's state at an instant T.
  */
 export function FormDebug() {
-    const { snapshot } = useForm(CAR_CONFIGURATION_FORM);
+    const { snapshot } = useForm();
 
     return (
         <>

@@ -1,11 +1,13 @@
-import { useField } from "slz-react-form";
+import { useField } from "../../../form/car-configuration-form";
 import { FieldShell } from "../../shared/FieldShell";
 import { FileInput } from "../../shared/input";
-import { REQUIRED_MESSAGE, shellId, type SlzFieldProps } from "./props";
+import { REQUIRED_MESSAGE, shellId, type FieldsOfType, type SlzFieldProps } from "./props";
 
-export function FileField(props: SlzFieldProps<File> & { accept?: string }) {
+export function FileField(
+    props: SlzFieldProps<FieldsOfType<File>> & { accept?: string },
+) {
     const { label, hint, accept, ...params } = props;
-    const field = useField<File>({ requiredMessage: REQUIRED_MESSAGE, ...params });
+    const field = useField({ requiredMessage: REQUIRED_MESSAGE, ...params });
 
     if (!field.isVisible) {
         return null;
@@ -17,7 +19,8 @@ export function FileField(props: SlzFieldProps<File> & { accept?: string }) {
             required={field.required} showError={field.showError} error={field.error}
             isLoading={field.isLoading} badges={field.flags}
         >
-            <FileInput accept={accept} disabled={field.isLocked} onChange={field.onChange} onBlur={field.onBlur} />
+            <FileInput accept={accept} disabled={field.isLocked}
+                onChange={field.onChange} onBlur={field.onBlur} />
         </FieldShell>
     );
 }

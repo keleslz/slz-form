@@ -1,11 +1,12 @@
-import { useField } from "slz-react-form";
+import { useField } from "../../../form/car-configuration-form";
 import { FieldShell } from "../../shared/FieldShell";
 import { MultiSelectInput } from "../../shared/input";
-import { REQUIRED_MESSAGE, shellId, type SlzFieldProps } from "./props";
+import { REQUIRED_MESSAGE, shellId, type FieldsOfType, type SlzFieldProps } from "./props";
 
-export function MultiSelectField(props: SlzFieldProps<string[]>) {
+export function MultiSelectField(
+    props: SlzFieldProps<FieldsOfType<string[]>>) {
     const { label, hint, ...params } = props;
-    const field = useField<string[]>({ requiredMessage: REQUIRED_MESSAGE, ...params });
+    const field = useField({ requiredMessage: REQUIRED_MESSAGE, ...params });
 
     if (!field.isVisible) {
         return null;

@@ -1,8 +1,9 @@
 import { fetchModels } from "../../api/fetch-models";
-import { loadOptions } from "slz-form";
+import { loadOptions } from "../car-configuration-form";
 
-/** Dependent select: reloads and clears itself whenever `brand` changes. */
-export const modelOptions = loadOptions(
-    (ctx) => fetchModels(ctx.watched("brand")?.value as string | undefined),
-    { watch: ["brand"] },
-);
+/** Select dépendant : rechargé et vidé à chaque changement de marque. */
+export const modelOptions = loadOptions({
+    field: "model",
+    watch: ["brand"],
+    fetch: ({ brand }) => fetchModels(brand),
+});

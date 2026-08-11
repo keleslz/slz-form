@@ -1,7 +1,7 @@
-import { lockWhile } from "slz-form";
+import { lockWhile } from "../car-configuration-form";
 
-/** Cross-field lock, with no mutation of the watched field (invariants 6, 20). */
-export const lockedUntilConsent = lockWhile(
-    (ctx) => ctx.watched("consent")?.value !== true,
-    ["consent"],
-);
+/** Verrouillage inter-champs, sans jamais muter le champ observé. */
+export const lockedUntilConsent = lockWhile({
+    watch: ["consent"],
+    when: ({ consent }) => consent !== true,
+});

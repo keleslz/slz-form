@@ -1,11 +1,13 @@
-import { useField } from "slz-react-form";
+import { useField } from "../../../form/car-configuration-form";
 import { FieldShell } from "../../shared/FieldShell";
 import { TextAreaInput } from "../../shared/input";
-import { REQUIRED_MESSAGE, shellId, type SlzFieldProps } from "./props";
+import { REQUIRED_MESSAGE, shellId, type FieldsOfType, type SlzFieldProps } from "./props";
 
-export function TextAreaField(props: SlzFieldProps<string> & { rows?: number }) {
+export function TextAreaField(
+    props: SlzFieldProps<FieldsOfType<string>> & { rows?: number },
+) {
     const { label, hint, rows, ...params } = props;
-    const field = useField<string>({ requiredMessage: REQUIRED_MESSAGE, ...params });
+    const field = useField({ requiredMessage: REQUIRED_MESSAGE, ...params });
 
     if (!field.isVisible) {
         return null;

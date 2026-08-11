@@ -1,5 +1,4 @@
-import { CAR_CONFIGURATION_FORM } from "../../form";
-import { useForm } from "slz-react-form";
+import { useForm } from "../../form/car-configuration-form";
 import { countRender } from "../shared/renderCounter";
 
 /**
@@ -7,7 +6,7 @@ import { countRender } from "../shared/renderCounter";
  * which is why typing does not re-render them all.
  */
 export function FormActions() {
-    const { isValid, isSubmitting, submit, reset } = useForm(CAR_CONFIGURATION_FORM);
+    const { isValid, isSubmitting, submit, reset } = useForm();
     const renders = countRender("slz:actions");
 
     return (

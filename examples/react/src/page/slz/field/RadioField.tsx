@@ -1,11 +1,15 @@
-import { useField } from "slz-react-form";
+import { useField } from "../../../form/car-configuration-form";
 import { FieldShell } from "../../shared/FieldShell";
 import { RadioInput } from "../../shared/input";
-import { REQUIRED_MESSAGE, shellId, type SlzFieldProps } from "./props";
+import { REQUIRED_MESSAGE, shellId, type PlainFieldsOfType, type SlzFieldProps } from "./props";
 
-export function RadioField(props: SlzFieldProps<string>) {
+/**
+ * Restreint aux champs sans meta : la vue passe ici une liste statique, qui ne
+ * pourrait pas porter les données métier qu'un autre champ déclare.
+ */
+export function RadioField(props: SlzFieldProps<PlainFieldsOfType<string>>) {
     const { label, hint, ...params } = props;
-    const field = useField<string>({ requiredMessage: REQUIRED_MESSAGE, ...params });
+    const field = useField({ requiredMessage: REQUIRED_MESSAGE, ...params });
 
     if (!field.isVisible) {
         return null;
