@@ -2,31 +2,30 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import type {
     FieldController,
     FieldOption,
+    FormController,
     IBehavior,
     IValidator,
+    OptionValue,
     UiFlag,
     UiState,
 } from "slz-form";
-import { useFormRegister } from "./registerContext";
 
-export interface UseFieldParams<T = string> {
-    /** Name of the form to join, as registered in the FormRegister. */
-    form: string;
+export interface UseFieldParams<V = string, M = never> {
     name: string;
     required?: boolean;
     requiredMessage?: string;
-    initialValue?: T;
-    validator?: IValidator<T>;
-    behaviors?: readonly IBehavior<T>[];
-    options?: readonly FieldOption[];
-    /** Set only when the parent drives the value; leave out otherwise. */
-    value?: T;
+    initialValue?: V;
+    validator?: IValidator<V>;
+    behaviors?: readonly IBehavior<V, M>[];
+    options?: readonly FieldOption<OptionValue<V>, M>[];
+    /** À renseigner seulement quand le parent pilote la valeur. */
+    value?: V;
 }
 
-export interface UseFieldResult<T = string> {
+export interface UseFieldResult<V = string, M = never> {
     name: string;
-    value: T | undefined;
-    options: readonly FieldOption[];
+    value: V | undefined;
+    options: readonly FieldOption<OptionValue<V>, M>[];
     errors: readonly string[];
     error: string | undefined;
     ui: UiState;
@@ -42,36 +41,41 @@ export interface UseFieldResult<T = string> {
     focused: boolean;
     required: boolean;
     submitting: boolean;
-    onChange: (next: T | undefined) => void;
+    onChange: (next: V | undefined) => void;
     onBlur: () => void;
     onFocus: () => void;
-    controller: FieldController<T>;
+    controller: FieldController<V, M>;
 }
 
+/** Un formulaire dont la map de champs est inconnue d'ici. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyForm = FormController<any>;
+
 /**
- * Joins a field to its form and bridges it to React.
+ * Implémentation partagée. Le point d'entrée public est `hooksFor(form)`, qui
+ * la lie à un formulaire et contraint `name` à ses champs.
  *
- * The field is created on first render and reused afterwards, so adding an
- * input to a form is a single call — nothing to declare in the form module.
- * All the hook does is wire React's lifecycle to the controller and read its
- * snapshot: no `useState` mirrors the controller's state (invariants 3, 4, 15).
+ * C'est le seul endroit où le typage est relâché : `hooksFor` a déjà vérifié
+ * que le nom appartient au formulaire et que les types concordent, mais cette
+ * fonction ne voit plus la map. Le pont est ici, et nulle part ailleurs.
  */
-export function useField<T = string>(params: UseFieldParams<T>): UseFieldResult<T> {
-    const { form: formName, name, required, value } = params;
-    const register = useFormRegister();
-    const form = useMemo(() => register.require(formName), [register, formName]);
+export function useFieldOn<V, M>(
+    form: AnyForm,
+    params: UseFieldParams<V, M>,
+): UseFieldResult<V, M> {
+    const { name, required, value } = params;
 
     const controller = useMemo(
-        () => form.field<T>(name, {
+        () => form.field(name, {
             required: params.required,
             requiredMessage: params.requiredMessage,
             initialValue: params.initialValue,
             validator: params.validator,
             behaviors: params.behaviors,
             options: params.options,
-        }),
-        // Identity only. Behaviors and validator are read at creation, so
-        // passing them inline from a render never rebuilds the field.
+        } as never) as FieldController<V, M>,
+        // Identité seulement. Behaviors et validator sont lus à la création, donc
+        // les passer en ligne depuis un rendu ne reconstruit jamais le champ.
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [form, name],
     );
@@ -87,7 +91,7 @@ export function useField<T = string>(params: UseFieldParams<T>): UseFieldResult<
         controller.update({ required, value });
     }, [controller, required, value]);
 
-    const onChange = useCallback((next: T | undefined) => controller.change(next), [controller]);
+    const onChange = useCallback((next: V | undefined) => controller.change(next), [controller]);
     const onBlur = useCallback(() => controller.blur(), [controller]);
     const onFocus = useCallback(() => controller.focus(), [controller]);
     const hasFlag = useCallback((...flags: UiFlag[]) => snapshot.ui.has(...flags), [snapshot]);
