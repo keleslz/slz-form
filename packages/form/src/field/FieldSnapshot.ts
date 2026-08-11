@@ -1,12 +1,13 @@
 import type { UiFlag, UiState, ValidityFlag } from "../state";
+import type { OptionValue } from "./Field";
 import type { FieldOption } from "./FieldOption";
 
-export interface FieldSnapshotParams<T> {
+export interface FieldSnapshotParams<T, M = never> {
     readonly name: string;
     readonly value: T | undefined;
     readonly ui: UiState;
     readonly errors: readonly string[];
-    readonly options: readonly FieldOption[];
+    readonly options: readonly FieldOption<OptionValue<T>, M>[];
     readonly touched: boolean;
     readonly focused: boolean;
     readonly required: boolean;
@@ -22,19 +23,19 @@ export interface FieldSnapshotParams<T> {
  * reference stability is what `useSyncExternalStore` requires, and what keeps a
  * change on one field from re-rendering the others (invariant 22).
  */
-export class FieldSnapshot<T = string> {
+export class FieldSnapshot<T = string, M = never> {
     readonly name: string;
     readonly value: T | undefined;
     readonly ui: UiState;
     readonly errors: readonly string[];
-    readonly options: readonly FieldOption[];
+    readonly options: readonly FieldOption<OptionValue<T>, M>[];
     readonly touched: boolean;
     readonly focused: boolean;
     readonly required: boolean;
     readonly submitting: boolean;
     readonly mounted: boolean;
 
-    constructor(params: FieldSnapshotParams<T>) {
+    constructor(params: FieldSnapshotParams<T, M>) {
         this.name = params.name;
         this.value = params.value;
         this.ui = params.ui;
@@ -84,7 +85,7 @@ export class FieldSnapshot<T = string> {
         return this.errors[0];
     }
 
-    equals(other: FieldSnapshot<T>): boolean {
+    equals(other: FieldSnapshot<T, M>): boolean {
         return this.name === other.name
             && Object.is(this.value, other.value)
             && this.ui.equals(other.ui)
@@ -102,7 +103,9 @@ function sameStrings(a: readonly string[], b: readonly string[]): boolean {
     return a.length === b.length && a.every((item, i) => item === b[i]);
 }
 
-function sameOptions(a: readonly FieldOption[], b: readonly FieldOption[]): boolean {
+type ComparableOption = { readonly value: unknown; readonly label: string };
+
+function sameOptions(a: readonly ComparableOption[], b: readonly ComparableOption[]): boolean {
     if (a === b) {
         return true;
     }

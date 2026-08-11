@@ -1,12 +1,23 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { FieldController, type FieldHost, type FieldParams, type FieldView } from "../field";
+import {
+    FieldController,
+    type FieldHost,
+    type FieldParams,
+    type FieldsShape,
+    type AnyFieldView,
+    type MetaOf,
+    type ValueOf,
+} from "../field";
 import { Lifecycle } from "../lifecycle";
 import { DependencyGraph } from "./DependencyGraph";
 import { FormSnapshot, type FieldSummary } from "./FormSnapshot";
 import type { FormStatus, FormView } from "./FormView";
 
 type Listener = () => void;
-type AnyField = FieldController<any>;
+type AnyField = FieldController<any, any>;
+
+/** Les noms de champs déclarés par la map du formulaire. */
+export type FieldNameOf<TFields extends FieldsShape> = Extract<keyof TFields, string>;
 
 /** Passes de convergence avant d'abandonner : couvre les lookups en chaîne. */
 const MAX_SETTLE_ROUNDS = 5;
@@ -33,7 +44,7 @@ export interface FormParams {
  * graph lives in `DependencyGraph`, the per-field state in each
  * `FieldController`, and the aggregate in `FormSnapshot`.
  */
-export class FormController implements FieldHost {
+export class FormController<TFields extends FieldsShape = FieldsShape> implements FieldHost {
     readonly name: string;
 
     private readonly lifecycle = new Lifecycle();
@@ -73,13 +84,18 @@ export class FormController implements FieldHost {
      * fixed for the field's lifetime, so passing inline objects from a React
      * render is safe. Later changes go through `FieldController.update`.
      */
-    field<T = string>(name: string, params?: Omit<FieldParams<T>, "name">): FieldController<T> {
+    field<K extends FieldNameOf<TFields>>(
+        name: K,
+        params?: Omit<FieldParams<ValueOf<TFields[K]>, MetaOf<TFields[K]>>, "name">,
+    ): FieldController<ValueOf<TFields[K]>, MetaOf<TFields[K]>> {
+        type Controller = FieldController<ValueOf<TFields[K]>, MetaOf<TFields[K]>>;
+
         const existing = this.fields.get(name);
         if (existing) {
-            return existing as FieldController<T>;
+            return existing as Controller;
         }
 
-        const controller = new FieldController<T>({ ...params, name });
+        const controller: Controller = new FieldController({ ...params, name });
         controller.attach(this);
         this.fields.set(name, controller);
 
@@ -94,15 +110,15 @@ export class FormController implements FieldHost {
         return controller;
     }
 
-    has(name: string): boolean {
+    has(name: FieldNameOf<TFields>): boolean {
         return this.fields.has(name);
     }
 
-    get(name: string): AnyField | null {
+    get(name: FieldNameOf<TFields>): AnyField | null {
         return this.fields.get(name) ?? null;
     }
 
-    remove(name: string): void {
+    remove(name: FieldNameOf<TFields>): void {
         const field = this.fields.get(name);
         if (!field) {
             return;
@@ -113,8 +129,8 @@ export class FormController implements FieldHost {
         this.commit();
     }
 
-    names(): readonly string[] {
-        return [...this.fields.keys()];
+    names(): readonly FieldNameOf<TFields>[] {
+        return [...this.fields.keys()] as FieldNameOf<TFields>[];
     }
 
     // ── FieldHost ────────────────────────────────────────────────────────
@@ -140,7 +156,7 @@ export class FormController implements FieldHost {
 
         this.propagating = true;
         try {
-            const view: FieldView = source.view();
+            const view: AnyFieldView = source.view();
             for (const observer of observers) {
                 this.fields.get(observer)?.notifyDependency(view);
             }

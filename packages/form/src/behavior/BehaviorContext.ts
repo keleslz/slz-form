@@ -1,6 +1,7 @@
 import type { BehaviorState, UiState } from "../state";
+import type { OptionValue } from "../field/Field";
 import type { FieldOption } from "../field/FieldOption";
-import type { FieldView } from "../field/FieldView";
+import type { AnyFieldView } from "../field/FieldView";
 import type { FormView } from "../form/FormView";
 
 /**
@@ -8,7 +9,7 @@ import type { FormView } from "../form/FormView";
  * does not own (invariant 8); the only writes it can perform target its own
  * field (invariants 5, 6, 20).
  */
-export interface BehaviorContext<T = string> {
+export interface BehaviorContext<T = string, M = never> {
     readonly name: string;
 
     /**
@@ -40,13 +41,13 @@ export interface BehaviorContext<T = string> {
     setValue(next: T | undefined): void;
 
     /** Publishes the option list (select / multi-select / radio). */
-    setOptions(options: readonly FieldOption[]): void;
+    setOptions(options: readonly FieldOption<OptionValue<T>, M>[]): void;
 
     /**
      * Reads a field declared in `watch`. Throws on an undeclared name: a
      * reactive dependency must be explicit (invariants 7, 23).
      */
-    watched(name: string): FieldView | null;
+    watched(name: string): AnyFieldView | null;
 
     /**
      * Publishes an intermediate state outside the hook's return value — the

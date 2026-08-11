@@ -7,6 +7,6 @@ import type { IBehavior } from "./IBehavior";
  * Composite behaviors (invariant 18) are built by simply passing several
  * behaviors to a field: each keeps its own slice and the controller merges them.
  */
-export abstract class Behavior<T = string> implements IBehavior<T> {
+export abstract class Behavior<T = string, M = never> implements IBehavior<T, M> {
     readonly watch: readonly string[] = [];
 }

@@ -1,5 +1,5 @@
 import type { BehaviorContext, BehaviorResult, IBehavior } from "../behavior";
-import type { FieldView } from "../field";
+import type { AnyFieldView } from "../field";
 
 /**
  * Escape hatch for any cross-field reaction the other utils do not cover.
@@ -9,7 +9,7 @@ import type { FieldView } from "../field";
  */
 export function dependsOn<T = string>(
     watch: readonly string[],
-    effect: (ctx: BehaviorContext<T>, dependency: FieldView) => BehaviorResult,
+    effect: (ctx: BehaviorContext<T>, dependency: AnyFieldView) => BehaviorResult,
 ): IBehavior<T> {
     return { watch, onDependencyChanged: effect };
 }

@@ -1,4 +1,4 @@
-import type { FieldView } from "../field/FieldView";
+import type { AnyFieldView } from "../field/FieldView";
 
 export type FormStatus = "idle" | "submitting" | "submitted";
 
@@ -13,6 +13,6 @@ export type FormStatus = "idle" | "submitting" | "submitted";
 export interface FormView {
     readonly name: string;
     readonly status: FormStatus;
-    field(name: string): FieldView | null;
+    field(name: string): AnyFieldView | null;
     values(): Readonly<Record<string, unknown>>;
 }

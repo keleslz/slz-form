@@ -1,5 +1,5 @@
 import type { BehaviorContext, IBehavior } from "../behavior";
-import type { FieldOption } from "../field";
+import type { FieldOption, OptionValue } from "../field";
 import type { BehaviorState } from "../state";
 import { createDebouncer, type Debouncer } from "./debounce";
 import { lockedWhilePending, type PendingState } from "./pending";
@@ -46,10 +46,10 @@ export interface LoadOptionsParams {
  * sauf `resetOnReload`, qui vide un select dont la liste vient de changer sous
  * lui. Il n'entre donc jamais en collision avec la frappe de l'utilisateur.
  */
-export function loadOptions<T = string>(
-    fetcher: (ctx: BehaviorContext<T>) => Promise<readonly FieldOption[]>,
+export function loadOptions<T = string, M = never>(
+    fetcher: (ctx: BehaviorContext<T, M>) => Promise<readonly FieldOption<OptionValue<T>, M>[]>,
     params: LoadOptionsParams = {},
-): IBehavior<T> {
+): IBehavior<T, M> {
     const watch = params.watch ?? [];
     const delay = params.debounce ?? 0;
     const pending = params.pending ?? lockedWhilePending;
@@ -67,7 +67,7 @@ export function loadOptions<T = string>(
         return created;
     };
 
-    const load = async (ctx: BehaviorContext<T>): Promise<BehaviorState> => {
+    const load = async (ctx: BehaviorContext<T, M>): Promise<BehaviorState> => {
         ctx.push(pending(ctx.state));
 
         if (delay > 0 && !(await debouncerOf(ctx.name).wait(delay))) {

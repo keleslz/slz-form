@@ -1,12 +1,15 @@
 /**
- * Options are a first-class dimension of a field, not free-form data.
+ * Les options sont une dimension de premier rang du champ, pas des données
+ * libres : select, multi-select et radio en ont besoin, et « va chercher mes
+ * options » est de loin le besoin asynchrone le plus courant.
  *
- * Select / multi-select / radio need them, and "fetch my options" is by far the
- * most common async need — giving it a typed slot avoids a generic `data` bag
- * that would turn the snapshot into a junk drawer (invariant 21).
+ * `M` transporte les données métier de l'option — l'enregistrement brut renvoyé
+ * par l'API, dont on ne veut pas perdre l'avatar ou le sous-titre en cours de
+ * route. Quand il n'est pas déclaré, `meta` n'existe pas ; quand il l'est, il
+ * est **obligatoire**, donc lisible sans `?.`.
  */
-export interface FieldOption<V = string> {
+export type FieldOption<V = string, M = never> = {
     readonly value: V;
     readonly label: string;
     readonly disabled?: boolean;
-}
+} & ([M] extends [never] ? { readonly meta?: undefined } : { readonly meta: M });

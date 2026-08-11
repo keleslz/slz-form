@@ -1,10 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FormController } from "./FormController";
 import type { FormSnapshot } from "./FormSnapshot";
 
 type Listener = () => void;
 
 export interface FormRegisterParams {
-    values: readonly FormController[];
+    values: readonly FormController<any>[];
 }
 
 /**
@@ -13,12 +14,12 @@ export interface FormRegisterParams {
  * Same role as a root reducer: each form is declared in its own contextual
  * module, and they are gathered here once. Nothing else imports a form
  * instance — views address forms by name through this register, which is what
- * keeps `new FormController(...)` from leaking into every component.
+ * keeps `new FormController<any>(...)` from leaking into every component.
  *
  * Instantiable at module level: it holds no framework state.
  */
 export class FormRegister {
-    private readonly forms = new Map<string, FormController>();
+    private readonly forms = new Map<string, FormController<any>>();
     private readonly listeners = new Set<Listener>();
     private readonly unsubscribes: (() => void)[] = [];
 
@@ -32,12 +33,12 @@ export class FormRegister {
         }
     }
 
-    get(name: string): FormController | null {
+    get(name: string): FormController<any> | null {
         return this.forms.get(name) ?? null;
     }
 
     /** Same as `get`, but fails loudly — a typo in a form name is a wiring bug. */
-    require(name: string): FormController {
+    require(name: string): FormController<any> {
         const form = this.forms.get(name);
         if (!form) {
             throw new Error(
@@ -47,7 +48,7 @@ export class FormRegister {
         return form;
     }
 
-    all(): readonly FormController[] {
+    all(): readonly FormController<any>[] {
         return [...this.forms.values()];
     }
 

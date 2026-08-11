@@ -5,28 +5,29 @@ import type { UiFlag, ValidityFlag } from "../state";
 import { DefaultValidator, type IValidator, type ValidatorStatus } from "../validator";
 import type { FormView } from "../form/FormView";
 import type { FieldHost } from "./FieldHost";
+import type { OptionValue } from "./Field";
 import type { FieldOption } from "./FieldOption";
 import { FieldSnapshot } from "./FieldSnapshot";
-import type { FieldView } from "./FieldView";
+import type { AnyFieldView, FieldView } from "./FieldView";
 
 type Listener = () => void;
 
-export interface FieldParams<T = string> {
+export interface FieldParams<T = string, M = never> {
     name: string;
     required?: boolean;
     /** Overrides the validator's default "required" message. */
     requiredMessage?: string;
     initialValue?: T;
     validator?: IValidator<T>;
-    behaviors?: readonly IBehavior<T>[];
-    options?: readonly FieldOption[];
+    behaviors?: readonly IBehavior<T, M>[];
+    options?: readonly FieldOption<OptionValue<T>, M>[];
 }
 
 /** Props the consumer can push after creation. Identity (name, behaviors, validator) is fixed. */
-export interface FieldUpdate<T = string> {
+export interface FieldUpdate<T = string, M = never> {
     required?: boolean;
     value?: T;
-    options?: readonly FieldOption[];
+    options?: readonly FieldOption<OptionValue<T>, M>[];
 }
 
 /**
@@ -37,29 +38,29 @@ export interface FieldUpdate<T = string> {
  * Configuration is a single object; everything beyond `name` is optional
  * (invariant 17).
  */
-export class FieldController<T = string> {
+export class FieldController<T = string, M = never> {
     readonly name: string;
 
     private readonly lifecycle = new Lifecycle();
-    private readonly behaviors: readonly IBehavior<T>[];
+    private readonly behaviors: readonly IBehavior<T, M>[];
     private readonly validator: IValidator<T>;
-    private readonly statesByBehavior = new Map<IBehavior<T>, BehaviorState>();
+    private readonly statesByBehavior = new Map<IBehavior<T, M>, BehaviorState>();
     private readonly listeners = new Set<Listener>();
 
     private host: FieldHost | null = null;
     private required: boolean;
     private readonly requiredMessage?: string;
     private value: T | undefined;
-    private options: readonly FieldOption[];
+    private options: readonly FieldOption<OptionValue<T>, M>[];
     private touched = false;
     private focused = false;
     private submitting = false;
     private validity: ValidityFlag = "pristine";
-    private current: FieldSnapshot<T>;
+    private current: FieldSnapshot<T, M>;
     private abort = new AbortController();
     private unsubscribeValidator: (() => void) | null = null;
 
-    constructor(params: FieldParams<T>) {
+    constructor(params: FieldParams<T, M>) {
         this.name = params.name;
         this.behaviors = params.behaviors ?? [];
         // Always a validator: validity then has exactly one source, with no
@@ -101,7 +102,7 @@ export class FieldController<T = string> {
         this.run("onMount");
     }
 
-    update(params: FieldUpdate<T>): void {
+    update(params: FieldUpdate<T, M>): void {
         this.lifecycle.update(() => {
             if (params.required !== undefined && params.required !== this.required) {
                 this.required = params.required;
@@ -217,9 +218,9 @@ export class FieldController<T = string> {
 
     // ── read surface ─────────────────────────────────────────────────────
     /** Stable reference: safe to pass straight to `useSyncExternalStore`. */
-    getSnapshot = (): FieldSnapshot<T> => this.current;
+    getSnapshot = (): FieldSnapshot<T, M> => this.current;
 
-    get snapshot(): FieldSnapshot<T> {
+    get snapshot(): FieldSnapshot<T, M> {
         return this.current;
     }
 
@@ -235,7 +236,7 @@ export class FieldController<T = string> {
         return this.current.ui.has(...flags);
     }
 
-    view(): FieldView<T> {
+    view(): FieldView<T, M> {
         return {
             name: this.name,
             value: this.current.value,
@@ -248,7 +249,7 @@ export class FieldController<T = string> {
     }
 
     // ── dependency reaction (driven by the FormController) ───────────────
-    notifyDependency(dependency: FieldView): void {
+    notifyDependency(dependency: AnyFieldView): void {
         if (!this.lifecycle.isMounted) {
             return;
         }
@@ -300,7 +301,7 @@ export class FieldController<T = string> {
         this.commit();
     }
 
-    private apply(behavior: IBehavior<T>, result: BehaviorResult, signal: AbortSignal): void {
+    private apply(behavior: IBehavior<T, M>, result: BehaviorResult, signal: AbortSignal): void {
         if (result instanceof BehaviorState) {
             this.statesByBehavior.set(behavior, result);
             return;
@@ -328,7 +329,7 @@ export class FieldController<T = string> {
             });
     }
 
-    private buildContext(behavior: IBehavior<T>, signal: AbortSignal): BehaviorContext<T> {
+    private buildContext(behavior: IBehavior<T, M>, signal: AbortSignal): BehaviorContext<T, M> {
         const watch = behavior.watch ?? [];
         // Captured explicitly: `state`, `ui` and `form` are getters, so they must
         // read the controller live — a behavior that resumes after an `await`
@@ -385,11 +386,11 @@ export class FieldController<T = string> {
         this.host?.notifyFieldChanged(this.name, valueChanged);
     }
 
-    private buildSnapshot(): FieldSnapshot<T> {
+    private buildSnapshot(): FieldSnapshot<T, M> {
         const state = this.validator.getState();
         this.validity = this.resolveValidity(state.status);
 
-        return new FieldSnapshot<T>({
+        return new FieldSnapshot<T, M>({
             name: this.name,
             value: this.value,
             // A submitting form locks its fields: that is a controller-level fact,
