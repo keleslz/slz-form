@@ -7,3 +7,4 @@ export * from "./lockWhile";
 export * from "./hideWhen";
 export * from "./dependsOn";
 export * from "./lookup";
+export * from "./behaviorsFor";
