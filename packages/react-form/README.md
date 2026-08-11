@@ -12,33 +12,25 @@ résoudre une seule copie de chaque (voir « Pourquoi des peer dependencies » p
 
 ## Utilisation
 
-Déclare tes formulaires dans un module, enregistre-les une fois, publie le
-register — le même découpage qu'une slice, un root reducer et un store :
+Déclare le formulaire et sa map de champs dans un module, puis dérives-en ses
+hooks — le même découpage qu'une slice :
 
 ```ts
-// src/form/signup-form.ts          (≈ une slice)
-export const SIGNUP_FORM = "signup";
-export const signupForm = new FormController({ name: SIGNUP_FORM });
+// src/form/signup-form.ts
+export type SignupFields = { email: string; postcode: string; city: string };
 
-// src/form/index.ts                 (≈ le root reducer)
-export const formRegister = new FormRegister({ values: [signupForm] });
+export const signupForm = new FormController<SignupFields>({ name: "signup" });
+
+export const { useField, useForm } = hooksFor(signupForm);
 ```
 
-```tsx
-// src/main.tsx                      (≈ <Provider store={store}>)
-<FormProvider register={formRegister}>
-    <App />
-</FormProvider>
-```
-
-Ensuite, aucun composant n'importe une instance de formulaire — il en **nomme**
-un, et le register le résout :
+`name` est alors contraint aux champs déclarés, et la valeur est inférée. Il n'y
+a ni provider à monter ni formulaire à nommer sur chaque champ :
 
 ```tsx
 function EmailField() {
-    const field = useField<string>({
-        form: SIGNUP_FORM,
-        name: "email",
+    const field = useField({
+        name: "email",              // ← contraint à SignupFields
         required: true,
         validator: new EmailValidator(),
     });
@@ -66,9 +58,8 @@ Ajouter un champ au formulaire, c'est monter ce composant. Rien à déclarer en 
 
 | Export | Rôle |
 |---|---|
-| `FormProvider` | publie le `FormRegister` dans l'arbre |
-| `useField` | rattache un champ à son formulaire et l'expose à React |
-| `useForm` | souscription au formulaire entier (bouton submit, récapitulatif) |
+| `hooksFor(form)` | rend `useField` et `useForm` liés à un formulaire, typés par sa map |
+| `FormProvider` | publie le `FormRegister` dans l'arbre, pour l'accès transverse |
 | `useFormRegister` | accès direct au register |
 
 `useField` ne fait que brancher le cycle de vie React sur le controller et lire

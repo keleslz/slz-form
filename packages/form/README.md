@@ -14,7 +14,7 @@ npm install slz-form
 ## En trente secondes
 
 ```ts
-import { FormController, IValidator, type ValidationReport } from "slz-form";
+import { behaviorsFor, FormController, IValidator, type ValidationReport } from "slz-form";
 
 class EmailValidator extends IValidator<string> {
     protected validate(value: string, report: ValidationReport) {
@@ -22,7 +22,10 @@ class EmailValidator extends IValidator<string> {
     }
 }
 
-const form = new FormController({ name: "signup" });
+// la map déclare ce que vaut chaque champ : tout le reste s'infère
+const form = new FormController<{ email: string; postcode: string; city: string }>({
+    name: "signup",
+});
 
 const email = form.field("email", { required: true, validator: new EmailValidator() });
 email.listen(() => render(email.snapshot));
@@ -30,6 +33,20 @@ email.mount();
 email.change("ada@lovelace.dev");
 
 email.hasFlag("valid");   // true
+```
+
+Les behaviors se dérivent du formulaire, ce qui supprime les casts et les noms
+répétés :
+
+```ts
+const { lookup, suggest } = behaviorsFor(form);
+
+lookup({
+    field: "city",
+    watch: ["postcode"],
+    debounce: 400,
+    fetch: ({ postcode }) => fetchCity(postcode),   // postcode: string
+});
 ```
 
 Aucun framework requis : ce code tourne tel quel dans un navigateur, sous Node,

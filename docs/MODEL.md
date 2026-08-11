@@ -79,7 +79,8 @@ qui échoue bruyamment sur une faute de frappe. C'est le fichier qui répond à
 « quels formulaires a mon app ? ».
 
 ### FormController
-`new FormController({ name })`. Orchestrateur des Fields et **endroit où un
+`new FormController<CarFields>({ name })` — la map déclare ce que vaut chaque
+champ, et le narrowing en découle partout. Orchestrateur des Fields et **endroit où un
 field rejoint un form** : `form.field(name, params)` crée le champ au premier
 appel et rend la même instance ensuite. Conséquence recherchée : ajouter un
 input, c'est une ligne dans la vue, rien à déclarer en amont.
@@ -147,10 +148,11 @@ Couvrent les cas courants sans écrire de behavior :
 
 | Fonction | Rôle |
 |---|---|
-| `loadOptions(fetcher, { on, watch, debounce, pending })` | charge les options en API : au montage, sur dépendance, ou sur la frappe (champ de recherche) |
+| `loadOptions({ field, on, watch, debounce, fetch })` | charge les options : au montage, sur dépendance, ou à la frappe |
 | `prefill(fetcher)` | remplit le champ au montage, verrouillé et `loading`, sans le marquer touché |
 | `lockWhile(condition, watch)` | verrouillage conditionnel, y compris inter-champs |
-| `lookup(fetcher, { watch, debounce, pending })` | appelle une API et **écrit** la valeur du champ |
+| `lookup({ field, watch, debounce, fetch })` | appelle une API et **écrit** la valeur du champ |
+| `suggest({ field, debounce, fetch })` | champ de recherche : suggestions à la frappe, sans verrou |
 | `hideWhen(watch, predicate)` | émet `invisible` |
 | `dependsOn(watch, effect)` | échappatoire générique pour toute réaction inter-champs |
 | `createBehavior(def)` | typage d'un littéral de behavior |
@@ -232,7 +234,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 14 | Behaviors orchestrent les réactions | hooks de cycle de vie + `onDependencyChanged`, déclenché sur la **valeur** observée uniquement |
 | 15 | Adapters sans logique métier | `react/` = provider + 2 hooks, zéro règle |
 | 16 | Pas d'abstraction inutile | pas de couche « Field » séparée du Controller ; utils = fonctions nues |
-| 17 | Configuration concise | un seul objet, `name` seul obligatoire |
+| 17 | Configuration concise | un objet par behavior ; les dépendances déclarées **sont** ce que reçoit le callback |
 | 18 | Behavior atomique ou composite | plusieurs behaviors par champ, chacun sa tranche |
 | 19 | Aucun composant propriétaire du state | les composants ne reçoivent qu'un snapshot |
 | 20 | Mutations croisées interdites | aucun chemin d'écriture vers un autre champ |
@@ -261,10 +263,11 @@ inchangés).
 
 ## 8. Reste ouvert — à trancher
 
-1. **Noms de formulaires et de champs typés.** Aujourd'hui `form: string`, une
-   faute de frappe échoue au runtime (`require` throw). On peut dériver une map
-   typée depuis le tableau du register via generics, au prix d'un peu de
-   type-level. À arbitrer selon le goût pour l'ergonomie vs la simplicité.
+1. ~~**Noms de champs typés.**~~ Fait. `FormController<TFields>` porte la map,
+   `behaviorsFor(form)` et `hooksFor(form)` en dérivent des helpers où tout est
+   inféré. Prix assumé : ajouter un champ coûte une ligne dans la map en plus de
+   celle dans la vue. En échange, plus aucun `as` côté consommateur, et un nom
+   fautif ou du mauvais type ne compile pas.
 2. **Champs dynamiques** (field arrays, champs répétés). `addField`/`removeField`
    existent (`form.field()` / `form.remove()`), mais aucun cas d'usage n'est
    encore éprouvé.
