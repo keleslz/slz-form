@@ -65,19 +65,17 @@ Ce qui coûte cher n'est pas la longueur, c'est ce que ce code installe :
 
 Le même champ, avec le moteur :
 
+```ts
+// une fois, dans le module du formulaire
+const modelOptions = loadOptions({
+    field: "model",
+    watch: ["brand"],
+    fetch: ({ brand }) => fetchModels(brand),   // brand: string, sans cast
+});
+```
+
 ```tsx
-<SelectField
-    form={CAR_FORM}
-    name="model"
-    label="Modèle"
-    required
-    behaviors={[
-        loadOptions(
-            (ctx) => fetchModels(ctx.watched("brand")?.value as string | undefined),
-            { watch: ["brand"] },
-        ),
-    ]}
-/>
+<SelectField name="model" label="Modèle" required behaviors={[modelOptions]} />
 ```
 
 Pas de `useState`, pas de `useEffect`, pas de spinner câblé à la main, pas de
@@ -134,25 +132,36 @@ Chaque champ a son propre abonnement et un snapshot stable par référence.
 S'abonner au formulaire entier est un choix explicite, réservé à ce qui en a
 besoin — un bouton submit, un récapitulatif.
 
-### Ajouter un champ est une ligne
+### Rien n'est typé à la main, et rien de faux ne compile
 
-Le formulaire est déclaré dans un module, enregistré une fois, publié à
-l'application — le même découpage qu'une slice, un root reducer et un store :
+Le formulaire déclare ce que vaut chaque champ ; behaviors et hooks en dérivent :
 
 ```ts
-// src/form/car-configuration-form.ts   (≈ une slice)
-export const CAR_FORM = "car-configuration";
-export const carForm = new FormController({ name: CAR_FORM });
+// src/form/car-configuration-form.ts        (≈ une slice)
+export type CarFields = {
+    brand: string;
+    model: string;
+    mileage: number;
+    licence: File;
+};
 
-// src/form/index.ts                       (≈ le root reducer)
-export const formRegister = new FormRegister({ values: [carForm] });
+export const carForm = new FormController<CarFields>({ name: "car-configuration" });
 
-// src/main.tsx                            (≈ <Provider store={store}>)
-<FormProvider register={formRegister}><App /></FormProvider>
+export const { lookup, loadOptions, suggest, prefill } = behaviorsFor(carForm);
+export const { useField, useForm } = hooksFor(carForm);
 ```
 
-Aucun composant n'importe une instance de formulaire : il en **nomme** un, et le
-register le résout. Ajouter un champ ne touche pas le module `form`.
+Il n'y a plus de formulaire à nommer sur chaque champ, et `name` est vérifié —
+y compris contre le **type** du champ :
+
+```tsx
+<NumberField name="mileage" />   // ✓
+<NumberField name="brand" />     // ✗ ne compile pas : brand est un string
+<TextField   name="typo" />      // ✗ ne compile pas : champ inexistant
+```
+
+C'est le prix assumé du narrowing : ajouter un champ coûte une ligne dans la map
+en plus de celle dans la vue. En échange, aucun `as` dans le code consommateur.
 
 ### La logique s'écrit une fois, pour tous les frameworks
 
