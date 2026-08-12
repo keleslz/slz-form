@@ -204,8 +204,21 @@ FormRegister              tous les formulaires de l'app          (≈ root reduc
               └── FieldSnapshot   ce que le composant rend
 ```
 
-Les comportements courants sont fournis en fonctions nues, sans rien à écrire :
-`loadOptions`, `prefill`, `lockWhile`, `hideWhen`, `dependsOn`.
+Les comportements courants sont fournis prêts à l'emploi, dérivés du formulaire
+et donc entièrement typés : `loadOptions`, `suggest`, `lookup`, `prefill`,
+`lockWhile`, `hideWhen`.
+
+```ts
+const { lookup, suggest, prefill } = behaviorsFor(carForm);
+
+lookup({ field: "city", watch: ["postcode"], debounce: 400,
+         fetch: ({ postcode }) => fetchCity(postcode) });   // postcode: string
+```
+
+Le même besoin peut toujours s'écrire à la main quand il sort de l'ordinaire —
+le README du core montre [le même prefill dans ses trois
+formes](packages/form/README.md#trois-façons-de-préremplir-un-champ) : classe de
+behavior, avec validator, puis utilitaire.
 
 📄 La modélisation complète, les arbitrages et les 25 invariants d'architecture
 sont dans **[`docs/MODEL.md`](docs/MODEL.md)**.
