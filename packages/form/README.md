@@ -190,6 +190,42 @@ Un nom de champ fautif et un fetch au mauvais type sont des erreurs de
 compilation, pas des surprises à l'exécution.
 
 
+---
+
+## Champs dont le nom n'est pas un identifiant
+
+Un champ peut s'appeler `Toto-1`, `2-champ` ou `champ avec espaces` : la map
+accepte n'importe quelle clé, et le narrowing tient intégralement.
+
+```ts
+const form = new FormController<{ "Toto-1": string; "2-champ": number }>({ name: "f" });
+
+form.field("Toto-1").snapshot.value   // string | undefined
+```
+
+Seule l'**écriture** du callback change, parce que JavaScript ne sait pas
+destructurer un nom qui n'est pas un identifiant. Deux formes, l'une et l'autre
+typées :
+
+```ts
+// destructuration avec renommage
+fetch: async ({ "Toto-1": toto1, "2-champ": deux }) => { … }   // string, number
+
+// ou accès par index
+fetch: async (deps) => deps["Toto-1"]                          // string | undefined
+```
+
+En revanche, ceci n'est pas du JavaScript valide :
+
+```ts
+fetch: async ({ Toto-1 }) => …
+//                  ~ error TS1005: ',' expected
+```
+
+`Toto-1` se lit comme `Toto` moins `1`. C'est une erreur de syntaxe, pas de
+type — le compilateur échoue au parsing avant même de regarder les types.
+
+
 ## API
 
 | Entité | Rôle |
