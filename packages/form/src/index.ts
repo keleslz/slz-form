@@ -5,3 +5,4 @@ export * from "./behavior";
 export * from "./field";
 export * from "./form";
 export * from "./util";
+export * from "./array";

@@ -258,7 +258,10 @@ export class FieldController<T = string, M = never> {
     // ── events ───────────────────────────────────────────────────────────
     /** A user interaction: marks the field touched, unlike a programmatic write. */
     change(next: T | undefined): void {
-        if (!this.lifecycle.isMounted) {
+        // La garde vise le **démontage**, pas l'absence de montage : un champ
+        // qui n'est pas encore monté est en cours de mise en place, alors qu'un
+        // champ démonté ne fait plus partie du formulaire.
+        if (this.lifecycle.isUnmounted) {
             return;
         }
         this.touched = true;
@@ -266,7 +269,7 @@ export class FieldController<T = string, M = never> {
     }
 
     focus(): void {
-        if (this.focused || !this.lifecycle.isMounted) {
+        if (this.focused || this.lifecycle.isUnmounted) {
             return;
         }
         this.focused = true;
@@ -274,7 +277,7 @@ export class FieldController<T = string, M = never> {
     }
 
     blur(): void {
-        if (!this.lifecycle.isMounted) {
+        if (this.lifecycle.isUnmounted) {
             return;
         }
         this.focused = false;

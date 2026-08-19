@@ -88,7 +88,10 @@ export function useFieldOn<V, M>(
     const options = params.options;
 
     const controller = useMemo(
-        () => form.field(name, {
+        // `name` est élargi ici pour la même raison que `params` plus bas :
+        // `hooksFor` a déjà vérifié qu'il appartient au formulaire, mais cette
+        // fonction ne voit plus la map.
+        () => form.field(name as never, {
             required: params.required,
             requiredMessage: params.requiredMessage,
             requiredTrue: params.requiredTrue,

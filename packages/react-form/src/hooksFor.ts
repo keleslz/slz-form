@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import type {
+    ArrayNameOf,
     FieldsShape,
     FormController,
     FormSnapshot,
     MetaOf,
     ValueOf,
 } from "slz-form";
+import type { RowOf } from "slz-form";
 import { useFieldOn, type UseFieldParams, type UseFieldResult } from "./useField";
+import { useFieldArrayOn, type UseFieldArrayResult } from "./useFieldArray";
 
 export interface UseFormResult {
     snapshot: FormSnapshot;
@@ -46,6 +49,16 @@ export function hooksFor<TFields extends FieldsShape>(form: FormController<TFiel
     }
 
     /**
+     * Les lignes d'une liste répétable. `name` est contraint aux listes
+     * déclarées par la map — un nom de champ simple ne compile pas.
+     */
+    function useFieldArray<K extends ArrayNameOf<TFields>>(
+        name: K,
+    ): UseFieldArrayResult<RowOf<TFields[K]>> {
+        return useFieldArrayOn<RowOf<TFields[K]>>(form, name);
+    }
+
+    /**
      * Souscription au formulaire entier — bouton de soumission, récapitulatif.
      * Un champ ne l'appelle jamais, c'est ce qui préserve l'isolation des rendus.
      */
@@ -72,5 +85,5 @@ export function hooksFor<TFields extends FieldsShape>(form: FormController<TFiel
         };
     }
 
-    return { useField, useForm };
+    return { useField, useFieldArray, useForm };
 }

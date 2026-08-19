@@ -9,6 +9,8 @@ import {
     type ValueOf,
 } from "../field";
 import type { FieldChanges } from "../behavior/IBehavior";
+import { FieldArrayController } from "../array/FieldArrayController";
+import type { ArrayNameOf, PlainNameOf, RowOf } from "../array/FieldArray";
 import { Lifecycle } from "../lifecycle";
 import { DependencyGraph } from "./DependencyGraph";
 import { FormSnapshot, type FieldSummary } from "./FormSnapshot";
@@ -17,8 +19,11 @@ import type { FormStatus, FormView } from "./FormView";
 type Listener = () => void;
 type AnyField = FieldController<any, any>;
 
-/** Les noms de champs déclarés par la map du formulaire. */
-export type FieldNameOf<TFields extends FieldsShape> = Extract<keyof TFields, string>;
+/**
+ * Les noms de champs simples déclarés par la map — les listes en sont exclues,
+ * elles passent par `form.array(...)`.
+ */
+export type FieldNameOf<TFields extends FieldsShape> = PlainNameOf<TFields>;
 
 /** Passes de convergence avant d'abandonner : couvre les lookups en chaîne. */
 const MAX_SETTLE_ROUNDS = 5;
@@ -52,6 +57,7 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
 
     private readonly lifecycle = new Lifecycle();
     private readonly fields = new Map<string, AnyField>();
+    private readonly arrays = new Map<string, FieldArrayController<FieldsShape>>();
     private readonly graph = new DependencyGraph();
     private readonly listeners = new Set<Listener>();
     private readonly readOnlyView: FormView;
@@ -114,6 +120,37 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             throw error;
         }
 
+        this.commit();
+        return controller;
+    }
+
+    /**
+     * La liste nommée `name`, créée au premier appel — symétrique de `field()`.
+     *
+     * Chaque ligne est un `FormController` à part entière : sa validation, son
+     * graphe de dépendances et ses instantanés sont ceux qu'on connaît déjà.
+     */
+    array<K extends ArrayNameOf<TFields>>(name: K): FieldArrayController<RowOf<TFields[K]>> {
+        type Rows = FieldArrayController<RowOf<TFields[K]>>;
+
+        const existing = this.arrays.get(name);
+        if (existing) {
+            return existing as unknown as Rows;
+        }
+
+        const controller = new FieldArrayController<RowOf<TFields[K]>>({
+            name,
+            createRow: (id) => new FormController<RowOf<TFields[K]>>({
+                name: id,
+                settleTimeout: this.settleTimeout,
+            }),
+            onChanged: () => this.commit(),
+        });
+
+        this.arrays.set(name, controller as unknown as FieldArrayController<FieldsShape>);
+        if (this.lifecycle.isMounted) {
+            controller.mount();
+        }
         this.commit();
         return controller;
     }
@@ -202,6 +239,15 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
     // ── lifecycle ────────────────────────────────────────────────────────
     mount(): void {
         this.lifecycle.mount();
+        for (const rows of this.arrays.values()) {
+            rows.mount();
+        }
+    }
+
+    /** Un travail asynchrone est en cours, dans un champ ou dans une ligne. */
+    get isBusy(): boolean {
+        return [...this.fields.values()].some((field) => field.isBusy)
+            || [...this.arrays.values()].some((rows) => rows.isBusy);
     }
 
     update(mutate: () => void): boolean {
@@ -209,6 +255,9 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
     }
 
     unmount(): void {
+        for (const rows of this.arrays.values()) {
+            rows.unmount();
+        }
         if (!this.lifecycle.unmount()) {
             return;
         }
@@ -253,6 +302,12 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         // partir les fenêtres différées — et revalide.
         await Promise.all(mounted.map((field) => field.submit()));
 
+        // Les lignes sont soumises avec le reste : leurs valeurs doivent être
+        // posées et jugées avant qu'on statue sur le formulaire.
+        const rowsValid = (await Promise.all(
+            [...this.arrays.values()].map((rows) => rows.submit()),
+        )).every(Boolean);
+
         const settled = await this.settle(mounted);
 
         if (!settled) {
@@ -268,7 +323,7 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             field.setSubmitting(false);
         }
 
-        const valid = settled && this.buildSnapshot().isValid;
+        const valid = settled && rowsValid && this.buildSnapshot().isValid;
         this.setStatus(valid ? "submitted" : "idle");
         return valid;
     }
@@ -276,6 +331,9 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
     reset(): void {
         for (const field of this.fields.values()) {
             field.reset();
+        }
+        for (const rows of this.arrays.values()) {
+            rows.reset();
         }
         this.setStatus("idle");
     }
@@ -387,6 +445,11 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
                 mounted: snapshot.mounted,
             });
         }
-        return new FormSnapshot(this.name, this.status, summaries);
+        const arrays = [...this.arrays.entries()].map(([name, rows]) => ({
+            name,
+            valid: rows.isValid,
+            values: rows.values(),
+        }));
+        return new FormSnapshot(this.name, this.status, summaries, arrays);
     }
 }
