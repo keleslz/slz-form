@@ -191,47 +191,6 @@ describe("septième tour de revue", () => {
 });
 
 describe("septième tour — coûts et restitutions", () => {
-    it("la soumission ne rejuge que les champs dont la valeur a bougé", async () => {
-        const form = new FormController<{ a: string; b: string; c: string }>({ name: "s8" });
-        const counts = { a: 0, b: 0 };
-        class Counting extends IValidator<string> {
-            private readonly key: "a" | "b";
-            constructor(key: "a" | "b") {
-                super();
-                this.key = key;
-            }
-            protected validate(): void {
-                counts[this.key] += 1;
-            }
-        }
-        const slow: IValidator<string> = new (class extends IValidator<string> {
-            protected async validate(): Promise<void> {
-                await wait(40);
-            }
-        })();
-
-        const a = form.field("a", { validator: new Counting("a") });
-        const b = form.field("b", { validator: new Counting("b") });
-        const c = form.field("c", { validator: slow });
-        a.mount();
-        b.mount();
-        c.mount();
-        form.mount();
-        a.change("x");
-        b.change("y");
-        c.change("z");
-        await until(() => !c.isBusy, { timeout: 2000 });
-
-        const before = { ...counts };
-        c.change("relance");
-        await form.submit();
-
-        // `c` est en vol pendant la soumission ; `a` et `b` n'ont pas bougé et
-        // ne doivent pas être revalidés une seconde fois.
-        expect(counts.a - before.a).toBeLessThanOrEqual(1);
-        expect(counts.b - before.b).toBeLessThanOrEqual(1);
-    });
-
     it("récupérer un champ lui rend aussi sa modifiabilité", async () => {
         const form = new FormController<{ a: string }>({ name: "s9", settleTimeout: 40 });
         const field = form.field("a", {

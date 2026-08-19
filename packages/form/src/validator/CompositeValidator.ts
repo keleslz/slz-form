@@ -88,11 +88,13 @@ export class CompositeValidator<T = string> extends IValidator<T> {
                 const result = member.runInto(value, report, this.contextFor(member, ctx));
                 if (result instanceof Promise) {
                     pending.push(result.catch((error: unknown) => {
-                        reportRuleFailure(ctx.name, error);
+                        reportRuleFailure(ctx.name, member, error);
+                        report.fail();
                     }));
                 }
             } catch (error) {
-                reportRuleFailure(ctx.name, error);
+                reportRuleFailure(ctx.name, member, error);
+                report.fail();
             }
         }
 
@@ -149,7 +151,10 @@ export class CompositeValidator<T = string> extends IValidator<T> {
 }
 
 /** Signale l'échec d'une règle sans l'imputer aux autres membres. */
-function reportRuleFailure(field: string, error: unknown): void {
+function reportRuleFailure(field: string, member: object, error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[slz] A validation rule of "${field}" failed: ${message}`, error);
+    console.error(
+        `[slz] Validation rule "${member.constructor.name}" of "${field}" failed: ${message}`,
+        error,
+    );
 }

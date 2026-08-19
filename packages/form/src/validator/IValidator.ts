@@ -77,6 +77,7 @@ export interface ValidationContext {
  */
 export class ValidationReport {
     private readonly collected: ValidationIssue[] = [];
+    private failed = false;
 
     error(message: string, meta?: IssueMeta): this {
         this.collected.push({ message, severity: "error", code: meta?.code });
@@ -101,6 +102,22 @@ export class ValidationReport {
             this.warn(message, meta);
         }
         return this;
+    }
+
+    /**
+     * Marque la passe comme **interrompue** : une règle n'a pas pu conclure.
+     *
+     * Ce qui a été collecté reste vrai — un refus est un refus. Mais
+     * l'**absence** de refus ne prouve plus rien, et ne doit donc pas être
+     * publiée comme un verdict de validité.
+     */
+    fail(): this {
+        this.failed = true;
+        return this;
+    }
+
+    get interrupted(): boolean {
+        return this.failed;
     }
 
     /** Reprend des constats déjà formés — utilisé par la composition. */
@@ -215,6 +232,12 @@ export abstract class IValidator<T = string> {
 
     async handle(value: T | undefined, ctx: ValidationContext = detachedContext()): Promise<ValidatorState> {
         const run = ++this.run;
+        // Mémorisé avant la passe, et pas seulement à l'entrée en `loading` :
+        // une passe purement synchrone peut être interrompue elle aussi.
+        if (this.state.status !== "loading") {
+            this.beforeLoading = this.state.status;
+            this.beforeIssues = this.state.issues;
+        }
         const report = new ValidationReport();
         const empty = this.isEmpty(value);
 
@@ -228,18 +251,12 @@ export abstract class IValidator<T = string> {
         // la saisie suivante.
         const pending = this.runInto(value, report, ctx);
         if (pending instanceof Promise) {
-            // Ne pas mémoriser `loading` lui-même : une seconde validation
-            // lancée alors que la première est encore en vol écraserait sinon
-            // le seul statut vers lequel on puisse revenir.
-            if (this.state.status !== "loading") {
-                this.beforeLoading = this.state.status;
-                this.beforeIssues = this.state.issues;
-            }
             this.setState(makeState("loading", this.state.issues));
             try {
                 await pending;
             } catch (error) {
                 reportRuleFailure(this.constructor.name, error);
+                report.fail();
                 // Une règle qui casse — un réseau tombé — n'est pas un verdict.
                 // Mais les règles qui ont **réussi** dans la même passe en ont
                 // un : `required`, et tout membre synchrone d'un composite. Les
@@ -248,15 +265,6 @@ export abstract class IValidator<T = string> {
                 //
                 // À une règle qui veut signaler son propre échec de le faire
                 // explicitement, par `report.error(...)` ou `report.warn(...)`.
-                if (run === this.run) {
-                    // Statut et constats doivent décrire **la même passe** :
-                    // apparier un statut périmé à des constats frais publiait
-                    // `error` avec zéro message, ou l'inverse.
-                    this.setState(report.issues.length > 0
-                        ? makeState(report.hasError ? "error" : "valid", [...report.issues])
-                        : makeState(this.beforeLoading, this.beforeIssues));
-                }
-                return this.state;
             }
         }
 
@@ -264,8 +272,7 @@ export abstract class IValidator<T = string> {
             return this.state;
         }
 
-        this.setState(makeState(report.hasError ? "error" : "valid", [...report.issues]));
-
+        this.publish(report);
         return this.state;
     }
 
@@ -287,6 +294,26 @@ export abstract class IValidator<T = string> {
             return this.validate(value as T, report, ctx);
         }
         return undefined;
+    }
+
+    /**
+     * Publie le résultat d'une passe.
+     *
+     * Un refus est toujours publié : il vient d'une règle qui a conclu. En
+     * revanche, l'absence de refus dans une passe **interrompue** ne prouve
+     * rien — on garde alors le dernier verdict connu plutôt que de déclarer
+     * valide une valeur qu'aucune règle n'a pu juger.
+     */
+    private publish(report: ValidationReport): void {
+        if (report.hasError) {
+            this.setState(makeState("error", [...report.issues]));
+            return;
+        }
+        if (report.interrupted) {
+            this.setState(makeState(this.beforeLoading, this.beforeIssues));
+            return;
+        }
+        this.setState(makeState("valid", [...report.issues]));
     }
 
     /**

@@ -227,6 +227,24 @@ report.warn("Ce code postal semble inhabituel", { code: "unusual" });
 Un avertissement ne bloque pas la soumission. Le `code` est là pour que **tu**
 décides : snackbar, sous le champ, ou rien. Le moteur n'affiche jamais.
 
+### Ce qui se passe quand une règle casse
+
+Un réseau tombé n'est pas un verdict. Le moteur publie ce que les autres règles
+ont refusé, conserve le dernier verdict connu plutôt que de déclarer le champ
+valide, et signale l'échec sur la console. Une règle qui veut se prononcer sur
+sa propre panne le fait elle-même :
+
+```ts
+protected async validate(value: string, report: ValidationReport) {
+    try {
+        const taken = await isTaken(value);
+        report.errorIf(taken, "Déjà pris", { code: "taken" });
+    } catch {
+        report.warn("Vérification indisponible", { code: "offline" });
+    }
+}
+```
+
 ### Plusieurs validators sur un champ
 
 ```ts

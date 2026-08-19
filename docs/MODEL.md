@@ -2,7 +2,7 @@
 
 > Document de référence à valider. Il fixe l'objectif, les entités, les
 > arbitrages tranchés et la façon dont chaque invariant est tenu.
-> Statut : implémenté, couvert par `packages/form/test` (124 tests) et `packages/react-form/test` (7 tests) ; le parcours
+> Statut : implémenté, couvert par `packages/form/test` (139 tests) et `packages/react-form/test` (17 tests) ; le parcours
 > navigateur (`examples/react`, 43 assertions) couvre le socle, pas encore les
 > listes répétables ni `readonly`.
 
@@ -174,6 +174,21 @@ une erreur serveur sans que l'invariant 13 bouge.
 Une règle n'est pas consultée sur une valeur vide, sauf si elle déclare
 `validateWhenEmpty` — nécessaire quand c'est elle qui décide de l'obligation
 (« obligatoire si le compte est pro »).
+
+**Ce qui se passe quand une règle casse.** Une règle qui lève, ou dont la
+promesse rejette — un réseau tombé, une réponse illisible — n'a rendu **aucun
+verdict**. Le moteur ne l'invente pas à sa place :
+
+- ce que les autres règles ont déjà refusé est publié : un refus reste un refus ;
+- mais l'**absence** de refus dans une passe interrompue ne vaut pas validité :
+  le dernier verdict connu est conservé, et le champ ne devient pas valide par
+  accident ;
+- l'échec est signalé sur la console, jamais transformé en constat.
+
+Une règle qui veut dire quelque chose de son propre échec le fait
+explicitement, par `report.error(...)` ou `report.warn(...)` — c'est elle qui
+sait si un réseau indisponible doit bloquer la soumission ou seulement
+avertir.
 
 ### Util — les fonctions nues
 Couvrent les cas courants sans écrire de behavior :

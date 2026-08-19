@@ -398,3 +398,64 @@ describe("le hook pilote réellement le moteur", () => {
         expect(screen.getByTestId("status").textContent).toBe("submitted");
     });
 });
+
+describe("le cycle de vie côté React", () => {
+    it("useForm monte le formulaire", async () => {
+        const form = new FormController<{ a: string }>({ name: "r-15" });
+        const { useForm } = hooksFor(form);
+
+        function View(): React.ReactElement {
+            const state = useForm();
+            return <span data-testid="s">{state.snapshot.name}</span>;
+        }
+
+        expect(form.isMounted).toBe(false);
+        render(<View />);
+        await act(async () => { await tick(); });
+        expect(form.isMounted).toBe(true);
+    });
+
+    it("useFieldArray démonte ses lignes quand le composant disparaît", async () => {
+        type Line = { label: string };
+        const form = new FormController<{ lines: FieldArray<Line> }>({ name: "r-16" });
+        const { useFieldArray } = hooksFor(form);
+
+        function Lines(): React.ReactElement {
+            const { rows, append } = useFieldArray("lines");
+            return (
+                <div>
+                    <button onClick={append}>ajouter</button>
+                    <span data-testid="n">{rows.length}</span>
+                </div>
+            );
+        }
+
+        const view = render(<Lines />);
+        await act(async () => { fireEvent.click(screen.getByText("ajouter")); await tick(); });
+        const row = form.array("lines").rows[0];
+        expect(row?.form.isMounted).toBe(true);
+
+        view.unmount();
+        expect(row?.form.isUnmounted).toBe(true);
+    });
+
+    it("required repoussé par le parent atteint le contrôleur", async () => {
+        const form = new FormController<{ a: string }>({ name: "r-17" });
+        const { useField } = hooksFor(form);
+
+        function Field({ required }: { required: boolean }): React.ReactElement {
+            const field = useField({ name: "a", required });
+            return <span data-testid="r">{String(field.required)}</span>;
+        }
+
+        const view = render(<Field required={false} />);
+        await act(async () => { await tick(); });
+        expect(screen.getByTestId("r").textContent).toBe("false");
+        expect(form.snapshot.isValid).toBe(true);
+
+        await act(async () => { view.rerender(<Field required />); await tick(); });
+        expect(screen.getByTestId("r").textContent).toBe("true");
+        // Et la conséquence réelle : un champ vide devenu obligatoire invalide.
+        expect(form.snapshot.isValid).toBe(false);
+    });
+});

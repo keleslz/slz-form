@@ -7,7 +7,7 @@ import {
     type BehaviorContext,
     type ValidationReport,
 } from "../src/index";
-import { copyFrom, observes, wait } from "./helpers";
+import { copyFrom, observes, until, wait } from "./helpers";
 
 /**
  * Un test par bug relevé dans `potentiel-error-to-fix.md`, écrit à partir de la
@@ -116,7 +116,9 @@ describe("régressions", () => {
         const field = form.field("q", { behaviors: [new NeverResolves()] });
         field.mount();
         form.mount();
-        await wait(30);
+        // Attendre l'état, pas l'horloge : sous charge, un délai fixe laissait
+        // parfois la soumission partir avant que le behavior soit en vol.
+        await until(() => field.isBusy, { timeout: 2000 });
 
         await expect(form.submit()).resolves.toBe(false);
         expect(field.isBusy).toBe(false);

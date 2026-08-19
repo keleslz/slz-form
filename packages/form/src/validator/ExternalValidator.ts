@@ -73,10 +73,16 @@ export class ExternalValidator<T = string> extends IValidator<T> {
 
     /** Une remise à zéro efface aussi les constats injectés. */
     override reset(): void {
+        const carried = this.stored.length > 0;
         this.stored = [];
         this.boundTo.clear();
         this.released.clear();
         super.reset();
+        // Une instance peut être portée par plusieurs champs : sans ça, les
+        // autres restaient sur un instantané périmé, erreur affichée comprise.
+        if (carried) {
+            this.requestRevalidation();
+        }
     }
 
     protected validate(value: T, report: ValidationReport, ctx: ValidationContext): void {
