@@ -48,11 +48,7 @@ export class DebouncedValidator<T = string> extends IValidator<T> {
         // Le décorateur ne change rien aux règles qu'il diffère : une demande de
         // revalidation venue du validator décoré doit remonter jusqu'au champ,
         // sinon des constats injectés resteraient muets.
-        inner.subscribe(() => {
-            if (inner.consumeStale()) {
-                this.requestRevalidation();
-            }
-        });
+        inner.onStale(() => this.requestRevalidation());
     }
 
     protected async validate(value: T, report: ValidationReport, ctx: ValidationContext): Promise<void> {

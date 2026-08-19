@@ -27,9 +27,17 @@ suivantes.
 Les validators, behaviors et appels de la vue existants compilent et se
 comportent à l'identique — la démo passe ses 43 assertions sans être touchée.
 
-Deux points de la surface bas niveau bougent malgré tout, pour qui l'utilisait
-directement : `ValidatorState` porte désormais `issues` à côté de `errors`, et
+La surface bas niveau bouge malgré tout, pour qui l'utilisait directement.
+`ValidatorState` porte désormais `issues` à côté de `errors`, et
 `FieldHost.notifyFieldChanged` reçoit un jeu de changements au lieu d'un
 booléen. `IValidator.handle(value)` reste appelable sans contexte. `UiFlag`
 s'élargit à `readonly`, ce qui rend non exhaustif un `switch` consommateur qui
-en couvrait toutes les valeurs.
+en couvrait toutes les valeurs. `IBehavior.watch` passe de `string[]` à
+`WatchTarget[]`, ce qui ne change rien à l'écriture mais compte pour qui le
+**lit**.
+
+Enfin, le point d'entrée passe d'un `export *` à une liste explicite : les
+rouages internes n'ont pas à devenir un contrat de version. En sortent
+`Lifecycle`, `DependencyGraph`, `CompositeValidator`, `createDebouncer`,
+`errorsOf`, `sameIssues`, les constantes de flags, `watchedName` et
+`watchedTriggers`. Sans conséquence sur npm, puisque rien n'est encore publié.

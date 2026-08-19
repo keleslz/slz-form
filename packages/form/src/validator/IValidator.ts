@@ -59,6 +59,13 @@ export type ValidatorListener = () => void;
 export interface ValidationContext {
     readonly name: string;
     readonly form: FormView;
+    /**
+     * Avorté au démontage du champ, exactement comme celui d'un behavior.
+     * Une règle qui touche le réseau doit le passer à `fetch` et le vérifier
+     * après chaque `await` : sans ça, retirer vingt lignes d'une liste lance
+     * vingt requêtes orphelines.
+     */
+    readonly signal: AbortSignal;
     watched(name: string): AnyFieldView | null;
 }
 
@@ -162,9 +169,16 @@ export abstract class IValidator<T = string> {
     private state: ValidatorState = makeState("pristine", []);
     private options: ValidationOptions = {};
     private readonly listeners = new Set<ValidatorListener>();
+    /**
+     * Canal distinct pour les demandes de revalidation.
+     *
+     * Un drapeau unique, consommé par le premier abonné réveillé, laissait les
+     * suivants sans rien : un membre partagé entre deux champs n'en faisait
+     * revalider qu'un. Chaque abonné a désormais son propre appel.
+     */
+    private readonly staleListeners = new Set<ValidatorListener>();
     /** Jeton de run monotone — un résultat périmé ne doit pas écraser un plus frais. */
     private run = 0;
-    private stale = false;
 
     /**
      * Les règles propres au champ. Les constats passent par `report` ; renvoyer
@@ -280,17 +294,17 @@ export abstract class IValidator<T = string> {
      * se contenter de republier l'état courant.
      */
     protected requestRevalidation(): void {
-        this.stale = true;
-        for (const listener of this.listeners) {
+        for (const listener of this.staleListeners) {
             listener();
         }
     }
 
-    /** Lu par le FieldController à chaque notification. Remet le drapeau à zéro. */
-    consumeStale(): boolean {
-        const was = this.stale;
-        this.stale = false;
-        return was;
+    /** S'abonner aux demandes de revalidation, indépendamment des changements d'état. */
+    onStale(listener: ValidatorListener): () => void {
+        this.staleListeners.add(listener);
+        return () => {
+            this.staleListeners.delete(listener);
+        };
     }
 
     reset(): void {
@@ -352,6 +366,7 @@ function detachedContext(): ValidationContext {
     return {
         name: "<detached>",
         form: { name: "<detached>", status: "idle", field: () => null, values: () => ({}) },
+        signal: new AbortController().signal,
         watched: () => null,
     };
 }

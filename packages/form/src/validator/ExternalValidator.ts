@@ -1,4 +1,9 @@
-import { IValidator, type ValidationIssue, type ValidationReport } from "./IValidator";
+import {
+    IValidator,
+    type ValidationContext,
+    type ValidationIssue,
+    type ValidationReport,
+} from "./IValidator";
 
 /**
  * Porte des constats venus **de l'extérieur** : la réponse 422 d'un POST, un
@@ -27,13 +32,19 @@ export class ExternalValidator<T = string> extends IValidator<T> {
     override readonly validateWhenEmpty = true;
 
     private stored: readonly ValidationIssue[] = [];
-    private boundTo: T | undefined;
-    private bound = false;
+    /**
+     * La valeur à laquelle les constats se sont liés, **par champ**.
+     *
+     * Une instance peut être portée par plusieurs champs — c'est le cas d'un
+     * membre de composite partagé. Une liaison unique faisait que le second
+     * champ, dont la valeur diffère, effaçait les constats du premier.
+     */
+    private readonly boundTo = new Map<string, T | undefined>();
 
     /** Publie des constats et demande une revalidation du champ. */
     set(issues: readonly ValidationIssue[]): void {
         this.stored = issues;
-        this.bound = false;
+        this.boundTo.clear();
         this.requestRevalidation();
     }
 
@@ -42,22 +53,32 @@ export class ExternalValidator<T = string> extends IValidator<T> {
             return;
         }
         this.stored = [];
-        this.bound = false;
+        this.boundTo.clear();
         this.requestRevalidation();
     }
 
-    protected validate(value: T, report: ValidationReport): void {
+    /** Une remise à zéro efface aussi les constats injectés. */
+    override reset(): void {
+        this.stored = [];
+        this.boundTo.clear();
+        super.reset();
+    }
+
+    protected validate(value: T, report: ValidationReport, ctx: ValidationContext): void {
         if (this.stored.length === 0) {
             return;
         }
 
-        if (!this.bound) {
-            // Première exécution après `set` : les constats se lient à la valeur
-            // qui était en place au moment de l'appel serveur.
-            this.boundTo = value;
-            this.bound = true;
-        } else if (!Object.is(value, this.boundTo)) {
-            this.stored = [];
+        const key = `${ctx.form.name}.${ctx.name}`;
+
+        if (!this.boundTo.has(key)) {
+            // Première exécution après `set` pour ce champ : les constats se
+            // lient à la valeur qui était en place au moment de l'appel serveur.
+            this.boundTo.set(key, value);
+        } else if (!Object.is(value, this.boundTo.get(key))) {
+            // Ce champ a été corrigé : il cesse de porter le constat, sans
+            // toucher aux autres champs qui portent la même instance.
+            this.boundTo.delete(key);
             return;
         }
 

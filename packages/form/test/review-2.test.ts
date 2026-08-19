@@ -8,7 +8,7 @@ import {
     type IBehavior,
     type ValidationReport,
 } from "../src/index";
-import { wait } from "./helpers";
+import { until, wait } from "./helpers";
 
 class Passing extends IValidator<string> {
     protected validate(): void {
@@ -78,7 +78,7 @@ describe("second tour de revue", () => {
         }
         rows.row(first)?.field("code").change("75");
         rows.row(second)?.field("code").change("13");
-        await wait(120);
+        await until(() => rows.row(second)?.form.get("city")?.snapshot.value !== undefined);
 
         expect(calls).toBe(2);
         expect(rows.row(first)?.form.get("city")?.snapshot.value).toBe("ville-75");

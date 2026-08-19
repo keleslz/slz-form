@@ -68,11 +68,18 @@ fonction générique ne voit plus.
 
 - `packages/react-form/src/useField.ts` et `useFieldArray.ts` — `hooksFor` a
   contraint le nom, la fonction sous-jacente ne voit plus la map.
-- `packages/form/src/form/FormController.ts` — `array()` fait le pont entre la
-  map typée et le contrôleur générique de liste.
+- `packages/form/src/util/behaviorsFor.ts` — même pont, côté behaviors : la
+  fonction générique a déjà vérifié le nom et le type, le behavior produit ne
+  les voit plus.
+- `packages/form/src/form/FormController.ts` — `field()` et `array()` font le
+  pont entre la map typée et les contrôleurs génériques.
+- `packages/form/src/field/FieldController.ts` et `validator/IValidator.ts` —
+  la valeur est passée à `validate` après que la classe de base a vérifié
+  qu'elle n'est pas vide.
 
 **Cette liste est limitative.** Un `as` ailleurs est un défaut de conception des
-types, pas une commodité — et jamais dans le code consommateur.
+types, pas une commodité — et jamais dans le code consommateur. Quand on en
+ajoute un, on l'ajoute ici, avec sa raison.
 
 ### 7. Lire `docs/MODEL.md` avant, le mettre à jour après
 

@@ -37,7 +37,7 @@ donc groupés par **axe** :
 |---|---|---|---|
 | Validité | `pristine` · `valid` · `error` | exclusif | le **Validator** seul |
 | Activité | `idle` · `loading` | exclusif | les Behaviors + le Validator |
-| Disponibilité | `locked` · `readonly` · `invisible` | cumulatif | les Behaviors + le Controller |
+| Disponibilité | `locked` · `readonly` · `invisible` | cumulatif | les Behaviors + le Controller + la vue (`FieldUpdate`) |
 
 Règles de fusion, une par axe :
 

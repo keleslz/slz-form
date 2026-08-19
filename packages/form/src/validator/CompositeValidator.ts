@@ -52,11 +52,7 @@ export class CompositeValidator<T = string> extends IValidator<T> {
             return;
         }
         for (const member of this.members) {
-            this.unsubscribes.push(member.subscribe(() => {
-                if (member.consumeStale()) {
-                    this.requestRevalidation();
-                }
-            }));
+            this.unsubscribes.push(member.onStale(() => this.requestRevalidation()));
         }
     }
 

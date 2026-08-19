@@ -122,15 +122,20 @@ export class FieldController<T = string, M = never> {
         // Un `IValidator` porte son état — verdict, options, jeton de run. Deux
         // champs qui en partagent un se voient mutuellement leurs erreurs. Un
         // behavior, lui, peut être partagé : il ne retient rien.
+        // Qualifié par le formulaire porteur : deux lignes d'une même liste ont
+        // les mêmes noms de champ, et comparer le nom seul laissait passer le
+        // partage — le dernier verdict écrasait celui de l'autre ligne, jusqu'à
+        // faire accepter une valeur explicitement refusée.
+        const identity = `${host.formView().name}.${this.name}`;
         const owner = OWNERS.get(this.validator);
-        if (owner !== undefined && owner !== this.name) {
+        if (owner !== undefined && owner !== identity) {
             throw new Error(
                 `[slz] Validator already used by field "${owner}": an IValidator holds its own `
-                + `state and cannot be shared with "${this.name}". Create one per field, or `
+                + `state and cannot be shared with "${identity}". Create one per field, or `
                 + "compose it — the members of a composite may be shared.",
             );
         }
-        OWNERS.set(this.validator, this.name);
+        OWNERS.set(this.validator, identity);
 
         if (this.host && this.host !== host) {
             throw new Error(`[slz] Field "${this.name}" is already attached to another form.`);
@@ -172,16 +177,15 @@ export class FieldController<T = string, M = never> {
         // lancer ne doit pas survivre au signal qui le remplace.
         this.abort.abort();
         this.abort = new AbortController();
-        this.unsubscribeValidator = this.validator.subscribe(() => {
-            // Un validator peut se déclarer périmé sans que la valeur bouge —
-            // des constats injectés, par exemple. Il faut alors le rejouer, pas
-            // seulement republier ce qu'il dit déjà.
-            if (this.validator.consumeStale()) {
-                void this.revalidate();
-                return;
-            }
-            this.commit();
-        });
+        // Deux canaux : republier ce que le validator dit déjà, et le **rejouer**
+        // quand il se déclare périmé sans que la valeur ait bougé — des constats
+        // injectés, par exemple.
+        const stopListening = this.validator.subscribe(() => this.commit());
+        const stopStale = this.validator.onStale(() => void this.revalidate());
+        this.unsubscribeValidator = () => {
+            stopListening();
+            stopStale();
+        };
         this.run("onMount");
         // Le verdict doit exister dès le montage : sans ça un champ obligatoire
         // et vide n'a aucun constat, et le formulaire se croit soumettable.
@@ -424,7 +428,7 @@ export class FieldController<T = string, M = never> {
                 continue;
             }
             const ctx = this.buildContext(behavior, signal);
-            this.apply(behavior, behavior.onDependencyChanged?.(ctx, dependency), signal);
+            this.apply(behavior, this.invoke(() => behavior.onDependencyChanged?.(ctx, dependency)), signal);
         }
 
         // Le validator observe lui aussi : une règle croisée doit être rejouée
@@ -447,7 +451,24 @@ export class FieldController<T = string, M = never> {
         void this.revalidate();
     }
 
+    /**
+     * Ne rejette **jamais**.
+     *
+     * Presque tous ses appelants l'ignorent par `void` — un rejet deviendrait
+     * une promesse non rattrapée, c'est-à-dire la fin du process sous Node. Une
+     * règle qui casse n'est pas un verdict : `handle` garde le dernier en date,
+     * et ce qui remonte jusqu'ici est signalé sans être propagé.
+     */
     private async revalidate(): Promise<void> {
+        try {
+            await this.runValidation();
+        } catch (error) {
+            reportEngineError(this.name, error);
+            this.commit();
+        }
+    }
+
+    private async runValidation(): Promise<void> {
         // Re-sent on every run: `required` can change after construction, and
         // the message must not be dropped along the way.
         this.validator.setOptions({
@@ -474,6 +495,9 @@ export class FieldController<T = string, M = never> {
             get form(): FormView {
                 return field.host?.formView() ?? detachedForm(field.name);
             },
+            get signal(): AbortSignal {
+                return field.abort.signal;
+            },
             watched: (name) => {
                 if (!watch.includes(name)) {
                     throw new Error(
@@ -489,16 +513,32 @@ export class FieldController<T = string, M = never> {
         const signal = this.abort.signal;
         for (const behavior of this.behaviors) {
             const ctx = this.buildContext(behavior, signal);
-            this.apply(behavior, behavior[hook]?.(ctx), signal);
+            this.apply(behavior, this.invoke(() => behavior[hook]?.(ctx)), signal);
         }
         this.commit();
+    }
+
+    /**
+     * Exécute un hook de behavior en absorbant ce qu'il lève.
+     *
+     * Un behavior fautif ne doit emporter ni les autres behaviors du champ, ni
+     * la revalidation qui suit, ni la file de propagation du formulaire : un
+     * bug local resterait local.
+     */
+    private invoke(hook: () => BehaviorResult): BehaviorResult {
+        try {
+            return hook();
+        } catch (error) {
+            reportEngineError(this.name, error);
+            return undefined;
+        }
     }
 
     private runChange(value: T | undefined): void {
         const signal = this.abort.signal;
         for (const behavior of this.behaviors) {
             const ctx = this.buildContext(behavior, signal);
-            this.apply(behavior, behavior.onChange?.(ctx, value), signal);
+            this.apply(behavior, this.invoke(() => behavior.onChange?.(ctx, value)), signal);
         }
         this.commit();
     }
@@ -684,4 +724,14 @@ function toValidator<T>(validator?: IValidator<T> | readonly IValidator<T>[]): I
             : new CompositeValidator<T>(members);
     }
     return validator as IValidator<T>;
+}
+
+/**
+ * Une erreur du moteur — une garde violée, une règle qui casse — ne doit pas
+ * remonter dans une promesse que personne n'attend. On la signale, bruyamment,
+ * sans faire tomber l'application.
+ */
+function reportEngineError(field: string, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[slz] Validation of "${field}" failed: ${message}`, error);
 }

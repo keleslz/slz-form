@@ -364,9 +364,39 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             field.setSubmitting(true);
         }
 
+        try {
+            return await this.runSubmit(mounted);
+        } finally {
+            // Sans ce `finally`, la moindre exception — y compris levée par une
+            // garde du moteur — laissait le formulaire verrouillé sur
+            // « submitting », sans aucun chemin de sortie : `reset()` lui-même
+            // ne remettait pas `submitting` à zéro.
+            for (const field of mounted) {
+                field.setSubmitting(false);
+            }
+            this.leaveSubmitting();
+        }
+    }
+
+    /** Quitte l'état de soumission s'il n'a pas déjà été tranché. */
+    private leaveSubmitting(): void {
+        if (this.status === "submitting") {
+            this.setStatus("idle");
+        }
+    }
+
+    private async runSubmit(mounted: readonly AnyField[]): Promise<boolean> {
+
         // `field.submit()` touche le champ, déclenche `onSubmit` — ce qui fait
         // partir les fenêtres différées — et revalide.
-        await Promise.all(mounted.map((field) => field.submit()));
+        //
+        // Borné : un validator dont la promesse ne retombe jamais — un `fetch`
+        // sans timeout — bloquerait ici, hors de toute deadline, et laisserait
+        // le formulaire verrouillé à vie.
+        const touched = await withDeadline(
+            Promise.all(mounted.map((field) => field.submit())),
+            this.settleTimeout,
+        );
 
         // Les lignes sont soumises avec le reste : leurs valeurs doivent être
         // posées et jugées avant qu'on statue sur le formulaire.
@@ -374,7 +404,7 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             [...this.arrays.values()].map((rows) => rows.submit()),
         )).every(Boolean);
 
-        const settled = await this.settle(mounted);
+        const settled = touched && await this.settle(mounted);
 
         if (!settled) {
             // La convergence a expiré : un champ est resté en vol. Sans ça il
@@ -383,10 +413,6 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             for (const field of mounted) {
                 field.recover();
             }
-        }
-
-        for (const field of mounted) {
-            field.setSubmitting(false);
         }
 
         const valid = settled && rowsValid && this.buildSnapshot().isValid;
@@ -437,8 +463,15 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         const deadline = Date.now() + this.settleTimeout;
 
         for (let round = 0; round < MAX_SETTLE_ROUNDS; round += 1) {
+            const wasBusy = fields.some((field) => field.isBusy);
             if (!(await this.waitIdle(fields, deadline))) {
                 return false;
+            }
+            // Rien n'était en vol au premier tour : `field.submit()` vient de
+            // valider, et aucune valeur n'a pu bouger depuis. Revalider ici
+            // doublerait chaque appel réseau de validation, à chaque soumission.
+            if (!wasBusy) {
+                return true;
             }
             await Promise.all(fields.map((field) => field.validateNow()));
             if (!fields.some((field) => field.isBusy)) {
@@ -518,4 +551,21 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         }));
         return new FormSnapshot(this.name, this.status, summaries, arrays);
     }
+}
+
+/**
+ * Résout `false` si la promesse n'a pas retombé dans le temps imparti.
+ *
+ * La promesse continue sa vie — on ne peut pas l'annuler — mais la soumission,
+ * elle, cesse d'attendre : un appel réseau sans timeout ne doit pas condamner
+ * le formulaire.
+ */
+function withDeadline(work: Promise<unknown>, timeout: number): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => resolve(false), timeout);
+        void work.then(
+            () => { clearTimeout(timer); resolve(true); },
+            () => { clearTimeout(timer); resolve(false); },
+        );
+    });
 }

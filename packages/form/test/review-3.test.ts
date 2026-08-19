@@ -147,7 +147,7 @@ describe("troisième tour de revue", () => {
             field.unmount();
         }
 
-        expect(subscribers).toBeLessThanOrEqual(1);
+        expect(subscribers).toBe(0);
     });
 
     it("le snapshot d'un champ garde la même référence quand rien ne change", () => {

@@ -46,7 +46,7 @@ export class FieldArrayController<TRow extends FieldsShape> {
     /** Monotone : un identifiant libéré n'est jamais réattribué. */
     private nextId = 0;
     private mounted = false;
-    private lastValues = "[]";
+    private lastValues: readonly Readonly<Record<string, unknown>>[] = [];
 
     constructor(params: FieldArrayParams<TRow>) {
         this.name = params.name;
@@ -173,8 +173,8 @@ export class FieldArrayController<TRow extends FieldsShape> {
      * jusqu'à pendant la soumission (arbitrage 18).
      */
     private publishContent(): void {
-        const next = JSON.stringify(this.values());
-        const changed = next !== this.lastValues;
+        const next = this.values();
+        const changed = !sameValues(next, this.lastValues);
         this.lastValues = next;
         this.onChanged(changed);
     }
@@ -187,8 +187,36 @@ export class FieldArrayController<TRow extends FieldsShape> {
         for (const listener of this.listeners) {
             listener();
         }
-        this.lastValues = JSON.stringify(this.values());
+        this.lastValues = this.values();
         // Ajouter, retirer ou déplacer une ligne change toujours le payload.
         this.onChanged(true);
     }
+}
+
+/**
+ * Comparaison structurelle des valeurs de lignes.
+ *
+ * Volontairement pas `JSON.stringify` : il **lève** sur une structure
+ * circulaire ou un `BigInt` — depuis `change()`, donc dans le code appelant —
+ * et il est **aveugle** à ce qu'il ne sait pas sérialiser, un `File` du DOM se
+ * réduisant à `{}`. Or le moteur revendique `File` et `Date` comme valeurs.
+ */
+function sameValues(
+    a: readonly Readonly<Record<string, unknown>>[],
+    b: readonly Readonly<Record<string, unknown>>[],
+): boolean {
+    return a.length === b.length && a.every((row, i) => sameRow(row, b[i]));
+}
+
+function sameRow(
+    a: Readonly<Record<string, unknown>>,
+    b: Readonly<Record<string, unknown>> | undefined,
+): boolean {
+    if (b === undefined) {
+        return false;
+    }
+    // Une clé absente et une clé à `undefined` décrivent le même payload : un
+    // champ monté mais pas encore rempli n'est pas un changement de valeur.
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    return [...keys].every((key) => Object.is(a[key], b[key]));
 }
