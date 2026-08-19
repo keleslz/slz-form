@@ -131,6 +131,11 @@ export function loadOptions<T = string, M = never>(
         onSubmit: (ctx) => {
             debouncers.get(keyOf(ctx))?.flush();
         },
-        onUnmount: (ctx) => debouncers.get(keyOf(ctx))?.cancel(),
+        onUnmount: (ctx) => {
+            const key = keyOf(ctx);
+            debouncers.get(key)?.cancel();
+            debouncers.delete(key);
+            runs.delete(key);
+        },
     };
 }

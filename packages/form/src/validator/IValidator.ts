@@ -202,12 +202,16 @@ export abstract class IValidator<T = string> {
 
         if (this.options.required && empty) {
             report.error(this.options.requiredMessage ?? "This field is required", { code: "required" });
-        } else if (!empty || this.validateWhenEmpty === true) {
-            const pending = this.validate(value as T, report, ctx);
-            if (pending instanceof Promise) {
-                this.setState(makeState("loading", this.state.issues));
-                await pending;
-            }
+        }
+
+        // Les deux ne s'excluent pas : une règle qui a demandé à se prononcer
+        // sur du vide doit l'être même quand `required` a déjà parlé. C'est le
+        // cas d'un constat serveur « ce champ manque », qui porterait sinon sur
+        // la saisie suivante.
+        const pending = this.runInto(value, report, ctx);
+        if (pending instanceof Promise) {
+            this.setState(makeState("loading", this.state.issues));
+            await pending;
         }
 
         if (run !== this.run) {
@@ -217,6 +221,26 @@ export abstract class IValidator<T = string> {
         this.setState(makeState(report.hasError ? "error" : "valid", [...report.issues]));
 
         return this.state;
+    }
+
+    /**
+     * Exécute les règles de ce validator dans un rapport **fourni**, sans
+     * toucher à son propre état ni au sien de `required`.
+     *
+     * C'est ce que la composition appelle : le composite reste seul porteur de
+     * l'état publié, et surtout un membre synchrone n'introduit pas de tour
+     * asynchrone — sinon composer deux règles synchrones ferait clignoter
+     * `loading` à chaque frappe.
+     */
+    runInto(
+        value: T | undefined,
+        report: ValidationReport,
+        ctx: ValidationContext,
+    ): void | Promise<void> {
+        if (!this.isEmpty(value) || this.validateWhenEmpty === true) {
+            return this.validate(value as T, report, ctx);
+        }
+        return undefined;
     }
 
     /**

@@ -56,11 +56,18 @@ export class CompositeValidator<T = string> extends IValidator<T> {
         return this;
     }
 
-    protected async validate(value: T, report: ValidationReport, ctx: ValidationContext): Promise<void> {
-        const states = await Promise.all(this.members.map((member) => member.handle(value, ctx)));
-        for (const state of states) {
-            report.add(state.issues);
+    protected validate(value: T, report: ValidationReport, ctx: ValidationContext): void | Promise<void> {
+        // Chaque membre écrit dans le rapport commun. Ceux qui sont synchrones
+        // le font tout de suite : le composite ne devient asynchrone que si l'un
+        // d'eux l'est réellement.
+        const pending = this.members
+            .map((member) => member.runInto(value, report, ctx))
+            .filter((result): result is Promise<void> => result instanceof Promise);
+
+        if (pending.length === 0) {
+            return undefined;
         }
+        return Promise.all(pending).then(() => undefined);
     }
 
     override flush(): void {

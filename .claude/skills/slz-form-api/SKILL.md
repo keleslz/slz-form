@@ -62,9 +62,17 @@ et le contournement contredit les invariants affichés par le projet.
 Le narrowing tient de bout en bout : nom de champ contraint à la map, valeur
 inférée, `meta` inféré depuis le callback API.
 
-Le typage n'est relâché qu'à **un seul endroit**, documenté comme tel :
-`packages/react-form/src/useField.ts`, où `hooksFor` a déjà vérifié ce que la
-fonction générique ne voit plus. Nulle part ailleurs.
+Le typage n'est relâché qu'aux **ponts génériques**, tous documentés sur place,
+et pour la même raison : le helper lié au formulaire a déjà vérifié ce que la
+fonction générique ne voit plus.
+
+- `packages/react-form/src/useField.ts` et `useFieldArray.ts` — `hooksFor` a
+  contraint le nom, la fonction sous-jacente ne voit plus la map.
+- `packages/form/src/form/FormController.ts` — `array()` fait le pont entre la
+  map typée et le contrôleur générique de liste.
+
+**Cette liste est limitative.** Un `as` ailleurs est un défaut de conception des
+types, pas une commodité — et jamais dans le code consommateur.
 
 ### 7. Lire `docs/MODEL.md` avant, le mettre à jour après
 
@@ -105,10 +113,14 @@ plat que le modèle existe pour écarter.
 - **Validator** — *juge*. Seule autorité sur la validité. Déclare `watch` pour
   lire d'autres champs, produit des constats portant `severity` et `code`.
 
-Le partage des rôles tient parce que le réacteur a une **sonnette**
-(`ctx.revalidate` via `requestRevalidation`) et le juge des **yeux**
-(`ValidationContext`). Ne pas donner l'axe validité aux behaviors pour
-« simplifier » : c'est ce qui rend les flags dignes de confiance.
+Le partage des rôles tient parce que le juge a des **yeux**
+(`ValidationContext` : `watch` déclaré, lecture seule) et une **sonnette** —
+`IValidator.requestRevalidation()`, `protected`, qu'un validator déclenche
+quand son verdict peut changer sans que la valeur bouge (`ExternalValidator`).
+Un changement de dépendance déclarée le rejoue aussi, automatiquement.
+
+Ne pas donner l'axe validité aux behaviors pour « simplifier » : c'est ce qui
+rend les flags dignes de confiance.
 
 ### `validity` n'est pas le verdict
 

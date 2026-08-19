@@ -324,7 +324,14 @@ export class FieldController<T = string, M = never> {
         for (const behavior of this.behaviors) {
             this.statesByBehavior.set(behavior, BehaviorState.neutral);
         }
-        this.commit();
+        // Effacer les tranches ne suffit pas : la condition qui les avait
+        // produites tient toujours. Sans rejouer le montage, un champ
+        // conditionnel masqué réapparaissait et bloquait la soumission.
+        if (this.lifecycle.isMounted) {
+            this.run("onMount");
+        } else {
+            this.commit();
+        }
         // Le verdict doit repartir de la valeur restaurée. Sans ça, un champ
         // obligatoire redevenu vide se déclarait soumettable — le montage
         // revalide justement pour éviter ça, la remise à zéro le doit aussi.

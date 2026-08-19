@@ -196,9 +196,12 @@ describe("constats de revue", () => {
     it("plusieurs déclarations du même champ observé comptent toutes", async () => {
         const form = new FormController<{ src: string; dst: string }>({ name: "r11" });
         const seen: string[] = [];
+        // La **seconde** déclaration seule doit suffire à réveiller le behavior
+        // sur un changement de validité. Ne lire que la première la rendrait
+        // muette — c'est précisément ce que ce test verrouille.
         const observer: IBehavior<string> = {
             watch: [
-                { field: "src", on: ["value"] },
+                { field: "src", on: ["activity"] },
                 { field: "src", on: ["validity"] },
             ],
             onDependencyChanged: (_ctx, dependency) => {
@@ -218,7 +221,9 @@ describe("constats de revue", () => {
         src.change("rempli");
         await wait(40);
 
-        expect(seen.length).toBeGreaterThan(0);
+        // Aucun réveil possible via `activity` ici : seule la déclaration
+        // `validity`, la deuxième, peut avoir produit ces observations.
+        expect(seen).toContain("valid");
     });
 
     it("un `on` vide est refusé au câblage plutôt qu'ignoré", () => {

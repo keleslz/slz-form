@@ -99,8 +99,9 @@ n'exécute que si monté — le garde vit à un seul endroit.
 
 ### FieldController
 ```ts
-new FieldController({ name, required?, requiredMessage?, initialValue?,
-                      validator?, behaviors?, options? })
+new FieldController({ name, required?, requiredMessage?, requiredTrue?,
+                      initialValue?, validator?, behaviors?, options? })
+// validator : un IValidator, ou un tableau (arbitrage 23)
 ```
 Lifecycle (`mount` / `update` / `unmount`), événements (`change` / `blur` /
 `focus` / `submit`), lecture (`hasFlag(...)`, `snapshot`, `listen`, `view()`).
@@ -180,7 +181,6 @@ Couvrent les cas courants sans écrire de behavior :
 | `loadOptions({ field, on, watch, debounce, fetch })` | charge les options : au montage, sur dépendance, ou à la frappe |
 | `prefill(fetcher)` | remplit le champ au montage, verrouillé et `loading`, sans le marquer touché |
 | `lockWhile(condition, watch)` | verrouillage conditionnel, y compris inter-champs |
-
 | `lookup({ field, watch, debounce, fetch })` | appelle une API et **écrit** la valeur du champ |
 | `suggest({ field, debounce, fetch })` | champ de recherche : suggestions à la frappe, sans verrou |
 | `hideWhen(watch, predicate)` | émet `invisible` |
@@ -197,9 +197,10 @@ Une ligne est un `FormController` à part entière, identifiée et jamais index�
 type InvoiceFields = { customer: string; lines: FieldArray<{ label: string; qty: number }> };
 
 const lines = form.array("lines");
-const id = lines.append();          // rend un identifiant stable
-lines.rows[0].field("qty");         // exactement l'API d'un formulaire
-lines.move(0, 1);                   // aucun renommage, donc aucun `watch` cassé
+const id = lines.append();                  // rend un identifiant stable
+lines.row(id).field("qty").mount();         // exactement l'API d'un formulaire
+lines.row(id).field("qty").change(3);
+lines.move(0, 1);                           // aucun renommage, donc aucun `watch` cassé
 ```
 
 ---
@@ -282,8 +283,8 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 11 | Réactivité locale | chaque champ a ses propres listeners |
 | 12 | UI states composables | c'est exactement le découpage en axes |
 | 13 | Validators déterminent la validité | les Behaviors ne peuvent pas émettre l'axe validité |
-| 14 | Behaviors orchestrent les réactions | hooks de cycle de vie + `onDependencyChanged`, déclenché sur la **valeur** observée uniquement |
-| 15 | Adapters sans logique métier | `react/` = provider + 2 hooks, zéro règle |
+| 14 | Behaviors orchestrent les réactions | hooks de cycle de vie + `onDependencyChanged`, déclenché sur les axes **déclarés** — la valeur par défaut (arbitrage 22) |
+| 15 | Adapters sans logique métier | `react/` = provider + hooks (`useField`, `useFieldArray`, `useForm`), zéro règle |
 | 16 | Pas d'abstraction inutile | pas de couche « Field » séparée du Controller ; utils = fonctions nues |
 | 17 | Configuration concise | un objet par behavior ; les dépendances déclarées **sont** ce que reçoit le callback |
 | 18 | Behavior atomique ou composite | plusieurs behaviors par champ, chacun sa tranche |

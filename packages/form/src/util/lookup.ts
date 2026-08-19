@@ -52,7 +52,13 @@ export function lookup<T = string>(
 
     // Une fenêtre d'attente par champ : l'instance de behavior ne porte ainsi
     // que de la configuration et reste partageable entre plusieurs champs.
+    // Jeton de run et fenêtres différées, indexés par **formulaire + champ**.
+    // Le nom seul ne suffit pas : deux lignes d'une liste répétable ont les
+    // mêmes noms de champ, et une instance partagée les ferait se marcher
+    // dessus — l'une resterait verrouillée indéfiniment.
+    const runs = new Map<string, number>();
     const debouncers = new Map<string, Debouncer>();
+    const keyOf = (ctx: BehaviorContext<T>): string => `${ctx.form.name}\u0000${ctx.name}`;
     const debouncerOf = (name: string): Debouncer => {
         const existing = debouncers.get(name);
         if (existing) {
@@ -64,11 +70,15 @@ export function lookup<T = string>(
     };
 
     const run = async (ctx: BehaviorContext<T>): Promise<BehaviorState> => {
+        const key = keyOf(ctx);
+        const token = (runs.get(key) ?? 0) + 1;
+        runs.set(key, token);
+
         // L'état d'attente est posé dès le déclenchement, sans attendre la fin
         // du délai : l'utilisateur voit tout de suite que quelque chose est en cours.
         ctx.push(pending(ctx.state));
 
-        if (!(await debouncerOf(ctx.name).wait(delay))) {
+        if (!(await debouncerOf(key).wait(delay))) {
             // Remplacé par un déclenchement plus récent : celui-ci prend la main
             // et rendra la main sur l'état.
             return ctx.state;
@@ -78,10 +88,11 @@ export function lookup<T = string>(
         }
 
         const before = ctx.getValue();
+        const fresh = (): boolean => !ctx.signal.aborted && runs.get(key) === token;
 
         try {
             const value = await fetcher(ctx);
-            if (ctx.signal.aborted) {
+            if (!fresh()) {
                 return ctx.state;
             }
             // Si l'utilisateur a repris la main pendant l'appel, sa saisie gagne.
@@ -95,7 +106,10 @@ export function lookup<T = string>(
             // erreur de validation, et le Validator reste seul juge.
         }
 
-        return ctx.state.idle().unlock().show();
+        // Un run supplanté ne rend pas la main sur l'état : éteindre `loading`
+        // et `locked` ici ferait croire au FormController que tout est retombé,
+        // et la soumission partirait avec une valeur pas encore posée.
+        return runs.get(key) === token ? ctx.state.idle().unlock().show() : ctx.state;
     };
 
     return {
@@ -105,8 +119,15 @@ export function lookup<T = string>(
         // Soumettre ne doit pas attendre la fin du délai : la fenêtre en attente
         // part tout de suite, et le FormController attend ensuite l'appel.
         onSubmit: (ctx) => {
-            debouncers.get(ctx.name)?.flush();
+            debouncers.get(keyOf(ctx))?.flush();
         },
-        onUnmount: (ctx) => debouncers.get(ctx.name)?.cancel(),
+        onUnmount: (ctx) => {
+            const key = keyOf(ctx);
+            debouncers.get(key)?.cancel();
+            // Purge : une ligne retirée ne doit pas laisser d'entrée derrière
+            // elle sur une instance de behavior partagée.
+            debouncers.delete(key);
+            runs.delete(key);
+        },
     };
 }
