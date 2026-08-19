@@ -88,7 +88,9 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             get status(): FormStatus {
                 return form.status;
             },
-            field: (name) => form.fields.get(name)?.view() ?? null,
+            // Un champ, ou une liste : les deux se déclarent dans `watch`, les
+            // deux doivent donc se lire.
+            field: (name) => form.fields.get(name)?.view() ?? form.arrayView(name),
             values: () => form.values(),
         };
     }
@@ -147,10 +149,13 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
                 name: id,
                 settleTimeout: this.settleTimeout,
             }),
-            onChanged: () => this.notifyFieldChanged(name, {
-                // Une liste qui change, c'est une valeur qui change : les
-                // validators qui la déclarent dans `watch` doivent être rejoués.
-                value: true, validity: false, activity: false,
+            onChanged: (valuesChanged) => this.notifyFieldChanged(name, {
+                // Seule une vraie modification des **valeurs** propage. Un
+                // montage de champ, un `touched` ou un `loading` dans une ligne
+                // n'en est pas une : les signaler relancerait les appels réseau
+                // qui observent la liste, y compris pendant la soumission
+                // (arbitrage 18).
+                value: valuesChanged, validity: false, activity: false,
             }),
         });
 
@@ -168,6 +173,18 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
 
     get(name: FieldNameOf<TFields>): AnyField | null {
         return this.fields.get(name) ?? null;
+    }
+
+    /** Retire une liste et démonte ses lignes. */
+    removeArray(name: ArrayNameOf<TFields>): void {
+        const rows = this.arrays.get(name);
+        if (!rows) {
+            return;
+        }
+        rows.unmount();
+        this.arrays.delete(name);
+        this.graph.unregister(name);
+        this.commit();
     }
 
     remove(name: FieldNameOf<TFields>): void {
@@ -256,7 +273,8 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
      * l'ensemble — ce qu'il faut pour qu'une règle « la somme fait 100 »
      * déclare simplement `watch: ["lines"]`.
      */
-    private arrayView(name: string): AnyFieldView | null {
+    /** Lue aussi par la surface de lecture du formulaire, d'où l'absence de `private`. */
+    arrayView(name: string): AnyFieldView | null {
         const rows = this.arrays.get(name);
         if (!rows) {
             return null;
@@ -300,6 +318,9 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
     }
 
     unmount(): void {
+        if (this.lifecycle.isUnmounted) {
+            return;
+        }
         for (const rows of this.arrays.values()) {
             rows.unmount();
         }

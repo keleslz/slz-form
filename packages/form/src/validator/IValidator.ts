@@ -211,7 +211,24 @@ export abstract class IValidator<T = string> {
         const pending = this.runInto(value, report, ctx);
         if (pending instanceof Promise) {
             this.setState(makeState("loading", this.state.issues));
-            await pending;
+            try {
+                await pending;
+            } catch {
+                // Une règle qui casse — un réseau tombé — n'est pas un verdict.
+                // On garde le dernier en date et on sort de `loading` : sans ça
+                // le champ reste occupé à vie, `submit()` lève au lieu de rendre
+                // `false`, et le formulaire ne se soumet plus jamais.
+                //
+                // À une règle qui veut signaler son échec de le faire
+                // explicitement, par `report.error(...)` ou `report.warn(...)`.
+                if (run === this.run) {
+                    this.setState(makeState(
+                        this.state.status === "loading" ? "pristine" : this.state.status,
+                        this.state.issues,
+                    ));
+                }
+                return this.state;
+            }
         }
 
         if (run !== this.run) {

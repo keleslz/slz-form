@@ -26,6 +26,7 @@ export class CompositeValidator<T = string> extends IValidator<T> {
     override readonly validateWhenEmpty: boolean;
 
     private readonly members: readonly IValidator<T>[];
+    private unsubscribes: (() => void)[] = [];
 
     constructor(members: readonly IValidator<T>[]) {
         super();
@@ -35,20 +36,36 @@ export class CompositeValidator<T = string> extends IValidator<T> {
         this.watch = watched.length > 0 ? watched : undefined;
         this.validateWhenEmpty = members.some((member) => member.validateWhenEmpty === true);
 
-        // Un membre qui se déclare périmé (issues injectées) rend le composite
-        // périmé : la demande de revalidation doit remonter jusqu'au champ.
-        //
-        // L'abonnement vit aussi longtemps que le composite, qui possède ses
-        // membres. Le couper au démontage le rendait définitif — un cycle
-        // démontage/remontage, que React fait en StrictMode, laissait les
-        // erreurs serveur muettes.
-        for (const member of members) {
-            member.subscribe(() => {
+        this.subscribeToMembers();
+    }
+
+    /**
+     * Un membre qui se déclare périmé (constats injectés) rend le composite
+     * périmé : la demande de revalidation doit remonter jusqu'au champ.
+     *
+     * Réétabli à la demande, parce qu'un membre peut être **partagé** entre
+     * plusieurs champs : garder l'abonnement d'un champ détruit ferait grossir
+     * sa liste d'auditeurs sans fin.
+     */
+    private subscribeToMembers(): void {
+        if (this.unsubscribes.length > 0) {
+            return;
+        }
+        for (const member of this.members) {
+            this.unsubscribes.push(member.subscribe(() => {
                 if (member.consumeStale()) {
                     this.requestRevalidation();
                 }
-            });
+            }));
         }
+    }
+
+    /** Coupe les abonnements. Le prochain tour de validation les rétablit. */
+    detach(): void {
+        for (const unsubscribe of this.unsubscribes) {
+            unsubscribe();
+        }
+        this.unsubscribes = [];
     }
 
     override setOptions(options: ValidationOptions): this {
@@ -57,6 +74,7 @@ export class CompositeValidator<T = string> extends IValidator<T> {
     }
 
     protected validate(value: T, report: ValidationReport, ctx: ValidationContext): void | Promise<void> {
+        this.subscribeToMembers();
         // Chaque membre écrit dans le rapport commun. Ceux qui sont synchrones
         // le font tout de suite : le composite ne devient asynchrone que si l'un
         // d'eux l'est réellement.

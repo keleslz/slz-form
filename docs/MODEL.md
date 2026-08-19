@@ -2,7 +2,7 @@
 
 > Document de référence à valider. Il fixe l'objectif, les entités, les
 > arbitrages tranchés et la façon dont chaque invariant est tenu.
-> Statut : implémenté, couvert par `packages/form/test` (60 tests) ; le parcours
+> Statut : implémenté, couvert par `packages/form/test` (87 tests) ; le parcours
 > navigateur (`examples/react`, 43 assertions) couvre le socle, pas encore les
 > listes répétables ni `readonly`.
 
@@ -176,19 +176,30 @@ Une règle n'est pas consultée sur une valeur vide, sauf si elle déclare
 ### Util — les fonctions nues
 Couvrent les cas courants sans écrire de behavior :
 
-| Fonction | Rôle |
+Deux formes pour chacune. Les **fonctions nues**, exportées, prennent le
+fetcher en premier argument :
+
+| Fonction nue | Rôle |
 |---|---|
-| `loadOptions({ field, on, watch, debounce, fetch })` | charge les options : au montage, sur dépendance, ou à la frappe |
+| `loadOptions(fetcher, params?)` | charge les options : au montage, sur dépendance, ou à la frappe |
+| `lookup(fetcher, params?)` | appelle une API et **écrit** la valeur du champ |
 | `prefill(fetcher)` | remplit le champ au montage, verrouillé et `loading`, sans le marquer touché |
 | `lockWhile(condition, watch)` | verrouillage conditionnel, y compris inter-champs |
-| `lookup({ field, watch, debounce, fetch })` | appelle une API et **écrit** la valeur du champ |
-| `suggest({ field, debounce, fetch })` | champ de recherche : suggestions à la frappe, sans verrou |
 | `hideWhen(watch, predicate)` | émet `invisible` |
 | `dependsOn(watch, effect)` | échappatoire générique pour toute réaction inter-champs |
 | `createBehavior(def)` | typage d'un littéral de behavior |
 
-`behaviorsFor(form)` en dérive des variantes typées, plus `lockUntilValid({ watch })`,
-qui verrouille tant qu'un champ observé porte un constat bloquant.
+Et les **variantes liées au formulaire**, rendues par `behaviorsFor(form)`, où
+tout est inféré depuis la map — c'est la forme à privilégier :
+
+| `behaviorsFor(form)` | Rôle |
+|---|---|
+| `loadOptions({ field, on, watch, debounce, fetch })` | idem, typé |
+| `lookup({ field, watch, debounce, fetch })` | idem, typé |
+| `suggest({ field, debounce, fetch })` | champ de recherche : suggestions à la frappe, sans verrou |
+| `prefill({ field, fetch })` | idem, typé |
+| `lockWhile({ watch, when })` · `hideWhen({ watch, when })` | conditions typées sur les champs observés |
+| `lockUntilValid({ watch })` | verrouille tant qu'un champ observé porte un constat bloquant |
 
 Nouvelle entité : **`FieldArrayController`**, obtenu par `form.array(name)`.
 Une ligne est un `FormController` à part entière, identifiée et jamais indexée.

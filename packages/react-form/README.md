@@ -1,7 +1,7 @@
 # slz-react-form
 
 Adapter React de [`slz-form`](https://www.npmjs.com/package/slz-form) : un
-provider et deux hooks. Aucune logique métier — elle vit entièrement dans le core.
+provider et trois hooks. Aucune logique métier — elle vit entièrement dans le core.
 
 ```bash
 npm install slz-form slz-react-form

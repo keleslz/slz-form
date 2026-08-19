@@ -44,6 +44,15 @@ export class DebouncedValidator<T = string> extends IValidator<T> {
         this.delay = delay;
         this.watch = inner.watch;
         this.validateWhenEmpty = inner.validateWhenEmpty;
+
+        // Le décorateur ne change rien aux règles qu'il diffère : une demande de
+        // revalidation venue du validator décoré doit remonter jusqu'au champ,
+        // sinon des constats injectés resteraient muets.
+        inner.subscribe(() => {
+            if (inner.consumeStale()) {
+                this.requestRevalidation();
+            }
+        });
     }
 
     protected async validate(value: T, report: ValidationReport, ctx: ValidationContext): Promise<void> {

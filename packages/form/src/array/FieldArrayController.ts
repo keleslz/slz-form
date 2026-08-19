@@ -13,7 +13,7 @@ export interface FieldArrayParams<TRow extends FieldsShape> {
      */
     readonly createRow: (id: string) => FormController<TRow>;
     /** Prévient le parent qu'il doit republier son instantané. */
-    readonly onChanged: () => void;
+    readonly onChanged: (valuesChanged: boolean) => void;
 }
 
 /**
@@ -32,7 +32,7 @@ export class FieldArrayController<TRow extends FieldsShape> {
     readonly name: string;
 
     private readonly createRow: (id: string) => FormController<TRow>;
-    private readonly onChanged: () => void;
+    private readonly onChanged: (valuesChanged: boolean) => void;
     private readonly listeners = new Set<Listener>();
     private entries: FieldArrayRow<TRow>[] = [];
     /**
@@ -46,6 +46,7 @@ export class FieldArrayController<TRow extends FieldsShape> {
     /** Monotone : un identifiant libéré n'est jamais réattribué. */
     private nextId = 0;
     private mounted = false;
+    private lastValues = "[]";
 
     constructor(params: FieldArrayParams<TRow>) {
         this.name = params.name;
@@ -66,7 +67,7 @@ export class FieldArrayController<TRow extends FieldsShape> {
         this.nextId += 1;
         const id = `${this.name}#${this.nextId}`;
         const row = new FieldArrayRow(id, this.createRow(id));
-        this.rowSubscriptions.set(id, row.form.listen(() => this.onChanged()));
+        this.rowSubscriptions.set(id, row.form.listen(() => this.publishContent()));
         this.entries.push(row);
         if (this.mounted) {
             row.form.mount();
@@ -165,6 +166,19 @@ export class FieldArrayController<TRow extends FieldsShape> {
         };
     };
 
+    /**
+     * Une ligne a notifié. Ne remonter au parent que si ses **valeurs** ont
+     * bougé : monter un champ, le toucher ou le passer en `loading` n'en est
+     * pas une, et le signaler relancerait les appels qui observent la liste —
+     * jusqu'à pendant la soumission (arbitrage 18).
+     */
+    private publishContent(): void {
+        const next = JSON.stringify(this.values());
+        const changed = next !== this.lastValues;
+        this.lastValues = next;
+        this.onChanged(changed);
+    }
+
     private publish(): void {
         // Nouvelle référence à chaque modification de la liste : c'est le
         // changement d'ordre ou de composition qui doit re-rendre, pas le
@@ -173,6 +187,8 @@ export class FieldArrayController<TRow extends FieldsShape> {
         for (const listener of this.listeners) {
             listener();
         }
-        this.onChanged();
+        this.lastValues = JSON.stringify(this.values());
+        // Ajouter, retirer ou déplacer une ligne change toujours le payload.
+        this.onChanged(true);
     }
 }

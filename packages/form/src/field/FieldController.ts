@@ -26,6 +26,12 @@ import type { AnyFieldView, FieldView } from "./FieldView";
 
 type Listener = () => void;
 
+/**
+ * Quel champ possède quel validator. Une `WeakMap` : elle ne retient rien et ne
+ * pèse pas sur la durée de vie des instances.
+ */
+const OWNERS = new WeakMap<object, string>();
+
 export interface FieldParams<T = string, M = never> {
     name: string;
     required?: boolean;
@@ -113,6 +119,19 @@ export class FieldController<T = string, M = never> {
     // ── wiring ───────────────────────────────────────────────────────────
     /** Called once by the FormController the field joins. */
     attach(host: FieldHost): void {
+        // Un `IValidator` porte son état — verdict, options, jeton de run. Deux
+        // champs qui en partagent un se voient mutuellement leurs erreurs. Un
+        // behavior, lui, peut être partagé : il ne retient rien.
+        const owner = OWNERS.get(this.validator);
+        if (owner !== undefined && owner !== this.name) {
+            throw new Error(
+                `[slz] Validator already used by field "${owner}": an IValidator holds its own `
+                + `state and cannot be shared with "${this.name}". Create one per field, or `
+                + "compose it — the members of a composite may be shared.",
+            );
+        }
+        OWNERS.set(this.validator, this.name);
+
         if (this.host && this.host !== host) {
             throw new Error(`[slz] Field "${this.name}" is already attached to another form.`);
         }
@@ -149,6 +168,9 @@ export class FieldController<T = string, M = never> {
         if (!this.lifecycle.mount()) {
             return;
         }
+        // Un `change()` est permis avant le montage : le travail qu'il a pu
+        // lancer ne doit pas survivre au signal qui le remplace.
+        this.abort.abort();
         this.abort = new AbortController();
         this.unsubscribeValidator = this.validator.subscribe(() => {
             // Un validator peut se déclarer périmé sans que la valeur bouge —
@@ -206,6 +228,12 @@ export class FieldController<T = string, M = never> {
         // le signal est avorté, donc plus rien ne viendrait la libérer.
         for (const behavior of this.behaviors) {
             this.statesByBehavior.set(behavior, BehaviorState.neutral);
+        }
+        // Un membre de composite peut être partagé entre plusieurs champs :
+        // garder l'abonnement d'un champ détruit ferait grossir sa liste
+        // d'auditeurs sans fin. Le prochain tour de validation le rétablit.
+        if (this.validator instanceof CompositeValidator) {
+            this.validator.detach();
         }
         this.commit();
     }
@@ -556,7 +584,12 @@ export class FieldController<T = string, M = never> {
         }
         const changes: FieldChanges = {
             value: !Object.is(this.current.value, next.value),
-            validity: this.current.ui.validity !== next.ui.validity,
+            // Le verdict **et** son affichage : `validity` reste `pristine`
+            // tant qu'on n'a pas touché le champ, donc s'y fier seul laissait
+            // un observateur attendre indéfiniment qu'un champ prérempli
+            // devienne valide.
+            validity: this.current.ui.validity !== next.ui.validity
+                || this.current.isBlocking !== next.isBlocking,
             activity: this.current.ui.activity !== next.ui.activity,
         };
         this.current = next;
