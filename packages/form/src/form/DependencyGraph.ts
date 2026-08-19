@@ -53,27 +53,40 @@ export class DependencyGraph {
         return this.dependencies.get(name) ?? [];
     }
 
+    /**
+     * Cherche un cycle atteignable depuis `start`.
+     *
+     * Deux ensembles, et pas un seul : `onPath` est la pile de récursion — c'est
+     * elle qui caractérise un cycle — tandis que `done` mémorise les nœuds déjà
+     * explorés sans cycle. Les confondre faisait passer un **losange**
+     * (a → b, a → c, b → d, c → d) pour une boucle, alors qu'il est parfaitement
+     * légitime : `d` est simplement atteint par deux chemins.
+     */
     private findCycle(start: string): string[] | null {
         const path: string[] = [];
-        const seen = new Set<string>();
+        const onPath = new Set<string>();
+        const done = new Set<string>();
 
         const walk = (node: string): boolean => {
-            path.push(node);
-            if (seen.has(node)) {
+            if (onPath.has(node)) {
+                path.push(node);
                 return true;
             }
-            seen.add(node);
+            if (done.has(node)) {
+                return false;
+            }
+
+            path.push(node);
+            onPath.add(node);
 
             for (const next of this.dependencies.get(node) ?? []) {
-                if (next === start) {
-                    path.push(start);
-                    return true;
-                }
                 if (walk(next)) {
                     return true;
                 }
             }
 
+            onPath.delete(node);
+            done.add(node);
             path.pop();
             return false;
         };

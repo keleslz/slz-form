@@ -8,6 +8,7 @@ import type {
     OptionValue,
     UiFlag,
     UiState,
+    ValidationIssue,
 } from "slz-form";
 
 export interface UseFieldParams<V = string, M = never> {
@@ -15,11 +16,23 @@ export interface UseFieldParams<V = string, M = never> {
     required?: boolean;
     requiredMessage?: string;
     initialValue?: V;
-    validator?: IValidator<V>;
+    /** Traite `false` comme vide — pour une case à cocher qui doit être cochée. */
+    requiredTrue?: boolean;
+    /** Un validator, ou plusieurs : leurs constats sont agrégés. */
+    validator?: IValidator<V> | readonly IValidator<V>[];
     behaviors?: readonly IBehavior<V, M>[];
     options?: readonly FieldOption<OptionValue<V>, M>[];
-    /** À renseigner seulement quand le parent pilote la valeur. */
+    /**
+     * À renseigner seulement quand le parent pilote la valeur.
+     *
+     * La **présence de la clé** fait foi, pas sa valeur : passer `value:
+     * undefined` efface le champ, ne pas passer `value` du tout le laisse libre.
+     */
     value?: V;
+    /** Verrouillage décidé par la vue, cumulé avec celui des behaviors. */
+    locked?: boolean;
+    /** Lecture seule : lisible et sélectionnable, mais non modifiable. */
+    readOnly?: boolean;
 }
 
 export interface UseFieldResult<V = string, M = never> {
@@ -28,6 +41,10 @@ export interface UseFieldResult<V = string, M = never> {
     options: readonly FieldOption<OptionValue<V>, M>[];
     errors: readonly string[];
     error: string | undefined;
+    /** Tous les constats, bloquants ou non — avec leur `code` pour les router. */
+    issues: readonly ValidationIssue[];
+    /** Les constats non bloquants. */
+    warnings: readonly string[];
     ui: UiState;
     flags: readonly UiFlag[];
     hasFlag: (...flags: UiFlag[]) => boolean;
@@ -35,6 +52,7 @@ export interface UseFieldResult<V = string, M = never> {
     isValid: boolean;
     isLoading: boolean;
     isLocked: boolean;
+    isReadOnly: boolean;
     isVisible: boolean;
     showError: boolean;
     touched: boolean;
@@ -63,12 +81,17 @@ export function useFieldOn<V, M>(
     form: AnyForm,
     params: UseFieldParams<V, M>,
 ): UseFieldResult<V, M> {
-    const { name, required, value } = params;
+    const { name, required, value, locked, readOnly } = params;
+    // La présence de la clé, pas sa valeur : sans ça, un champ non piloté se
+    // ferait effacer par le `value: undefined` implicite à chaque mise à jour.
+    const controlled = "value" in params;
+    const options = params.options;
 
     const controller = useMemo(
         () => form.field(name, {
             required: params.required,
             requiredMessage: params.requiredMessage,
+            requiredTrue: params.requiredTrue,
             initialValue: params.initialValue,
             validator: params.validator,
             behaviors: params.behaviors,
@@ -88,8 +111,16 @@ export function useFieldOn<V, M>(
     }, [controller]);
 
     useEffect(() => {
-        controller.update({ required, value });
-    }, [controller, required, value]);
+        controller.update({
+            required,
+            locked,
+            readOnly,
+            ...(controlled ? { value } : {}),
+            // Une liste statique poussée par le parent. Un champ alimenté par
+            // `loadOptions` ne passe pas cette prop, donc rien ne l'écrase.
+            ...(options !== undefined ? { options } : {}),
+        } as never);
+    }, [controller, required, value, controlled, locked, readOnly, options]);
 
     const onChange = useCallback((next: V | undefined) => controller.change(next), [controller]);
     const onBlur = useCallback(() => controller.blur(), [controller]);
@@ -102,6 +133,8 @@ export function useFieldOn<V, M>(
         options: snapshot.options,
         errors: snapshot.errors,
         error: snapshot.error,
+        issues: snapshot.issues,
+        warnings: snapshot.warnings,
         ui: snapshot.ui,
         flags: snapshot.ui.flags,
         hasFlag,
@@ -109,6 +142,7 @@ export function useFieldOn<V, M>(
         isValid: snapshot.isValid,
         isLoading: snapshot.isLoading,
         isLocked: snapshot.isLocked,
+        isReadOnly: snapshot.isReadOnly,
         isVisible: snapshot.isVisible,
         showError: snapshot.showError,
         touched: snapshot.touched,

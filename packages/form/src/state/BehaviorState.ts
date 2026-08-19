@@ -40,6 +40,15 @@ export class BehaviorState {
         return this.without("locked");
     }
 
+    /** Lisible mais non modifiable — n'implique pas `locked`. */
+    readOnly(): BehaviorState {
+        return this.with("readonly");
+    }
+
+    writable(): BehaviorState {
+        return this.without("readonly");
+    }
+
     hide(): BehaviorState {
         return this.with("invisible");
     }

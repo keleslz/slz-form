@@ -1,5 +1,5 @@
 import { createDebouncer, type Debouncer } from "../util/debounce";
-import { IValidator, type ValidationReport } from "./IValidator";
+import { IValidator, type ValidationContext, type ValidationReport } from "./IValidator";
 
 /**
  * Décorateur qui **diffère** l'exécution d'un validator, sans rien changer à ses
@@ -25,6 +25,13 @@ import { IValidator, type ValidationReport } from "./IValidator";
  * immédiatement.
  */
 export class DebouncedValidator<T = string> extends IValidator<T> {
+    /**
+     * Le `watch` du validator décoré, recopié. Assigné dans le constructeur et
+     * non exposé par un getter : `watch` est un champ de la classe de base, et
+     * un champ masque un accesseur de sous-classe.
+     */
+    override readonly watch: readonly string[] | undefined;
+
     private readonly inner: IValidator<T>;
     private readonly delay: number;
     private readonly debouncer: Debouncer = createDebouncer();
@@ -33,19 +40,18 @@ export class DebouncedValidator<T = string> extends IValidator<T> {
         super();
         this.inner = inner;
         this.delay = delay;
+        this.watch = inner.watch;
     }
 
-    protected async validate(value: T, report: ValidationReport): Promise<void> {
+    protected async validate(value: T, report: ValidationReport, ctx: ValidationContext): Promise<void> {
         if (!(await this.debouncer.wait(this.delay))) {
             // Remplacée par une frappe plus récente : ne rien signaler. Le jeton
             // de run de la base empêche de toute façon la publication.
             return;
         }
 
-        const state = await this.inner.handle(value);
-        for (const message of state.errors) {
-            report.error(message);
-        }
+        const state = await this.inner.handle(value, ctx);
+        report.add(state.issues);
     }
 
     override flush(): void {

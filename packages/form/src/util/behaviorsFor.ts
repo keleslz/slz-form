@@ -144,6 +144,22 @@ export function behaviorsFor<TFields extends FieldsShape>(_form: FormController<
             return lockWhile<never>((ctx) => params.when(readWatched(ctx, watch)), watch);
         },
 
+        /**
+         * Verrouille tant qu'un des champs observés n'est pas **valide**.
+         *
+         * C'est le seul helper qui observe la validité plutôt que la valeur :
+         * il déclare `on: ["validity"]`. Pour toute autre réaction à l'état d'un
+         * voisin, un `IBehavior` écrit à la main accepte la même déclaration.
+         */
+        lockUntilValid<W extends Name>(params: { watch: readonly W[] }): IBehavior<never, never> {
+            const watch = params.watch.map((field) => ({ field, on: ["validity"] as const }));
+            const compute = (ctx: BehaviorContext<never, never>) => {
+                const allValid = params.watch.every((field) => ctx.watched(field)?.validity === "valid");
+                return allValid ? ctx.state.unlock() : ctx.state.lock();
+            };
+            return { watch, onMount: compute, onDependencyChanged: compute };
+        },
+
         /** Émet `invisible` tant que la condition tient. */
         hideWhen<W extends Name = never>(params: {
             watch?: readonly W[];

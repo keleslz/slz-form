@@ -1,3 +1,4 @@
+import type { FieldChanges } from "../behavior/IBehavior";
 import type { FormView } from "../form/FormView";
 
 /**
@@ -10,10 +11,10 @@ import type { FormView } from "../form/FormView";
 export interface FieldHost {
     formView(): FormView;
     /**
-     * @param valueChanged  seule une vraie modification de valeur propage aux
-     *                      champs observateurs. Un changement de validité, de
-     *                      `touched` ou de `submitting` met à jour le formulaire
-     *                      sans rejouer les dépendances.
+     * @param changes  ce qui a bougé, par axe. Un observateur n'est réveillé que
+     *                 sur les axes qu'il a déclarés — `value` par défaut, ce qui
+     *                 évite qu'une revalidation rejoue les lookups qui
+     *                 l'observent (arbitrage 18).
      */
-    notifyFieldChanged(name: string, valueChanged: boolean): void;
+    notifyFieldChanged(name: string, changes: FieldChanges): void;
 }

@@ -8,6 +8,7 @@ import {
     type MetaOf,
     type ValueOf,
 } from "../field";
+import type { FieldChanges } from "../behavior/IBehavior";
 import { Lifecycle } from "../lifecycle";
 import { DependencyGraph } from "./DependencyGraph";
 import { FormSnapshot, type FieldSummary } from "./FormSnapshot";
@@ -21,6 +22,8 @@ export type FieldNameOf<TFields extends FieldsShape> = Extract<keyof TFields, st
 
 /** Passes de convergence avant d'abandonner : couvre les lookups en chaîne. */
 const MAX_SETTLE_ROUNDS = 5;
+/** Filet de sécurité : le graphe interdit les cycles, ceci attrape les oscillations. */
+const MAX_PROPAGATION_STEPS = 100;
 
 export interface FormParams {
     name: string;
@@ -56,8 +59,13 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
     private readonly settleTimeout: number;
     private status: FormStatus = "idle";
     private current: FormSnapshot;
-    /** Re-entrancy guard: a propagation must not trigger another propagation. */
-    private propagating = false;
+    /**
+     * File de propagation. Une écriture faite pendant une propagation y est
+     * empilée au lieu d'être perdue : c'est ce qui fait qu'une chaîne
+     * **synchrone** a → b → c va jusqu'au bout.
+     */
+    private readonly queue: { name: string; changes: FieldChanges }[] = [];
+    private draining = false;
 
     constructor(params: FormParams) {
         this.name = params.name;
@@ -138,30 +146,56 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         return this.readOnlyView;
     }
 
-    notifyFieldChanged(name: string, valueChanged: boolean): void {
+    notifyFieldChanged(name: string, changes: FieldChanges): void {
         this.commit();
 
-        // Une dépendance se déclenche sur la *valeur* observée, pas sur l'état
-        // du champ observé. Sans ça, toucher un champ ou le revalider rejouait
-        // les lookups qui l'observent — au point de relancer un appel réseau
-        // pendant la soumission.
-        if (!valueChanged || this.propagating) {
+        if (!changes.value && !changes.validity && !changes.activity) {
             return;
         }
+
+        this.queue.push({ name, changes });
+
+        // Déjà dans la boucle : l'écriture qui vient d'être faite sera traitée
+        // par le tour suivant. Sans cette file, la garde de réentrance avalait
+        // silencieusement le deuxième maillon d'une chaîne synchrone.
+        if (this.draining) {
+            return;
+        }
+
+        this.draining = true;
+        try {
+            let steps = 0;
+            while (this.queue.length > 0) {
+                steps += 1;
+                if (steps > MAX_PROPAGATION_STEPS) {
+                    // Le graphe interdit les cycles, donc on ne devrait jamais
+                    // arriver ici — sauf si un behavior fait osciller une valeur.
+                    throw new Error(
+                        `[slz] Propagation ne converge pas dans "${this.name}" `
+                        + `après ${MAX_PROPAGATION_STEPS} étapes : un behavior écrit-il en boucle ?`,
+                    );
+                }
+                const next = this.queue.shift();
+                if (next) {
+                    this.dispatch(next.name, next.changes);
+                }
+            }
+        } finally {
+            this.draining = false;
+            this.queue.length = 0;
+        }
+    }
+
+    private dispatch(name: string, changes: FieldChanges): void {
         const observers = this.graph.observersOf(name);
         const source = this.fields.get(name);
         if (observers.length === 0 || !source) {
             return;
         }
 
-        this.propagating = true;
-        try {
-            const view: AnyFieldView = source.view();
-            for (const observer of observers) {
-                this.fields.get(observer)?.notifyDependency(view);
-            }
-        } finally {
-            this.propagating = false;
+        const view: AnyFieldView = source.view();
+        for (const observer of observers) {
+            this.fields.get(observer)?.notifyDependency(view, changes);
         }
     }
 
@@ -204,6 +238,10 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
      * pas convergé dans le temps imparti — dans les deux cas, rien n'est soumis.
      */
     async submit(): Promise<boolean> {
+        // Deux soumissions concurrentes partaient toutes les deux.
+        if (this.status === "submitting") {
+            return false;
+        }
         this.setStatus("submitting");
         const mounted = [...this.fields.values()].filter((field) => field.isMounted);
 
@@ -216,6 +254,15 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         await Promise.all(mounted.map((field) => field.submit()));
 
         const settled = await this.settle(mounted);
+
+        if (!settled) {
+            // La convergence a expiré : un champ est resté en vol. Sans ça il
+            // garderait `loading` + `locked` indéfiniment, et **toutes** les
+            // soumissions suivantes échoueraient.
+            for (const field of mounted) {
+                field.recover();
+            }
+        }
 
         for (const field of mounted) {
             field.setSubmitting(false);
@@ -249,12 +296,9 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         };
     };
 
+    /** Le payload : ni les champs démontés, ni les champs masqués. */
     values(): Readonly<Record<string, unknown>> {
-        const values: Record<string, unknown> = {};
-        for (const [name, field] of this.fields) {
-            values[name] = field.snapshot.value;
-        }
-        return values;
+        return this.buildSnapshot().values;
     }
 
     // ── internals ────────────────────────────────────────────────────────
@@ -338,6 +382,8 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
                 value: snapshot.value,
                 validity: snapshot.ui.validity,
                 errors: snapshot.errors,
+                blocking: snapshot.isBlocking,
+                visible: snapshot.isVisible,
                 mounted: snapshot.mounted,
             });
         }

@@ -4,8 +4,12 @@ import type { FormStatus } from "./FormView";
 export interface FieldSummary {
     readonly name: string;
     readonly value: unknown;
+    /** Ce qu'on affiche — `pristine` tant que le champ n'a pas été touché. */
     readonly validity: ValidityFlag;
     readonly errors: readonly string[];
+    /** Le verdict, indépendant de l'interaction : c'est lui qui décide de `isValid`. */
+    readonly blocking: boolean;
+    readonly visible: boolean;
     readonly mounted: boolean;
 }
 
@@ -28,9 +32,22 @@ export class FormSnapshot {
         this.fields = fields;
     }
 
-    /** Only mounted fields count: an unmounted field is not part of the form being filled. */
+    /**
+     * Comptent seuls les champs **montés et visibles** : un champ démonté ou
+     * masqué ne fait pas partie du formulaire qu'on remplit. Sans ça, un champ
+     * conditionnel obligatoire mais invisible rendait la soumission impossible
+     * sans que l'utilisateur puisse rien y faire.
+     *
+     * Le critère est `blocking`, pas `validity` : un formulaire prérempli et
+     * correct est valide même si personne n'a encore touché à ses champs.
+     */
     get isValid(): boolean {
-        return this.fields.every((field) => !field.mounted || field.validity === "valid");
+        return this.contributing.every((field) => !field.blocking);
+    }
+
+    /** Les champs qui pèsent sur la validité et sur le payload. */
+    private get contributing(): readonly FieldSummary[] {
+        return this.fields.filter((field) => field.mounted && field.visible);
     }
 
     get isSubmitting(): boolean {
@@ -39,7 +56,7 @@ export class FormSnapshot {
 
     get values(): Readonly<Record<string, unknown>> {
         const values: Record<string, unknown> = {};
-        for (const field of this.fields) {
+        for (const field of this.contributing) {
             values[field.name] = field.value;
         }
         return values;
@@ -47,7 +64,7 @@ export class FormSnapshot {
 
     get errors(): Readonly<Record<string, readonly string[]>> {
         const errors: Record<string, readonly string[]> = {};
-        for (const field of this.fields) {
+        for (const field of this.contributing) {
             if (field.errors.length > 0) {
                 errors[field.name] = field.errors;
             }

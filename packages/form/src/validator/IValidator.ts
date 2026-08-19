@@ -1,66 +1,170 @@
+import type { AnyFieldView } from "../field/FieldView";
+import type { FormView } from "../form/FormView";
+
 export type ValidatorStatus = "pristine" | "loading" | "valid" | "error";
+
+/**
+ * Gravité d'un constat de validation.
+ *
+ * Seul `error` bloque. `warning` remonte à la vue sans peser sur la validité :
+ * c'est ce qui permet un « ce code postal semble inhabituel » qui n'empêche pas
+ * de soumettre.
+ */
+export type IssueSeverity = "error" | "warning";
+
+/**
+ * Un constat de validation.
+ *
+ * `code` est le point d'accroche du consommateur : router vers une snackbar
+ * plutôt que sous le champ, traduire, regrouper. Le moteur le transporte et ne
+ * s'en sert jamais — décider de l'affichage n'est pas son travail.
+ */
+export interface ValidationIssue {
+    readonly message: string;
+    readonly severity: IssueSeverity;
+    readonly code?: string;
+}
+
+export interface IssueMeta {
+    readonly code?: string;
+}
 
 export interface ValidatorState {
     readonly status: ValidatorStatus;
-    readonly errors: readonly string[];
+    readonly issues: readonly ValidationIssue[];
 }
 
 export interface ValidationOptions {
     required?: boolean;
     requiredMessage?: string;
+    /**
+     * Traite `false` comme une valeur vide, pour les cases à cocher qui doivent
+     * être cochées. Sans cette option, `required` laisse passer `false` : c'est
+     * une valeur booléenne parfaitement renseignée.
+     */
+    requiredTrue?: boolean;
 }
 
 export type ValidatorListener = () => void;
 
 /**
- * Error collector handed to `validate`, scoped to a **single run**.
+ * Lecture du formulaire offerte à `validate` (invariants 8 et 9).
  *
- * Errors are never accumulated on the validator instance: two concurrent async
- * validations would otherwise interleave their messages.
+ * Aucune méthode de mutation : le validator **juge**, il n'écrit pas. Et il ne
+ * lit que ce qu'il a déclaré dans `watch` — `watched()` throw sur un nom non
+ * déclaré, exactement comme pour un behavior (invariants 7 et 23).
+ */
+export interface ValidationContext {
+    readonly name: string;
+    readonly form: FormView;
+    watched(name: string): AnyFieldView | null;
+}
+
+/**
+ * Collecteur de constats remis à `validate`, propre à **une seule exécution**.
+ *
+ * Rien n'est accumulé sur l'instance du validator : deux validations async
+ * concurrentes entremêleraient leurs messages sinon.
  */
 export class ValidationReport {
-    private readonly messages: string[] = [];
+    private readonly collected: ValidationIssue[] = [];
 
-    error(message: string): this {
-        this.messages.push(message);
+    error(message: string, meta?: IssueMeta): this {
+        this.collected.push({ message, severity: "error", code: meta?.code });
         return this;
     }
 
-    errorIf(invalid: boolean, message: string): this {
+    errorIf(invalid: boolean, message: string, meta?: IssueMeta): this {
         if (invalid) {
-            this.messages.push(message);
+            this.error(message, meta);
         }
         return this;
     }
 
+    /** Signale sans bloquer : `isValid` ignore les avertissements. */
+    warn(message: string, meta?: IssueMeta): this {
+        this.collected.push({ message, severity: "warning", code: meta?.code });
+        return this;
+    }
+
+    warnIf(suspect: boolean, message: string, meta?: IssueMeta): this {
+        if (suspect) {
+            this.warn(message, meta);
+        }
+        return this;
+    }
+
+    /** Reprend des constats déjà formés — utilisé par la composition. */
+    add(issues: Iterable<ValidationIssue>): this {
+        for (const issue of issues) {
+            this.collected.push(issue);
+        }
+        return this;
+    }
+
+    get issues(): readonly ValidationIssue[] {
+        return this.collected;
+    }
+
     get errors(): readonly string[] {
-        return this.messages;
+        return errorsOf(this.collected);
     }
 
     get hasError(): boolean {
-        return this.messages.length > 0;
+        return this.collected.some((issue) => issue.severity === "error");
     }
 }
 
+/** Les messages bloquants seuls — les avertissements n'en font pas partie. */
+export function errorsOf(issues: readonly ValidationIssue[]): readonly string[] {
+    return issues.filter((issue) => issue.severity === "error").map((issue) => issue.message);
+}
+
+export function sameIssues(a: readonly ValidationIssue[], b: readonly ValidationIssue[]): boolean {
+    return a.length === b.length && a.every((issue, i) => {
+        const other = b[i];
+        return other !== undefined
+            && issue.message === other.message
+            && issue.severity === other.severity
+            && issue.code === other.code;
+    });
+}
+
 /**
- * Validity authority for one field (invariant 13). Generic over the value type,
- * so the same contract covers text, options, multi-options, files, dates,
- * times and datetimes — subclass with the `T` you need.
+ * Autorité de validité pour un champ (invariant 13). Générique sur le type de
+ * valeur, ce qui couvre texte, options, multi-options, fichiers, dates, heures
+ * et datetimes — on sous-classe avec le `T` voulu.
  *
- * Behaviors never decide validity; they only react to it.
+ * Les behaviors ne décident jamais de la validité ; ils y réagissent.
  */
 export abstract class IValidator<T = string> {
-    private state: ValidatorState = { status: "pristine", errors: [] };
+    /**
+     * Champs que ce validator lit pour statuer. Le FieldController les agrège
+     * dans le graphe de dépendances, ce qui déclenche une **revalidation
+     * automatique** quand l'un d'eux change : c'est ce qui rend la validation
+     * croisée possible sans que le consommateur ait à la rejouer à la main.
+     */
+    readonly watch?: readonly string[];
+
+    private state: ValidatorState = { status: "pristine", issues: [] };
     private options: ValidationOptions = {};
     private readonly listeners = new Set<ValidatorListener>();
-    /** Monotonic run id — a stale async run must not overwrite a fresher result. */
+    /** Jeton de run monotone — un résultat périmé ne doit pas écraser un plus frais. */
     private run = 0;
+    private stale = false;
 
     /**
-     * Implement the field-specific rules. Push messages through `report`;
-     * return a promise for async rules (the field shows `loading` meanwhile).
+     * Les règles propres au champ. Les constats passent par `report` ; renvoyer
+     * une promesse pour une règle asynchrone (le champ porte `loading` pendant
+     * ce temps).
+     *
+     * `ctx` donne accès en lecture aux champs déclarés dans `watch`.
      */
-    protected abstract validate(value: T, report: ValidationReport): void | Promise<void>;
+    protected abstract validate(
+        value: T,
+        report: ValidationReport,
+        ctx: ValidationContext,
+    ): void | Promise<void>;
 
     setOptions(options: ValidationOptions): this {
         this.options = options;
@@ -78,17 +182,17 @@ export abstract class IValidator<T = string> {
         };
     }
 
-    async handle(value?: T): Promise<ValidatorState> {
+    async handle(value: T | undefined, ctx: ValidationContext): Promise<ValidatorState> {
         const run = ++this.run;
         const report = new ValidationReport();
         const empty = this.isEmpty(value);
 
         if (this.options.required && empty) {
-            report.error(this.options.requiredMessage ?? "This field is required");
+            report.error(this.options.requiredMessage ?? "This field is required", { code: "required" });
         } else if (!empty) {
-            const pending = this.validate(value as T, report);
+            const pending = this.validate(value as T, report, ctx);
             if (pending instanceof Promise) {
-                this.setState({ status: "loading", errors: this.state.errors });
+                this.setState({ status: "loading", issues: this.state.issues });
                 await pending;
             }
         }
@@ -98,8 +202,8 @@ export abstract class IValidator<T = string> {
         }
 
         this.setState(report.hasError
-            ? { status: "error", errors: [...report.errors] }
-            : { status: "valid", errors: [] });
+            ? { status: "error", issues: [...report.issues] }
+            : { status: "valid", issues: [...report.issues] });
 
         return this.state;
     }
@@ -115,17 +219,43 @@ export abstract class IValidator<T = string> {
         // no-op
     }
 
+    /**
+     * Signale que ce validator doit être **rejoué**, et pas seulement relu.
+     *
+     * Sert aux validators dont le verdict peut changer sans que la valeur
+     * bouge : des issues injectées de l'extérieur, une règle qui dépend d'un
+     * autre champ. Le FieldController relance alors une validation au lieu de
+     * se contenter de republier l'état courant.
+     */
+    protected requestRevalidation(): void {
+        this.stale = true;
+        for (const listener of this.listeners) {
+            listener();
+        }
+    }
+
+    /** Lu par le FieldController à chaque notification. Remet le drapeau à zéro. */
+    consumeStale(): boolean {
+        const was = this.stale;
+        this.stale = false;
+        return was;
+    }
+
     reset(): void {
         this.run += 1;
-        this.setState({ status: "pristine", errors: [] });
+        this.setState({ status: "pristine", issues: [] });
+    }
+
+    get issues(): readonly ValidationIssue[] {
+        return this.state.issues;
     }
 
     get errors(): readonly string[] {
-        return this.state.errors;
+        return errorsOf(this.state.issues);
     }
 
     get firstError(): string | null {
-        return this.state.errors[0] ?? null;
+        return this.errors[0] ?? null;
     }
 
     get hasError(): boolean {
@@ -142,11 +272,16 @@ export abstract class IValidator<T = string> {
         if (Array.isArray(value)) {
             return value.length === 0;
         }
+        // `false` n'est vide que si le champ l'a demandé : une case à cocher
+        // obligatoire n'est pas la même chose qu'un booléen renseigné à faux.
+        if (value === false) {
+            return this.options.requiredTrue === true;
+        }
         return false;
     }
 
     private setState(next: ValidatorState): void {
-        if (next.status === this.state.status && sameErrors(next.errors, this.state.errors)) {
+        if (next.status === this.state.status && sameIssues(next.issues, this.state.issues)) {
             return;
         }
         this.state = next;
@@ -154,8 +289,4 @@ export abstract class IValidator<T = string> {
             listener();
         }
     }
-}
-
-function sameErrors(a: readonly string[], b: readonly string[]): boolean {
-    return a.length === b.length && a.every((message, i) => message === b[i]);
 }

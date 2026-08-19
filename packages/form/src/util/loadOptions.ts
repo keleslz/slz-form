@@ -7,7 +7,7 @@ import { lockedWhilePending, type PendingState } from "./pending";
 /** Ce qui relance le chargement de la liste. */
 export type LoadOptionsTrigger = "mount" | "change" | "dependency";
 
-export interface LoadOptionsParams {
+export interface LoadOptionsParams<T = string, M = never> {
     /** Champs dont le changement relance la liste (select dépendant). */
     watch?: readonly string[];
     /**
@@ -25,6 +25,14 @@ export interface LoadOptionsParams {
     pending?: PendingState;
     /** Vider la valeur courante quand un champ observé change. Défaut `true`. */
     resetOnReload?: boolean;
+    /**
+     * Appelé quand le chargement échoue.
+     *
+     * Sans ça, un réseau tombé est indiscernable d'une liste légitimement vide.
+     * Le moteur ne décide pas quoi en faire : à l'appelant de signaler, de
+     * réessayer, ou de pousser un constat via un `ExternalValidator`.
+     */
+    onError?: (error: unknown, ctx: BehaviorContext<T, M>) => void;
 }
 
 /**
@@ -48,7 +56,7 @@ export interface LoadOptionsParams {
  */
 export function loadOptions<T = string, M = never>(
     fetcher: (ctx: BehaviorContext<T, M>) => Promise<readonly FieldOption<OptionValue<T>, M>[]>,
-    params: LoadOptionsParams = {},
+    params: LoadOptionsParams<T, M> = {},
 ): IBehavior<T, M> {
     const watch = params.watch ?? [];
     const delay = params.debounce ?? 0;
@@ -56,6 +64,9 @@ export function loadOptions<T = string, M = never>(
     const resetOnReload = params.resetOnReload ?? true;
     const triggers = params.on ?? (watch.length > 0 ? ["mount", "dependency"] : ["mount"]);
 
+    // Jeton de run par champ : sans lui, une réponse lente et périmée écrasait
+    // une réponse plus récente — le même problème que le validator règle déjà.
+    const runs = new Map<string, number>();
     const debouncers = new Map<string, Debouncer>();
     const debouncerOf = (name: string): Debouncer => {
         const existing = debouncers.get(name);
@@ -68,6 +79,9 @@ export function loadOptions<T = string, M = never>(
     };
 
     const load = async (ctx: BehaviorContext<T, M>): Promise<BehaviorState> => {
+        const run = (runs.get(ctx.name) ?? 0) + 1;
+        runs.set(ctx.name, run);
+
         ctx.push(pending(ctx.state));
 
         if (delay > 0 && !(await debouncerOf(ctx.name).wait(delay))) {
@@ -77,18 +91,23 @@ export function loadOptions<T = string, M = never>(
             return ctx.state;
         }
 
+        const fresh = (): boolean => !ctx.signal.aborted && runs.get(ctx.name) === run;
+
         try {
             const options = await fetcher(ctx);
-            if (!ctx.signal.aborted) {
+            if (fresh()) {
                 ctx.setOptions(options);
             }
-        } catch {
-            if (!ctx.signal.aborted) {
+        } catch (error) {
+            if (fresh()) {
                 ctx.setOptions([]);
+                params.onError?.(error, ctx);
             }
         }
 
-        return ctx.state.idle().unlock().show();
+        // Une réponse dépassée ne touche pas non plus à l'état d'attente : le
+        // run le plus récent est encore en vol, il doit rester `loading`.
+        return runs.get(ctx.name) === run ? ctx.state.idle().unlock().show() : ctx.state;
     };
 
     return {
