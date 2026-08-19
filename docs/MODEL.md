@@ -35,7 +35,7 @@ donc groupés par **axe** :
 |---|---|---|---|
 | Validité | `pristine` · `valid` · `error` | exclusif | le **Validator** seul |
 | Activité | `idle` · `loading` | exclusif | les Behaviors + le Validator |
-| Disponibilité | `locked` · `invisible` | cumulatif | les Behaviors + le Controller |
+| Disponibilité | `locked` · `readonly` · `invisible` | cumulatif | les Behaviors + le Controller |
 
 Règles de fusion, une par axe :
 
@@ -109,7 +109,7 @@ form, jamais écrire dans un autre champ.
 ### IBehavior
 ```ts
 interface IBehavior<T> {
-    readonly watch?: readonly string[];
+    readonly watch?: readonly WatchTarget[];   // "postcode" | { field, on: [...] }
     onMount?, onChange?, onFocus?, onBlur?, onSubmit?,
     onDependencyChanged?, onUnmount?
 }
@@ -143,6 +143,33 @@ Les erreurs passent par un `ValidationReport` **propre à chaque run** : deux
 validations async concurrentes entremêleraient leurs messages sinon. Un jeton de
 run monotone garantit qu'un résultat périmé n'écrase pas un plus frais.
 
+Le validator **déclare ce qu'il lit** et reçoit une vue en lecture, ce qui rend
+la validation croisée exprimable sans sortir du modèle. Ses dépendances entrent
+dans le même graphe que celles des behaviors : la règle est donc rejouée quand
+sa dépendance change, sans que l'appelant s'en occupe.
+
+```ts
+class SameAsPassword extends IValidator<string> {
+    readonly watch = ["password"];
+    protected validate(value: string, report: ValidationReport, ctx: ValidationContext) {
+        report.errorIf(value !== ctx.watched("password")?.value, "Ne correspond pas");
+    }
+}
+```
+
+Un constat porte une **gravité** et un **code**. `warn()` signale sans bloquer ;
+le `code` permet à la vue de router — snackbar, sous le champ, ou nulle part.
+Le moteur transporte, il ne décide pas de l'affichage.
+
+Les validators se **composent** : `validator: [rules, serverIssues]`. Chaque
+membre garde ses règles, leurs constats sont agrégés, et la validité reste
+décidée par un validator. C'est ce qui permet à `ExternalValidator` de porter
+une erreur serveur sans que l'invariant 13 bouge.
+
+Une règle n'est pas consultée sur une valeur vide, sauf si elle déclare
+`validateWhenEmpty` — nécessaire quand c'est elle qui décide de l'obligation
+(« obligatoire si le compte est pro »).
+
 ### Util — les fonctions nues
 Couvrent les cas courants sans écrire de behavior :
 
@@ -151,11 +178,24 @@ Couvrent les cas courants sans écrire de behavior :
 | `loadOptions({ field, on, watch, debounce, fetch })` | charge les options : au montage, sur dépendance, ou à la frappe |
 | `prefill(fetcher)` | remplit le champ au montage, verrouillé et `loading`, sans le marquer touché |
 | `lockWhile(condition, watch)` | verrouillage conditionnel, y compris inter-champs |
+| `lockUntilValid({ watch })` | verrouille tant qu'un champ observé n'est pas **valide** |
 | `lookup({ field, watch, debounce, fetch })` | appelle une API et **écrit** la valeur du champ |
 | `suggest({ field, debounce, fetch })` | champ de recherche : suggestions à la frappe, sans verrou |
 | `hideWhen(watch, predicate)` | émet `invisible` |
 | `dependsOn(watch, effect)` | échappatoire générique pour toute réaction inter-champs |
 | `createBehavior(def)` | typage d'un littéral de behavior |
+
+Nouvelle entité : **`FieldArrayController`**, obtenu par `form.array(name)`.
+Une ligne est un `FormController` à part entière, identifiée et jamais indexée.
+
+```ts
+type InvoiceFields = { customer: string; lines: FieldArray<{ label: string; qty: number }> };
+
+const lines = form.array("lines");
+const id = lines.append();          // rend un identifiant stable
+lines.rows[0].field("qty");         // exactement l'API d'un formulaire
+lines.move(0, 1);                   // aucun renommage, donc aucun `watch` cassé
+```
 
 ---
 
@@ -211,6 +251,12 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 17 | Stabilité du snapshot | même référence tant que rien ne change | exigé par `useSyncExternalStore` ; sert l'invariant 22 |
 | 18 | Déclenchement d'une dépendance | sur la **valeur** observée, pas sur son état | sinon revalider ou toucher un champ rejoue les lookups qui l'observent |
 | 19 | Soumission et travail asynchrone | `submit()` fait partir le différé puis **attend** que plus rien ne soit en vol | toutes les valeurs doivent être posées avant qu'on juge le formulaire |
+| 20 | Contexte du Validator | il déclare `watch` et reçoit une vue en lecture | la validation croisée était le seul besoin courant hors d'atteinte ; l'autorité n'est pas déplacée, le juge reçoit des yeux |
+| 21 | Forme d'un constat | `{ message, severity, code? }` | le moteur transporte de quoi router, sans jamais décider où afficher |
+| 22 | Déclencheurs de dépendance | un nom seul vaut `["value"]` ; `{ field, on }` ouvre le reste | garde l'arbitrage 18 comme défaut, et rend la réaction à l'état possible en la déclarant |
+| 23 | Plusieurs validators | un tableau devient un composite, invisible pour l'appelant | promesse déjà faite ici et dans `.CLAUDE.md` ; permet aux erreurs serveur d'être un validator |
+| 24 | Affichage vs verdict | `validity` reste `pristine` tant qu'on n'a pas touché ; `isBlocking` dit le vrai | un prefill ne doit pas allumer d'erreur, mais un formulaire prérempli et correct doit être soumettable |
+| 25 | Champs répétables | une ligne **est** un formulaire, identifiée et non indexée | réutilise graphe, validation et soumission ; retirer ou déplacer une ligne ne renomme rien, donc aucun `watch` ne pointe dans le vide |
 
 ---
 
@@ -243,6 +289,11 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 23 | Dépendance réactive explicite | idem 7 |
 | 24 | FormController pas God Object | `DependencyGraph`, `FormSnapshot`, `FieldController` séparés |
 | 25 | Composition plutôt que duplication | `Lifecycle` partagé Form/Field ; utils composés de behaviors |
+| 26 | Le Validator lit, n'écrit pas | `ValidationContext` n'a aucune méthode de mutation ; `watched()` throw sur un nom non déclaré |
+| 27 | Le moteur ne décide pas de l'affichage | il porte `severity` et `code` ; aucun libellé, aucune couleur, aucun composant |
+| 28 | Un axe s'enrichit, ne s'ouvre pas | `readonly` a rejoint la disponibilité ; aucun sac à flags libres, qui recréerait le `Set` plat |
+| 29 | Masqué vaut absent | un champ `invisible` sort de la validité **et** du payload |
+| 30 | Une ligne est un formulaire | `FieldArrayController` compose des `FormController` ; aucun nommage par chemins |
 
 ---
 
@@ -268,16 +319,19 @@ inchangés).
    inféré. Prix assumé : ajouter un champ coûte une ligne dans la map en plus de
    celle dans la vue. En échange, plus aucun `as` côté consommateur, et un nom
    fautif ou du mauvais type ne compile pas.
-2. **Champs dynamiques** (field arrays, champs répétés). `addField`/`removeField`
-   existent (`form.field()` / `form.remove()`), mais aucun cas d'usage n'est
-   encore éprouvé.
+2. ~~**Champs dynamiques** (field arrays, champs répétés).~~ Fait.
+   `form.array(name)` rend un `FieldArrayController` dont chaque ligne est un
+   `FormController`. Prix assumé : une ligne se monte et se démonte comme un
+   formulaire. En échange, rien n'a été refondu — ni `FieldsShape`, ni
+   `FieldNameOf`, ni `DependencyGraph` — et les identifiants stables rendent le
+   réordonnancement inoffensif pour les dépendances déclarées.
 3. ~~**Debounce.**~~ Fait. Deux mécanismes distincts, parce qu'ils tombent sur
    deux axes différents et qu'aucun ne peut faire le travail de l'autre :
    `DebouncedValidator` diffère un validator (qui *juge* une valeur), `lookup`
    diffère un behavior (qui *écrit* une valeur). `IValidator.flush()` permet au
    FieldController de trancher sans attendre au blur et à la soumission.
-4. **Packaging.** Le core est isolé mais pas encore un package séparé : pas de
-   `exports`/`main`, pas de build lib. C'est l'étape qui rend `slz-form-event`
-   réellement publiable indépendamment des adapters.
+4. ~~**Packaging.**~~ Fait. `packages/form` et `packages/react-form` sont deux
+   packages publiables, construits par tsup (ESM + `.d.ts`), avec changesets et
+   CI. Reste à faire côté compte npm uniquement.
 5. **Adapters Angular et Vue.** `packages/angular-form` et `packages/vue-form`
    n'ont encore que leur README : le contrat à implémenter y est décrit.

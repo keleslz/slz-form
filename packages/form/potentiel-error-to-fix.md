@@ -1,8 +1,25 @@
 # Audit de couverture — `slz-form`
 
-> **Statut : rien n'est corrigé.** Ce document est un relevé, pas un changelog.
-> Il recense ce que le moteur couvre, ce qu'il ne couvre pas, et ce qui est
-> cassé — avec, pour chaque point, le fichier et la ligne concernés.
+> **Statut : traité.** Ce document était un relevé, pas un changelog. Il reste
+> ici comme trace de ce qui a été trouvé et de ce qui a été décidé — les numéros
+> de ligne cités décrivent l'état **avant** correction.
+>
+> Ce qui a été fait, et où le lire :
+>
+> - Les **douze bugs** de la §2 sont corrigés, chacun avec son test de
+>   non-régression dans `test/regressions.test.ts`.
+> - Les **cinq trous du contrat d'extension** identifiés en §5 sont comblés :
+>   le validator déclare `watch` et reçoit un contexte, les constats portent
+>   `severity` et `code`, `watch` accepte des déclencheurs, les validators se
+>   composent, et `readonly` a rejoint l'axe disponibilité.
+> - Les **champs répétables** (rang 1 de la §4) existent : `form.array(name)`.
+>   Sans nommage par chemins — une ligne est un formulaire.
+> - Les cas ❌ et 🟡 de la §5 sont rejoués dans `test/parity.test.ts`, écrits
+>   avec un behavior ou un validator, **sans capturer le `FormController`**.
+>
+> Restent hors périmètre, désormais documentés comme tels dans le README :
+> les **masques de saisie** (valeur affichée ≠ valeur stockée) et le **rendu
+> serveur**.
 
 **Portée** : `packages/form` (moteur) et `packages/react-form` (adapter).
 **Méthode** : trois passes indépendantes (une lecture manuelle + deux audits
@@ -96,7 +113,8 @@ patron de la démo (`return null` **après** `useField`, cf.
 
 ## 2. Les 12 bugs confirmés
 
-Tous observés à l'exécution sur le code de la branche.
+Tous observés à l'exécution sur le code de la branche. **Tous corrigés depuis**,
+chacun couvert par un test dans `test/regressions.test.ts`.
 
 | # | Bug | 📍 | Gravité |
 |---|---|---|---|

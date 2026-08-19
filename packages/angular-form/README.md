@@ -12,6 +12,7 @@ Strictement le pont Angular ↔ core, **aucune logique métier** — elle vit da
 |---|---|
 | `FormProvider` | un `InjectionToken<FormRegister>` fourni à la racine |
 | `useField` | un service ou une directive exposant le snapshot en `signal` |
+| `useFieldArray` | un service exposant `rows`, `append`, `remove`, `move` |
 | `useForm` | idem, sur `FormController.snapshot` |
 
 Points à respecter, identiques à l'adapter React :

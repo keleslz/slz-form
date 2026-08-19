@@ -21,7 +21,7 @@ export type SignupFields = { email: string; postcode: string; city: string };
 
 export const signupForm = new FormController<SignupFields>({ name: "signup" });
 
-export const { useField, useForm } = hooksFor(signupForm);
+export const { useField, useFieldArray, useForm } = hooksFor(signupForm);
 ```
 
 `name` est alors contraint aux champs déclarés, et la valeur est inférée. Il n'y
@@ -47,6 +47,7 @@ function EmailField() {
             />
             {field.isLoading && <Spinner />}
             {field.showError && <p>{field.error}</p>}
+            {field.warnings.map((warning) => <small key={warning}>{warning}</small>)}
         </>
     );
 }
@@ -54,11 +55,50 @@ function EmailField() {
 
 Ajouter un champ au formulaire, c'est monter ce composant. Rien à déclarer en amont.
 
+`field.issues` porte chaque constat avec sa `severity` et son `code`, ce qui
+permet de router sans que le moteur s'en mêle :
+
+```tsx
+const toasts = field.issues.filter((issue) => issue.code === "toast");
+```
+
+`field.isReadOnly` est distinct de `field.isLocked` : lisible et sélectionnable,
+mais non modifiable. Et la vue peut piloter les deux — `useField({ name, locked })`.
+
+## Listes répétables
+
+```tsx
+function InvoiceLines() {
+    const { rows, append, remove } = useFieldArray("lines");
+
+    return (
+        <>
+            {rows.map((row) => (
+                <fieldset key={row.id}>
+                    <LineLabel row={row} />
+                    <button onClick={() => remove(row.id)}>Retirer</button>
+                </fieldset>
+            ))}
+            <button onClick={append}>Ajouter une ligne</button>
+        </>
+    );
+}
+```
+
+`row.id` est stable : il ne change ni à la suppression d'une autre ligne, ni au
+réordonnancement. C'est une clé React fiable, et c'est ce qui évite qu'un
+déplacement casse les dépendances déclarées.
+
+Le composant ne se re-rend que lorsque la **composition** de la liste change.
+Taper dans une ligne ne re-rend pas les autres.
+
 ## API
 
 | Export | Rôle |
 |---|---|
-| `hooksFor(form)` | rend `useField` et `useForm` liés à un formulaire, typés par sa map |
+| `hooksFor(form)` | rend `useField`, `useFieldArray` et `useForm` liés à un formulaire, typés par sa map |
+| `useField` | un champ : valeur, constats, flags, handlers |
+| `useFieldArray` | les lignes d'une liste répétable : `rows`, `append`, `remove`, `move` |
 | `FormProvider` | publie le `FormRegister` dans l'arbre, pour l'accès transverse |
 | `useFormRegister` | accès direct au register |
 

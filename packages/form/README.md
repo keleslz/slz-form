@@ -58,7 +58,7 @@ Deno ou Bun.
 |---|---|---|---|
 | Validité | `pristine` · `valid` · `error` | exclusif | le Validator, seul |
 | Activité | `idle` · `loading` | exclusif | Behaviors + Validator |
-| Disponibilité | `locked` · `invisible` | cumulatif | Behaviors + Controller |
+| Disponibilité | `locked` · `readonly` · `invisible` | cumulatif | Behaviors + Controller + vue |
 
 Une union plate produirait des états impossibles (`pristine` + `error`). Le
 découpage par axe rend la fusion déterministe et donne un sens précis au retrait
@@ -178,9 +178,13 @@ Ce qui est vérifié à la compilation :
 
 ```ts
 prefill({ field: "reference", fetch: async () => "x" });
-//              ~~~~~~~~~~~ '"reference"' is not assignable to
-//                          '"customerReference" | "mileage"'
+//              ~~~~~~~~~~~ '"reference"' is not assignable to '"customerReference"'
+```
 
+Et sur un formulaire qui déclare `{ customerReference: string; mileage: number }`,
+un fetch au mauvais type ne compile pas davantage :
+
+```ts
 prefill({ field: "mileage", fetch: async () => "pas un nombre" });
 //                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~ 'string' is not
 //                                 assignable to 'number'
@@ -189,6 +193,99 @@ prefill({ field: "mileage", fetch: async () => "pas un nombre" });
 Un nom de champ fautif et un fetch au mauvais type sont des erreurs de
 compilation, pas des surprises à l'exécution.
 
+
+---
+
+## Un besoin, un behavior ou un validator
+
+Le principe : **tout comportement custom s'écrit avec l'un des deux**, sans
+jamais toucher au moteur. Le behavior *réagit*, le validator *juge*.
+
+### Le validator lit le formulaire
+
+Il déclare ce qu'il observe, et se voit rejouer quand cela change.
+
+```ts
+class SameAsPassword extends IValidator<string> {
+    readonly watch = ["password"];
+    protected validate(value: string, report: ValidationReport, ctx: ValidationContext) {
+        report.errorIf(value !== ctx.watched("password")?.value, "Ne correspond pas");
+    }
+}
+```
+
+`ctx.watched` **throw** sur un nom non déclaré : une dépendance réactive reste
+explicite.
+
+### Un constat porte une gravité et un code
+
+```ts
+report.error("Format attendu : CUST-42-9013", { code: "format" });
+report.warn("Ce code postal semble inhabituel", { code: "unusual" });
+```
+
+Un avertissement ne bloque pas la soumission. Le `code` est là pour que **tu**
+décides : snackbar, sous le champ, ou rien. Le moteur n'affiche jamais.
+
+### Plusieurs validators sur un champ
+
+```ts
+const serverIssues = new ExternalValidator<string>();
+
+form.field("email", { validator: [new EmailValidator(), serverIssues] });
+
+// après un 422
+serverIssues.set([{ message: "Déjà pris", severity: "error", code: "taken" }]);
+```
+
+Les constats injectés s'effacent dès que la valeur change : une erreur serveur
+porte sur ce qui a été envoyé, pas sur ce que l'utilisateur est en train de
+corriger.
+
+### Réagir à l'état d'un voisin, pas seulement à sa valeur
+
+```ts
+const { lockUntilValid } = behaviorsFor(form);
+
+lockUntilValid({ watch: ["postcode"] });
+```
+
+En écrivant le behavior soi-même, on choisit les axes observés :
+
+```ts
+{ watch: [{ field: "postcode", on: ["validity"] }], onDependencyChanged: … }
+```
+
+Un nom seul reste déclenché par la **valeur** — c'est le défaut, et il évite
+qu'une revalidation rejoue les appels réseau qui observent le champ.
+
+### Champs répétables
+
+```ts
+type InvoiceFields = { customer: string; lines: FieldArray<{ label: string; qty: number }> };
+
+const lines = form.array("lines");
+const id = lines.append();
+lines.rows[0].field("qty").change(3);
+lines.remove(id);
+```
+
+Une ligne **est** un formulaire : même API, même validation, mêmes behaviors.
+Les lignes sont identifiées et jamais indexées, donc réordonner ne renomme rien.
+
+Une règle qui porte sur l'ensemble se déclare sur le parent :
+
+```ts
+class SharesMakeAHundred extends IValidator<string> {
+    readonly watch = ["parts"];
+    readonly validateWhenEmpty = true;
+    protected validate(_value, report, ctx) {
+        const sum = (ctx.form.values().parts as { share: number }[])
+            .reduce((total, part) => total + part.share, 0);
+        report.errorIf(sum !== 100, `la somme fait ${sum}, pas 100`, { code: "sum" });
+    }
+}
+```
 
 ---
 
@@ -236,8 +333,8 @@ type — le compilateur échoue au parsing avant même de regarder les types.
 | `IBehavior` | réactions ; retourne sa tranche d'état, ne la stocke pas |
 | `IValidator<T>` | autorité de validité, générique sur le type de valeur |
 
-Behaviors prêts à l'emploi : `loadOptions`, `prefill`, `lockWhile`, `hideWhen`,
-`dependsOn`, `createBehavior`.
+Behaviors prêts à l'emploi : `loadOptions`, `lookup`, `suggest`, `prefill`,
+`lockWhile`, `lockUntilValid`, `hideWhen`, `dependsOn`, `createBehavior`.
 
 📄 Modélisation complète, arbitrages et invariants d'architecture :
 [`docs/MODEL.md`](https://github.com/keleslz/slz-form-event/blob/master/docs/MODEL.md)

@@ -12,6 +12,7 @@ Strictement le pont Vue ↔ core, **aucune logique métier** — elle vit dans
 |---|---|
 | `FormProvider` | un `provide()` du `FormRegister` à la racine, `inject()` côté composant |
 | `useField` | un composable renvoyant un `shallowRef` du snapshot |
+| `useFieldArray` | un composable exposant `rows`, `append`, `remove`, `move` |
 | `useForm` | idem, sur `FormController.snapshot` |
 
 Points à respecter, identiques à l'adapter React :

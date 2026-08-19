@@ -93,7 +93,7 @@ par **axe** :
 |---|---|---|---|
 | Validité | `pristine` · `valid` · `error` | exclusif | le Validator, seul |
 | Activité | `idle` · `loading` | exclusif | Behaviors + Validator |
-| Disponibilité | `locked` · `invisible` | cumulatif | Behaviors + Controller |
+| Disponibilité | `locked` · `readonly` · `invisible` | cumulatif | Behaviors + Controller + vue |
 
 Le composant ne décide de rien : il lit et se rend.
 
@@ -148,7 +148,7 @@ export type CarFields = {
 export const carForm = new FormController<CarFields>({ name: "car-configuration" });
 
 export const { lookup, loadOptions, suggest, prefill } = behaviorsFor(carForm);
-export const { useField, useForm } = hooksFor(carForm);
+export const { useField, useFieldArray, useForm } = hooksFor(carForm);
 ```
 
 Il n'y a plus de formulaire à nommer sur chaque champ, et `name` est vérifié —
@@ -193,11 +193,46 @@ Dire ce qu'un outil ne fait pas évite d'en attendre ce qu'il ne donnera pas.
 - **Ce n'est pas un générateur de formulaires.** Pas de rendu depuis un JSON,
   pas de schéma déclaratif produisant une page. Vous écrivez votre vue.
 
+- **Ce n'est pas un moteur de mise en forme de la saisie.** Masques de
+  téléphone, d'IBAN ou de montant : la valeur affichée et la valeur stockée sont
+  la même, et la position du curseur reste l'affaire de la vue.
+
+- **Il ne fait pas encore de rendu serveur.** L'adapter React lit son état via
+  `useSyncExternalStore` sans `getServerSnapshot` : le rendu côté serveur lève.
+
 - **Ce n'est pas une abstraction de React.** Le cœur ignore l'existence de
   React. L'adapter React est mince et remplaçable, pas une couche de compatibilité.
 
 - **Ce n'est pas encore publié.** Les packages existent et se construisent, mais
   aucun n'est sur npm à ce jour, et l'API peut encore bouger.
+
+---
+
+## Tout se branche par behavior et validator
+
+C'est le parti pris central : **rien de ce qu'on sait faire avec `useState` et
+un `useEffect` ne doit être impossible ici**, et rien ne doit obliger à modifier
+le moteur.
+
+Le partage des rôles est net. Le **behavior** réagit — il écrit une valeur,
+publie des options, émet `loading`, `locked`, `readonly`, `invisible`. Le
+**validator** juge — il est la seule autorité sur la validité.
+
+Pour que ça tienne, le réacteur a une sonnette et le juge a des yeux :
+
+| Besoin | Comment |
+|---|---|
+| Confirmer un mot de passe, ordonner deux dates | le validator déclare `watch` et lit `ctx.watched(...)` |
+| `required` seulement dans certains cas | le validator décide, avec `validateWhenEmpty` |
+| Une erreur renvoyée par le serveur | `ExternalValidator`, composé avec les règles métier |
+| Un avertissement qui ne bloque pas | `report.warn(...)` |
+| Router un message vers une snackbar | `report.error(msg, { code })`, et la vue lit `code` |
+| Verrouiller tant qu'un autre champ n'est pas valide | `lockUntilValid({ watch })` |
+| Lignes de facture, listes dynamiques | `form.array("lines")` — une ligne est un formulaire |
+
+Ce critère est vérifié, pas affirmé : `packages/form/test/parity.test.ts`
+reprend chaque cas et l'écrit avec un behavior ou un validator, **sans jamais
+capturer le `FormController`**.
 
 ---
 
@@ -293,7 +328,8 @@ packages et de la démo, contenu réellement publié (`npm pack --dry-run`), et 
 passe end-to-end de la démo dans Chromium.
 
 ```bash
-npm run test:e2e        # 29 assertions dans un vrai navigateur
+npm test                # tests unitaires du moteur
+npm run test:e2e        # 43 assertions dans un vrai navigateur
 ```
 
 Les versions sont gérées par [changesets](https://github.com/changesets/changesets) :
