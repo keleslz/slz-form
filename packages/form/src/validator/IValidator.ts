@@ -237,16 +237,19 @@ export abstract class IValidator<T = string> {
                 await pending;
             } catch {
                 // Une règle qui casse — un réseau tombé — n'est pas un verdict.
-                // On garde le dernier en date et on sort de `loading` : sans ça
-                // le champ reste occupé à vie, `submit()` lève au lieu de rendre
-                // `false`, et le formulaire ne se soumet plus jamais.
+                // Mais les règles qui ont **réussi** dans la même passe en ont
+                // un : `required`, et tout membre synchrone d'un composite. Les
+                // jeter revenait à contourner un champ obligatoire et à effacer
+                // un constat serveur déjà posé.
                 //
-                // À une règle qui veut signaler son échec de le faire
+                // À une règle qui veut signaler son propre échec de le faire
                 // explicitement, par `report.error(...)` ou `report.warn(...)`.
                 if (run === this.run) {
                     this.setState(makeState(
-                        this.state.status === "loading" ? "pristine" : this.state.status,
-                        this.state.issues,
+                        // Rien n'a été collecté : on revient au dernier verdict
+                        // connu plutôt que d'en inventer un.
+                        report.hasError ? "error" : this.beforeLoading,
+                        [...report.issues],
                     ));
                 }
                 return this.state;

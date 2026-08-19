@@ -7,5 +7,5 @@
       "slz-form": ["../form/src/index.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "test", "vitest.config.ts"]
 }

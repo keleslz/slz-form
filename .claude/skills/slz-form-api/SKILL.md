@@ -53,7 +53,10 @@ et le contournement contredit les invariants affichés par le projet.
   comment afficher : snackbar, sous le champ, ou nulle part, c'est la vue.
 - Il ne connaît ni skeleton, ni spinner, ni couleur, ni libellé.
 - `packages/form/src` : **aucun import non relatif**. Pas de DOM, pas de
-  framework. Seul `setTimeout` est utilisé comme global.
+  framework. Les seuls globaux sont ceux que tout hôte JavaScript fournit :
+  `setTimeout`/`clearTimeout`, `AbortController`, `Date.now`, et
+  `console.error` pour signaler une erreur du moteur qu'on ne peut pas
+  propager.
 - Un adapter (`packages/react-form`) est un pont, pas un endroit où mettre des
   règles.
 

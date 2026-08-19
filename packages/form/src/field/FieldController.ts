@@ -287,7 +287,9 @@ export class FieldController<T = string, M = never> {
         this.validator.abandon();
         for (const [behavior, state] of this.statesByBehavior) {
             if (state.activity === "loading") {
-                this.statesByBehavior.set(behavior, state.idle().unlock());
+                // Même règle qu'après un rejet : tout ce que l'état d'attente
+                // avait pris est rendu, masquage compris.
+                this.statesByBehavior.set(behavior, state.idle().unlock().show().writable());
             }
         }
         this.commit();
@@ -563,11 +565,13 @@ export class FieldController<T = string, M = never> {
                 if (signal.aborted) {
                     return;
                 }
-                // Un behavior rejeté ne doit laisser derrière lui ni `loading`
-                // ni le verrou que son état d'attente avait posé — sinon le
-                // champ reste inutilisable après un simple échec réseau.
+                // Un behavior rejeté ne doit rien laisser derrière lui de ce
+                // que son état d'attente avait posé : ni `loading`, ni le
+                // verrou, ni le masquage, ni la lecture seule. Un champ resté
+                // `invisible` sort du payload — donc une valeur obligatoire
+                // disparaît en silence et le formulaire se déclare valide.
                 const previous = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
-                this.statesByBehavior.set(behavior, previous.idle().unlock());
+                this.statesByBehavior.set(behavior, previous.idle().unlock().show().writable());
                 this.commit();
             });
     }

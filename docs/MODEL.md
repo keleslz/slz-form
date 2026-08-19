@@ -2,7 +2,7 @@
 
 > Document de référence à valider. Il fixe l'objectif, les entités, les
 > arbitrages tranchés et la façon dont chaque invariant est tenu.
-> Statut : implémenté, couvert par `packages/form/test` (115 tests) ; le parcours
+> Statut : implémenté, couvert par `packages/form/test` (124 tests) et `packages/react-form/test` (7 tests) ; le parcours
 > navigateur (`examples/react`, 43 assertions) couvre le socle, pas encore les
 > listes répétables ni `readonly`.
 
@@ -281,7 +281,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 
 | # | Invariant | Mécanisme |
 |---|---|---|
-| 1 | Core sans framework | aucun import non relatif dans `core/` |
+| 1 | Core sans framework | aucun import non relatif dans `packages/form/src` |
 | 2 | Contrôleurs source de vérité | `statesByBehavior` vit dans le Controller ; `BehaviorState` immuable |
 | 3 | Aucun `useState` miroir | `useField` ne fait que `useSyncExternalStore` |
 | 4 | `useSyncExternalStore` | `listen` / `getSnapshot` sont des références stables |

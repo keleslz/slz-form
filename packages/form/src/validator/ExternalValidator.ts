@@ -20,9 +20,12 @@ import {
  * serverIssues.set([{ message: "Déjà pris", severity: "error", code: "taken" }]);
  * ```
  *
- * Les constats sont **effacés dès que la valeur change** : une erreur serveur
- * porte sur la valeur qui a été envoyée, pas sur celle que l'utilisateur est en
- * train de corriger.
+ * Les constats sont **effacés dès que la valeur change**, et ne reviennent pas
+ * tant que le serveur n'a pas répondu de nouveau.
+ *
+ * Précision utile : la liaison se fait à la première validation **qui suit**
+ * `set()`, pas au moment de l'appel réseau. Si l'utilisateur tape pendant que
+ * la requête est en vol, le constat se rattache à ce qu'il vient de saisir.
  */
 export class ExternalValidator<T = string> extends IValidator<T> {
     /**

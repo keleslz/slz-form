@@ -69,8 +69,21 @@ export class CompositeValidator<T = string> extends IValidator<T> {
         return this;
     }
 
-    protected validate(value: T, report: ValidationReport, ctx: ValidationContext): void | Promise<void> {
+    /**
+     * Point de passage garanti : `validate()` est sauté quand la valeur est
+     * vide et qu'aucun membre ne réclame de se prononcer, alors que le
+     * réabonnement, lui, doit avoir lieu à chaque tour.
+     */
+    override runInto(
+        value: T | undefined,
+        report: ValidationReport,
+        ctx: ValidationContext,
+    ): void | Promise<void> {
         this.subscribeToMembers();
+        return super.runInto(value, report, ctx);
+    }
+
+    protected validate(value: T, report: ValidationReport, ctx: ValidationContext): void | Promise<void> {
         // Chaque membre écrit dans le rapport commun. Ceux qui sont synchrones
         // le font tout de suite : le composite ne devient asynchrone que si l'un
         // d'eux l'est réellement.
