@@ -184,7 +184,7 @@ describe("septième tour de revue", () => {
         await wait(60);
 
         serverIssues.set([{ message: "Déjà pris", severity: "error", code: "taken" }]);
-        await until(() => field.snapshot.errors.length > 0, { timeout: 2000 });
+        await until(() => field.snapshot.errors.includes("Déjà pris"), { timeout: 2000 });
 
         expect(field.snapshot.errors).toEqual(["Déjà pris"]);
     });

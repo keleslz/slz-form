@@ -37,6 +37,7 @@ export class DebouncedValidator<T = string> extends IValidator<T> {
     private readonly inner: IValidator<T>;
     private readonly delay: number;
     private readonly debouncer: Debouncer = createDebouncer();
+    private unsubscribeInner: (() => void) | null = null;
 
     constructor(inner: IValidator<T>, delay: number) {
         super();
@@ -48,7 +49,7 @@ export class DebouncedValidator<T = string> extends IValidator<T> {
         // Le décorateur ne change rien aux règles qu'il diffère : une demande de
         // revalidation venue du validator décoré doit remonter jusqu'au champ,
         // sinon des constats injectés resteraient muets.
-        inner.onStale(() => this.requestRevalidation());
+        this.unsubscribeInner = inner.onStale(() => this.requestRevalidation());
     }
 
     protected async validate(value: T, report: ValidationReport, ctx: ValidationContext): Promise<void> {
@@ -58,13 +59,26 @@ export class DebouncedValidator<T = string> extends IValidator<T> {
             return;
         }
 
-        const state = await this.inner.handle(value, ctx);
-        report.add(state.issues);
+        // `runInto` et non `handle` : le décorateur écrit dans **le** rapport de
+        // la passe, donc ce que la règle décorée lève ou rejette remonte tel
+        // quel. Passer par `handle` faisait avaler l'échec par l'état interne
+        // du validator décoré, et la passe se croyait complète.
+        await this.inner.runInto(value, report, ctx);
     }
 
     override flush(): void {
         this.debouncer.flush();
         this.inner.flush();
+    }
+
+    /**
+     * Coupe l'abonnement à la règle décorée — utile quand celle-ci est
+     * partagée : sans ça, chaque décorateur créé laisserait un auditeur
+     * derrière lui.
+     */
+    detach(): void {
+        this.unsubscribeInner?.();
+        this.unsubscribeInner = null;
     }
 
     override reset(): void {

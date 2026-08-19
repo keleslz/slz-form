@@ -230,9 +230,12 @@ décides : snackbar, sous le champ, ou rien. Le moteur n'affiche jamais.
 ### Ce qui se passe quand une règle casse
 
 Un réseau tombé n'est pas un verdict. Le moteur publie ce que les autres règles
-ont refusé, conserve le dernier verdict connu plutôt que de déclarer le champ
-valide, et signale l'échec sur la console. Une règle qui veut se prononcer sur
-sa propre panne le fait elle-même :
+ont refusé ; s'il n'y a aucun refus, il publie un constat **bloquant** de
+`code: "unverified"` — la valeur n'a été jugée par personne, et la déclarer
+valide laisserait passer ce que la règle aurait peut-être refusé.
+
+Une règle qui préfère tolérer sa propre panne l'attrape et le dit elle-même —
+elle a alors conclu, et la soumission passe :
 
 ```ts
 protected async validate(value: string, report: ValidationReport) {

@@ -29,8 +29,11 @@ describe("troisième tour de revue", () => {
 
         expect(field.snapshot.isLoading).toBe(false);
         expect(field.isBusy).toBe(false);
-        await expect(form.submit()).resolves.toBe(true);
+        // La valeur n'est pas jugée, donc elle bloque — mais rien n'est figé :
+        // la soumission rend un booléen et le formulaire reste utilisable.
+        await expect(form.submit()).resolves.toBe(false);
         expect(form.snapshot.status).not.toBe("submitting");
+        await expect(form.submit()).resolves.toBeTypeOf("boolean");
     });
 
     it("un validator peut lire une liste déclarée dans son watch", async () => {

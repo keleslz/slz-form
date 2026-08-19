@@ -135,6 +135,30 @@ Un changement de dépendance déclarée le rejoue aussi, automatiquement.
 Ne pas donner l'axe validité aux behaviors pour « simplifier » : c'est ce qui
 rend les flags dignes de confiance.
 
+### Une passe interrompue n'est pas un verdict
+
+C'est la sémantique qui a le plus régressé au cours du développement, à chaque
+fois par le même raccourci : *la passe s'est terminée, donc j'ai un verdict.*
+Faux dès qu'une règle casse.
+
+Trois cas, et un seul est correct :
+
+| La passe | Ce qu'on publie |
+|---|---|
+| complète | le verdict, `valid` ou `error` |
+| interrompue, avec un refus | ce refus — il vient d'une règle qui a conclu |
+| interrompue, sans refus | **`unverified`, bloquant** — surtout pas `valid`, surtout pas le verdict précédent |
+
+Ne jamais « garder le dernier verdict connu » : il a été rendu sur une **autre
+valeur**. Ne jamais conclure `valid` d'une absence de refus quand une règle n'a
+pas pu se prononcer.
+
+Toute modification de `IValidator.publish`, de `CompositeValidator.validate` ou
+de `DebouncedValidator.validate` commence par un test dans `review-9.test.ts`,
+qui couvre les quatre écritures — règle nue, composée, différée, différée et
+composée. Elles doivent se comporter **identiquement** : c'est là que les
+divergences se sont logées à répétition.
+
 ### `validity` n'est pas le verdict
 
 - `validity` est ce qu'on **affiche** : `pristine` tant que le champ n'a pas été

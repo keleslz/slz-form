@@ -50,6 +50,18 @@ export interface ValidationOptions {
 export type ValidatorListener = () => void;
 
 /**
+ * Ce que porte un champ dont aucune règle n'a pu rendre de verdict.
+ *
+ * Bloquant — une valeur non vérifiée n'est pas une valeur acceptée — et muni
+ * d'un `code`, pour que la vue le distingue d'un vrai refus.
+ */
+const UNVERIFIED: ValidationIssue = Object.freeze({
+    message: "Validation unavailable",
+    severity: "error",
+    code: "unverified",
+});
+
+/**
  * Lecture du formulaire offerte à `validate` (invariants 8 et 9).
  *
  * Aucune méthode de mutation : le validator **juge**, il n'écrit pas. Et il ne
@@ -198,8 +210,6 @@ export abstract class IValidator<T = string> {
     private run = 0;
     /** Statut d'avant l'entrée en `loading`, pour pouvoir y revenir. */
     private beforeLoading: ValidatorStatus = "pristine";
-    /** Les constats d'avant l'entrée en `loading`, appariés au statut ci-dessus. */
-    private beforeIssues: readonly ValidationIssue[] = [];
 
     /**
      * Les règles propres au champ. Les constats passent par `report` ; renvoyer
@@ -236,7 +246,6 @@ export abstract class IValidator<T = string> {
         // une passe purement synchrone peut être interrompue elle aussi.
         if (this.state.status !== "loading") {
             this.beforeLoading = this.state.status;
-            this.beforeIssues = this.state.issues;
         }
         const report = new ValidationReport();
         const empty = this.isEmpty(value);
@@ -299,10 +308,17 @@ export abstract class IValidator<T = string> {
     /**
      * Publie le résultat d'une passe.
      *
-     * Un refus est toujours publié : il vient d'une règle qui a conclu. En
-     * revanche, l'absence de refus dans une passe **interrompue** ne prouve
-     * rien — on garde alors le dernier verdict connu plutôt que de déclarer
-     * valide une valeur qu'aucune règle n'a pu juger.
+     * Un refus est toujours publié : il vient d'une règle qui a conclu.
+     *
+     * Une passe **interrompue** sans refus, elle, n'a pas de verdict. Deux
+     * réponses étaient tentantes et toutes deux fausses : déclarer la valeur
+     * valide laisse passer ce que la règle aurait peut-être refusé ; garder le
+     * verdict précédent recolle à la valeur courante un jugement rendu sur une
+     * autre. On dit donc ce qui est vrai — **la valeur n'est pas vérifiée** —
+     * et cela bloque, avec un `code` pour que la vue en fasse ce qu'elle veut.
+     *
+     * Une règle qui préfère tolérer sa propre panne l'attrape et le dit
+     * elle-même, par `report.warn(...)` : elle a alors conclu.
      */
     private publish(report: ValidationReport): void {
         if (report.hasError) {
@@ -310,7 +326,7 @@ export abstract class IValidator<T = string> {
             return;
         }
         if (report.interrupted) {
-            this.setState(makeState(this.beforeLoading, this.beforeIssues));
+            this.setState(makeState("error", [...report.issues, UNVERIFIED]));
             return;
         }
         this.setState(makeState("valid", [...report.issues]));

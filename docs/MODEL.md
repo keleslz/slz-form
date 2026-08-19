@@ -2,7 +2,7 @@
 
 > Document de référence à valider. Il fixe l'objectif, les entités, les
 > arbitrages tranchés et la façon dont chaque invariant est tenu.
-> Statut : implémenté, couvert par `packages/form/test` (139 tests) et `packages/react-form/test` (17 tests) ; le parcours
+> Statut : implémenté, couvert par `packages/form/test` (149 tests) et `packages/react-form/test` (17 tests) ; le parcours
 > navigateur (`examples/react`, 43 assertions) couvre le socle, pas encore les
 > listes répétables ni `readonly`.
 
@@ -175,15 +175,18 @@ Une règle n'est pas consultée sur une valeur vide, sauf si elle déclare
 `validateWhenEmpty` — nécessaire quand c'est elle qui décide de l'obligation
 (« obligatoire si le compte est pro »).
 
-**Ce qui se passe quand une règle casse.** Une règle qui lève, ou dont la
-promesse rejette — un réseau tombé, une réponse illisible — n'a rendu **aucun
-verdict**. Le moteur ne l'invente pas à sa place :
+**Ce qui se passe quand une règle casse** (invariant 31). Une règle qui lève, ou
+dont la promesse rejette — un réseau tombé, une réponse illisible — n'a rendu
+**aucun verdict**. Le moteur ne l'invente pas à sa place :
 
-- ce que les autres règles ont déjà refusé est publié : un refus reste un refus ;
-- mais l'**absence** de refus dans une passe interrompue ne vaut pas validité :
-  le dernier verdict connu est conservé, et le champ ne devient pas valide par
-  accident ;
-- l'échec est signalé sur la console, jamais transformé en constat.
+- ce que les autres règles ont déjà refusé est publié : un refus reste un refus,
+  et les avertissements posés avant la panne aussi ;
+- s'il n'y a aucun refus, la valeur est publiée **non vérifiée** : un constat
+  bloquant de `code: "unverified"`. Deux réponses étaient tentantes et toutes
+  deux fausses — la déclarer valide laisse passer ce que la règle aurait
+  peut-être refusé, et garder le verdict précédent recolle à la valeur courante
+  un jugement rendu sur une autre ;
+- l'échec est signalé sur la console, jamais transformé en refus métier.
 
 Une règle qui veut dire quelque chose de son propre échec le fait
 explicitement, par `report.error(...)` ou `report.warn(...)` — c'est elle qui
@@ -290,7 +293,8 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 22 | Déclencheurs de dépendance | un nom seul vaut `["value"]` ; `{ field, on }` ouvre le reste | garde l'arbitrage 18 comme défaut, et rend la réaction à l'état possible en la déclarant |
 | 23 | Plusieurs validators | un tableau devient un composite, invisible pour l'appelant | promesse déjà faite ici et dans `.CLAUDE.md` ; permet aux erreurs serveur d'être un validator |
 | 24 | Affichage vs verdict | `validity` reste `pristine` tant qu'on n'a pas touché ; `isBlocking` dit le vrai | un prefill ne doit pas allumer d'erreur, mais un formulaire prérempli et correct doit être soumettable |
-| 25 | Champs répétables | une ligne **est** un formulaire, identifiée et non indexée | réutilise graphe, validation et soumission ; retirer ou déplacer une ligne ne renomme rien, donc aucun `watch` ne pointe dans le vide |
+| 25 | Champs répétables | une ligne **est** un formulaire, identifiée et non indexée |
+| 26 | Règle qui casse | constat `unverified` bloquant, plutôt que « valide » ou que l'ancien verdict | déclarer valide laisse passer ce que la règle aurait refusé ; garder l'ancien verdict le recolle à une autre valeur | réutilise graphe, validation et soumission ; retirer ou déplacer une ligne ne renomme rien, donc aucun `watch` ne pointe dans le vide |
 
 ---
 
@@ -328,6 +332,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 28 | Un axe s'enrichit, ne s'ouvre pas | `readonly` a rejoint la disponibilité ; aucun sac à flags libres, qui recréerait le `Set` plat |
 | 29 | Masqué vaut absent | un champ `invisible` sort de la validité **et** du payload |
 | 30 | Une ligne est un formulaire | `FieldArrayController` compose des `FormController` ; aucun nommage par chemins |
+| 31 | Une passe interrompue n'est pas un verdict | une règle qui casse ne rend rien : la valeur est publiée **non vérifiée** et bloque, jamais valide, jamais jugée par le verdict d'une autre saisie |
 
 ---
 

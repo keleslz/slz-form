@@ -12,6 +12,7 @@ import { BehaviorState, UiState } from "../state";
 import type { AvailabilityFlag, UiFlag, ValidityFlag } from "../state";
 import {
     CompositeValidator,
+    DebouncedValidator,
     DefaultValidator,
     type IValidator,
     type ValidationContext,
@@ -236,7 +237,10 @@ export class FieldController<T = string, M = never> {
         // Un membre de composite peut être partagé entre plusieurs champs :
         // garder l'abonnement d'un champ détruit ferait grossir sa liste
         // d'auditeurs sans fin. Le prochain tour de validation le rétablit.
-        if (this.validator instanceof CompositeValidator) {
+        // Composite ou décorateur : les deux tiennent un abonnement à ce
+        // qu'ils enveloppent, et l'enveloppé peut être partagé.
+        if (this.validator instanceof CompositeValidator
+            || this.validator instanceof DebouncedValidator) {
             this.validator.detach();
         }
         this.commit();

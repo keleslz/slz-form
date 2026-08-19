@@ -26,6 +26,11 @@ import {
  * Précision utile : la liaison se fait à la première validation **qui suit**
  * `set()`, pas au moment de l'appel réseau. Si l'utilisateur tape pendant que
  * la requête est en vol, le constat se rattache à ce qu'il vient de saisir.
+ *
+ * Une instance peut être portée par plusieurs champs — c'est le cas d'un membre
+ * de composite partagé. Elle reste alors **un seul objet** : `set`, `clear` et
+ * `reset` valent pour tous les champs qui la portent, y compris le `reset` d'un
+ * seul d'entre eux. Pour des constats indépendants, une instance par champ.
  */
 export class ExternalValidator<T = string> extends IValidator<T> {
     /**
