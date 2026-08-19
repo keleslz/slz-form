@@ -103,8 +103,10 @@ new FieldController({ name, required?, requiredMessage?, requiredTrue?,
                       initialValue?, validator?, behaviors?, options? })
 // validator : un IValidator, ou un tableau (arbitrage 23)
 ```
-Lifecycle (`mount` / `update` / `unmount`), événements (`change` / `blur` /
-`focus` / `submit`), lecture (`hasFlag(...)`, `snapshot`, `listen`, `view()`).
+Lifecycle (`mount` / `update` / `unmount` / `reset`), événements (`change` /
+`blur` / `focus` / `submit`), lecture (`hasFlag(...)`, `snapshot`, `listen`,
+`view()`), et deux méthodes que le FormController pilote seul : `validateNow()`
+et `recover()`.
 
 Il est source de vérité pour **son** champ et rien d'autre : il peut lire le
 form, jamais écrire dans un autre champ.
@@ -255,7 +257,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 4 | États intermédiaires async | `ctx.push(state)` | un `await` ne retourne rien |
 | 5 | Câblage Form ↔ Field | `form.field(name)` — get-or-create | ajouter un champ reste une ligne dans la vue |
 | 6 | Résolution du form | par **nom**, via le register en contexte | aucun composant n'importe un FormController |
-| 7 | Réactivité inter-champs | `watch: string[]` + `DependencyGraph` | invariants 7 et 23 ; `ctx.watched()` **throw** sur un nom non déclaré |
+| 7 | Réactivité inter-champs | `watch: WatchTarget[]` + `DependencyGraph` | invariants 7 et 23 ; `ctx.watched()` **throw** sur un nom non déclaré |
 | 8 | Cycles de dépendance | rejetés au wiring | une boucle est une erreur de conception, autant la voir tôt |
 | 9 | `hasFlag(...)` | OU (`hasEvery` pour le ET) | usage dominant |
 | 10 | `required` vs Validator | config déclarative, injectée en option au Validator | invariant 13 : la validité reste au Validator |
@@ -287,7 +289,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 4 | `useSyncExternalStore` | `listen` / `getSnapshot` sont des références stables |
 | 5 | Un Field ne modifie que son state | le contexte n'expose que `setValue` / `setOptions` du champ courant |
 | 6 | Pas de mutation croisée | `watched()` rend un `FieldView` **en lecture seule** |
-| 7 | Dépendances déclarées | `watch: string[]` ; `watched()` throw sur un nom non déclaré |
+| 7 | Dépendances déclarées | `watch` déclaré, behaviors **et** validators ; `watched()` throw sur un nom non déclaré, y compris pour un membre de composite |
 | 8 | Contextes read-only | `FieldView` et `FormView` n'ont aucune méthode de mutation |
 | 9 | Accès global au Form en lecture | `ctx.form` |
 | 10 | Pas de subscription globale implicite | `FormView` n'a délibérément **pas** de `subscribe` |

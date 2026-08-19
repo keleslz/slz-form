@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup } from "@testing-library/react";
@@ -41,11 +41,13 @@ describe("useField", () => {
         const input = screen.getByLabelText("email") as HTMLInputElement;
         expect(input.value).toBe("");
 
+        // Par le DOM : c'est `onChange` du hook qui doit écrire dans le moteur.
         await act(async () => {
-            form.get("email")?.change("ada@lovelace.dev");
+            fireEvent.change(input, { target: { value: "ada@lovelace.dev" } });
             await tick();
         });
         expect(input.value).toBe("ada@lovelace.dev");
+        expect(form.values()).toEqual({ email: "ada@lovelace.dev" });
     });
 
     it("survit au double montage de StrictMode", async () => {
@@ -54,16 +56,23 @@ describe("useField", () => {
 
         function Field(): React.ReactElement {
             const field = useField({ name: "a", validator: new NonEmpty() });
-            return <span data-testid="flags">{field.flags.join(",")}</span>;
+            return (
+                <>
+                    <input aria-label="a" value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value)} />
+                    <span data-testid="flags">{field.flags.join(",")}</span>
+                </>
+            );
         }
 
         render(<StrictMode><Field /></StrictMode>);
         await act(async () => {
-            form.get("a")?.change("rempli");
+            fireEvent.change(screen.getByLabelText("a"), { target: { value: "rempli" } });
             await tick();
         });
 
         expect(screen.getByTestId("flags").textContent).toContain("valid");
+        // Un seul champ, donc un seul abonnement effectif malgré le double montage.
+        expect(form.values()).toEqual({ a: "rempli" });
     });
 
     it("démonte le champ quand le composant disparaît", async () => {
@@ -218,5 +227,174 @@ describe("useForm", () => {
             await tick();
         });
         expect(screen.getByTestId("valid").textContent).toBe("true");
+    });
+});
+
+describe("le hook pilote réellement le moteur", () => {
+    it("onBlur et onFocus atteignent le contrôleur", async () => {
+        const form = new FormController<{ a: string }>({ name: "r-8" });
+        const { useField } = hooksFor(form);
+
+        function Field(): React.ReactElement {
+            const field = useField({ name: "a" });
+            return (
+                <input
+                    aria-label="a"
+                    value={field.value ?? ""}
+                    onChange={(event) => field.onChange(event.target.value)}
+                    onFocus={field.onFocus}
+                    onBlur={field.onBlur}
+                />
+            );
+        }
+
+        render(<Field />);
+        await act(async () => { await tick(); });
+        const input = screen.getByLabelText("a");
+
+        await act(async () => { fireEvent.focus(input); await tick(); });
+        expect(form.get("a")?.snapshot.focused).toBe(true);
+
+        await act(async () => { fireEvent.blur(input); await tick(); });
+        expect(form.get("a")?.snapshot.focused).toBe(false);
+        expect(form.get("a")?.snapshot.touched).toBe(true);
+    });
+
+    it("les props repoussées par le parent atteignent le contrôleur", async () => {
+        const form = new FormController<{ a: string }>({ name: "r-9" });
+        const { useField } = hooksFor(form);
+
+        function Field({ locked }: { locked: boolean }): React.ReactElement {
+            const field = useField({ name: "a", required: true, locked });
+            return <span data-testid="locked">{String(field.isLocked)}</span>;
+        }
+
+        const view = render(<Field locked={false} />);
+        await act(async () => { await tick(); });
+        expect(screen.getByTestId("locked").textContent).toBe("false");
+
+        await act(async () => { view.rerender(<Field locked />); await tick(); });
+        expect(screen.getByTestId("locked").textContent).toBe("true");
+        expect(form.get("a")?.snapshot.isLocked).toBe(true);
+    });
+
+    it("un champ non piloté n'est pas effacé par les mises à jour", async () => {
+        const form = new FormController<{ a: string }>({ name: "r-10" });
+        const { useField } = hooksFor(form);
+
+        function Field({ required }: { required: boolean }): React.ReactElement {
+            // Aucune prop `value` : le parent ne pilote pas la valeur.
+            const field = useField({ name: "a", required });
+            return <span data-testid="v">{field.value ?? ""}</span>;
+        }
+
+        const view = render(<Field required={false} />);
+        await act(async () => {
+            form.get("a")?.change("saisie");
+            await tick();
+        });
+        expect(screen.getByTestId("v").textContent).toBe("saisie");
+
+        await act(async () => { view.rerender(<Field required />); await tick(); });
+        expect(screen.getByTestId("v").textContent).toBe("saisie");
+    });
+
+    it("un champ piloté peut être effacé par le parent", async () => {
+        const form = new FormController<{ a: string }>({ name: "r-11" });
+        const { useField } = hooksFor(form);
+
+        function Field({ value }: { value: string | undefined }): React.ReactElement {
+            const field = useField({ name: "a", value });
+            return <span data-testid="v">{field.value ?? "(vide)"}</span>;
+        }
+
+        const view = render(<Field value="pilotée" />);
+        await act(async () => { await tick(); });
+        expect(screen.getByTestId("v").textContent).toBe("pilotée");
+
+        await act(async () => { view.rerender(<Field value={undefined} />); await tick(); });
+        expect(screen.getByTestId("v").textContent).toBe("(vide)");
+    });
+
+    it("hasFlag reflète l'état réel du champ", async () => {
+        const form = new FormController<{ a: string }>({ name: "r-12" });
+        const { useField } = hooksFor(form);
+
+        function Field(): React.ReactElement {
+            const field = useField({ name: "a", required: true, validator: new NonEmpty() });
+            return (
+                <>
+                    <input aria-label="a" value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value)} />
+                    <span data-testid="f">{String(field.hasFlag("valid"))}</span>
+                </>
+            );
+        }
+
+        render(<Field />);
+        await act(async () => { await tick(); });
+        expect(screen.getByTestId("f").textContent).toBe("false");
+
+        await act(async () => {
+            fireEvent.change(screen.getByLabelText("a"), { target: { value: "rempli" } });
+            await tick();
+        });
+        expect(screen.getByTestId("f").textContent).toBe("true");
+    });
+
+    it("les boutons de useFieldArray ajoutent et retirent des lignes", async () => {
+        type Line = { label: string };
+        const form = new FormController<{ lines: FieldArray<Line> }>({ name: "r-13" });
+        const { useFieldArray } = hooksFor(form);
+
+        function Lines(): React.ReactElement {
+            const { rows, append, remove } = useFieldArray("lines");
+            return (
+                <div>
+                    <button onClick={append}>ajouter</button>
+                    {rows.map((row) => (
+                        <div key={row.id} data-testid="row">
+                            <button onClick={() => remove(row.id)}>retirer</button>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        render(<Lines />);
+        await act(async () => { await tick(); });
+        expect(screen.queryAllByTestId("row")).toHaveLength(0);
+
+        await act(async () => { fireEvent.click(screen.getByText("ajouter")); await tick(); });
+        await act(async () => { fireEvent.click(screen.getByText("ajouter")); await tick(); });
+        expect(screen.queryAllByTestId("row")).toHaveLength(2);
+
+        await act(async () => { fireEvent.click(screen.getAllByText("retirer")[0]!); await tick(); });
+        expect(screen.queryAllByTestId("row")).toHaveLength(1);
+    });
+
+    it("useForm soumet réellement le formulaire", async () => {
+        const form = new FormController<{ a: string }>({ name: "r-14" });
+        const { useField, useForm } = hooksFor(form);
+
+        function View(): React.ReactElement {
+            const field = useField({ name: "a", required: true });
+            const state = useForm();
+            return (
+                <div>
+                    <input aria-label="a" value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value)} />
+                    <button onClick={() => void state.submit()}>envoyer</button>
+                    <span data-testid="status">{state.snapshot.status}</span>
+                </div>
+            );
+        }
+
+        render(<View />);
+        await act(async () => {
+            fireEvent.change(screen.getByLabelText("a"), { target: { value: "rempli" } });
+            await tick();
+        });
+
+        await act(async () => { fireEvent.click(screen.getByText("envoyer")); await tick(60); });
+        expect(screen.getByTestId("status").textContent).toBe("submitted");
     });
 });

@@ -1,7 +1,6 @@
 import {
     IValidator,
     type ValidationContext,
-    type ValidationOptions,
     type ValidationReport,
 } from "./IValidator";
 
@@ -64,11 +63,6 @@ export class CompositeValidator<T = string> extends IValidator<T> {
         this.unsubscribes = [];
     }
 
-    override setOptions(options: ValidationOptions): this {
-        super.setOptions(options);
-        return this;
-    }
-
     /**
      * Point de passage garanti : `validate()` est sauté quand la valeur est
      * vide et qu'aucun membre ne réclame de se prononcer, alors que le
@@ -84,17 +78,59 @@ export class CompositeValidator<T = string> extends IValidator<T> {
     }
 
     protected validate(value: T, report: ValidationReport, ctx: ValidationContext): void | Promise<void> {
-        // Chaque membre écrit dans le rapport commun. Ceux qui sont synchrones
-        // le font tout de suite : le composite ne devient asynchrone que si l'un
-        // d'eux l'est réellement.
-        const pending = this.members
-            .map((member) => member.runInto(value, report, ctx))
-            .filter((result): result is Promise<void> => result instanceof Promise);
+        const pending: Promise<void>[] = [];
+
+        for (const member of this.members) {
+            // Chaque membre est isolé : celui qui casse ne doit ni interrompre
+            // les suivants, ni faire disparaître ce qu'un autre a déjà écrit,
+            // ni laisser une promesse orpheline derrière lui.
+            try {
+                const result = member.runInto(value, report, this.contextFor(member, ctx));
+                if (result instanceof Promise) {
+                    pending.push(result.catch((error: unknown) => {
+                        reportRuleFailure(ctx.name, error);
+                    }));
+                }
+            } catch (error) {
+                reportRuleFailure(ctx.name, error);
+            }
+        }
 
         if (pending.length === 0) {
             return undefined;
         }
+        // Aucune des promesses ne rejette : on attend donc bien **tous** les
+        // membres, y compris ceux qui étaient encore en vol au moment de l'échec.
         return Promise.all(pending).then(() => undefined);
+    }
+
+    /**
+     * Le contexte d'un membre, restreint à **son** `watch`.
+     *
+     * Le composite déclare l'union des dépendances de ses membres ; lui passer
+     * tel quel dispenserait chacun de déclarer ce qu'il lit, et ferait tomber
+     * les invariants 7 et 23 sur le chemin même que la doc recommande.
+     */
+    private contextFor(member: IValidator<T>, ctx: ValidationContext): ValidationContext {
+        const declared = member.watch ?? [];
+
+        return {
+            name: ctx.name,
+            get form() {
+                return ctx.form;
+            },
+            get signal() {
+                return ctx.signal;
+            },
+            watched: (name) => {
+                if (!declared.includes(name)) {
+                    throw new Error(
+                        `[slz] Validator on "${ctx.name}" reads "${name}" without declaring it in \`watch\`.`,
+                    );
+                }
+                return ctx.watched(name);
+            },
+        };
     }
 
     override flush(): void {
@@ -110,4 +146,10 @@ export class CompositeValidator<T = string> extends IValidator<T> {
         super.reset();
     }
 
+}
+
+/** Signale l'échec d'une règle sans l'imputer aux autres membres. */
+function reportRuleFailure(field: string, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[slz] A validation rule of "${field}" failed: ${message}`, error);
 }

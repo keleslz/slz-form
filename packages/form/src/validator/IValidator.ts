@@ -181,6 +181,8 @@ export abstract class IValidator<T = string> {
     private run = 0;
     /** Statut d'avant l'entrée en `loading`, pour pouvoir y revenir. */
     private beforeLoading: ValidatorStatus = "pristine";
+    /** Les constats d'avant l'entrée en `loading`, appariés au statut ci-dessus. */
+    private beforeIssues: readonly ValidationIssue[] = [];
 
     /**
      * Les règles propres au champ. Les constats passent par `report` ; renvoyer
@@ -231,11 +233,13 @@ export abstract class IValidator<T = string> {
             // le seul statut vers lequel on puisse revenir.
             if (this.state.status !== "loading") {
                 this.beforeLoading = this.state.status;
+                this.beforeIssues = this.state.issues;
             }
             this.setState(makeState("loading", this.state.issues));
             try {
                 await pending;
-            } catch {
+            } catch (error) {
+                reportRuleFailure(this.constructor.name, error);
                 // Une règle qui casse — un réseau tombé — n'est pas un verdict.
                 // Mais les règles qui ont **réussi** dans la même passe en ont
                 // un : `required`, et tout membre synchrone d'un composite. Les
@@ -245,12 +249,12 @@ export abstract class IValidator<T = string> {
                 // À une règle qui veut signaler son propre échec de le faire
                 // explicitement, par `report.error(...)` ou `report.warn(...)`.
                 if (run === this.run) {
-                    this.setState(makeState(
-                        // Rien n'a été collecté : on revient au dernier verdict
-                        // connu plutôt que d'en inventer un.
-                        report.hasError ? "error" : this.beforeLoading,
-                        [...report.issues],
-                    ));
+                    // Statut et constats doivent décrire **la même passe** :
+                    // apparier un statut périmé à des constats frais publiait
+                    // `error` avec zéro message, ou l'inverse.
+                    this.setState(report.issues.length > 0
+                        ? makeState(report.hasError ? "error" : "valid", [...report.issues])
+                        : makeState(this.beforeLoading, this.beforeIssues));
                 }
                 return this.state;
             }
@@ -395,4 +399,10 @@ function detachedContext(): ValidationContext {
         signal: new AbortController().signal,
         watched: () => null,
     };
+}
+
+/** Un échec de règle est signalé : l'avaler ferait d'un réseau tombé un silence. */
+function reportRuleFailure(rule: string, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[slz] Validation rule "${rule}" failed: ${message}`, error);
 }

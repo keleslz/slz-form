@@ -125,6 +125,15 @@ son snapshot via `useSyncExternalStore` : **aucun `useState` ne recopie l'état 
 moteur**. Un champ qui change ne re-rend pas les autres — s'abonner au
 formulaire entier est un choix explicite, réservé à ce qui en a besoin.
 
+## Ce que l'adapter ne fait pas encore
+
+**Pas de rendu serveur.** `useField`, `useFieldArray` et `useForm` lisent leur
+état par `useSyncExternalStore` sans `getServerSnapshot` : un
+`renderToString` lève `Missing getServerSnapshot`. À monter côté client
+uniquement pour l'instant.
+
+**ESM uniquement.** Le package n'expose pas de build CommonJS.
+
 ## Pourquoi des peer dependencies
 
 **`react`** : deux copies cassent les hooks (« Invalid hook call »). Classique.

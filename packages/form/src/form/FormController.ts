@@ -171,8 +171,18 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         return this.fields.has(name);
     }
 
-    get(name: FieldNameOf<TFields>): AnyField | null {
-        return this.fields.get(name) ?? null;
+    /**
+     * Le contrôleur d'un champ existant, typé depuis la map.
+     *
+     * Rendre `FieldController<any, any>` faisait de cette méthode un trou dans
+     * le typage : `form.get("a")?.change(12345)` compilait sur une map qui
+     * déclare `a: string`.
+     */
+    get<K extends FieldNameOf<TFields>>(
+        name: K,
+    ): FieldController<ValueOf<TFields[K]>, MetaOf<TFields[K]>> | null {
+        return (this.fields.get(name) ?? null) as
+            FieldController<ValueOf<TFields[K]>, MetaOf<TFields[K]>> | null;
     }
 
     /** Retire une liste et démonte ses lignes. */
@@ -461,6 +471,7 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
      */
     private async settle(fields: readonly AnyField[]): Promise<boolean> {
         const deadline = Date.now() + this.settleTimeout;
+        const before = new Map<AnyField, unknown>(fields.map((field) => [field, field.snapshot.value]));
 
         for (let round = 0; round < MAX_SETTLE_ROUNDS; round += 1) {
             const wasBusy = fields.some((field) => field.isBusy);
@@ -473,7 +484,16 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             if (!wasBusy) {
                 return true;
             }
-            await Promise.all(fields.map((field) => field.validateNow()));
+
+            // Et même quand quelque chose était en vol, seuls les champs dont
+            // la **valeur** a bougé pendant l'attente ont besoin d'être rejugés.
+            // Rejouer tout le formulaire multipliait les vérifications réseau
+            // par le nombre de champs.
+            const changed = fields.filter((field) => !Object.is(field.snapshot.value, before.get(field)));
+            for (const field of fields) {
+                before.set(field, field.snapshot.value);
+            }
+            await Promise.all(changed.map((field) => field.validateNow()));
             if (!fields.some((field) => field.isBusy)) {
                 return true;
             }

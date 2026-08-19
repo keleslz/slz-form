@@ -344,6 +344,14 @@ ajoute `lockUntilValid({ watch })`, typé sur la map du formulaire.
 📄 Modélisation complète, arbitrages et invariants d'architecture :
 [`docs/MODEL.md`](https://github.com/keleslz/slz-form-event/blob/master/docs/MODEL.md)
 
+## Portée
+
+**ESM uniquement** : le package n'expose pas de build CommonJS.
+
+📄 Ce que le moteur ne couvre pas — masques de saisie, rendu serveur — est
+listé dans la section « ce que ce n'est pas » du
+[README du dépôt](https://github.com/keleslz/slz-form-event#ce-quil-nest-pas).
+
 ## Licence
 
 MIT

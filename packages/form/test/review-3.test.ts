@@ -10,7 +10,7 @@ import {
     type ValidationContext,
     type ValidationReport,
 } from "../src/index";
-import { wait } from "./helpers";
+import { until, wait } from "./helpers";
 
 describe("troisième tour de revue", () => {
     it("un validator asynchrone qui rejette ne fige ni le champ ni le formulaire", async () => {
@@ -89,10 +89,10 @@ describe("troisième tour de revue", () => {
         src.mount();
         dst.mount();
         form.mount();
-        await wait(10);
         expect(dst.snapshot.isLocked).toBe(true);
 
-        await wait(90);
+        await until(() => !src.snapshot.isBlocking, { timeout: 2000 });
+        await until(() => !dst.snapshot.isLocked, { timeout: 2000 });
         // Aucune interaction utilisateur : `src` reste `pristine` à l'affichage,
         // mais son verdict a changé, et c'est lui qui compte.
         expect(src.snapshot.validity).toBe("pristine");
