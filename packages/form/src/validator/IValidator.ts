@@ -32,6 +32,8 @@ export interface IssueMeta {
 export interface ValidatorState {
     readonly status: ValidatorStatus;
     readonly issues: readonly ValidationIssue[];
+    /** Les messages bloquants seuls. Dérivé de `issues`, conservé par compatibilité. */
+    readonly errors: readonly string[];
 }
 
 export interface ValidationOptions {
@@ -157,7 +159,7 @@ export abstract class IValidator<T = string> {
      */
     readonly validateWhenEmpty?: boolean;
 
-    private state: ValidatorState = { status: "pristine", issues: [] };
+    private state: ValidatorState = makeState("pristine", []);
     private options: ValidationOptions = {};
     private readonly listeners = new Set<ValidatorListener>();
     /** Jeton de run monotone — un résultat périmé ne doit pas écraser un plus frais. */
@@ -193,7 +195,7 @@ export abstract class IValidator<T = string> {
         };
     }
 
-    async handle(value: T | undefined, ctx: ValidationContext): Promise<ValidatorState> {
+    async handle(value: T | undefined, ctx: ValidationContext = detachedContext()): Promise<ValidatorState> {
         const run = ++this.run;
         const report = new ValidationReport();
         const empty = this.isEmpty(value);
@@ -203,7 +205,7 @@ export abstract class IValidator<T = string> {
         } else if (!empty || this.validateWhenEmpty === true) {
             const pending = this.validate(value as T, report, ctx);
             if (pending instanceof Promise) {
-                this.setState({ status: "loading", issues: this.state.issues });
+                this.setState(makeState("loading", this.state.issues));
                 await pending;
             }
         }
@@ -212,9 +214,7 @@ export abstract class IValidator<T = string> {
             return this.state;
         }
 
-        this.setState(report.hasError
-            ? { status: "error", issues: [...report.issues] }
-            : { status: "valid", issues: [...report.issues] });
+        this.setState(makeState(report.hasError ? "error" : "valid", [...report.issues]));
 
         return this.state;
     }
@@ -254,7 +254,7 @@ export abstract class IValidator<T = string> {
 
     reset(): void {
         this.run += 1;
-        this.setState({ status: "pristine", issues: [] });
+        this.setState(makeState("pristine", []));
     }
 
     get issues(): readonly ValidationIssue[] {
@@ -300,4 +300,17 @@ export abstract class IValidator<T = string> {
             listener();
         }
     }
+}
+
+function makeState(status: ValidatorStatus, issues: readonly ValidationIssue[]): ValidatorState {
+    return { status, issues, errors: errorsOf(issues) };
+}
+
+/** Contexte de repli quand un validator est appelé hors d'un formulaire. */
+function detachedContext(): ValidationContext {
+    return {
+        name: "<detached>",
+        form: { name: "<detached>", status: "idle", field: () => null, values: () => ({}) },
+        watched: () => null,
+    };
 }

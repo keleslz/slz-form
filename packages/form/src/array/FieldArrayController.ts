@@ -140,10 +140,13 @@ export class FieldArrayController<TRow extends FieldsShape> {
         }
     }
 
+    /**
+     * Repart de l'état initial : une liste naît vide, donc la remise à zéro la
+     * vide. Réinitialiser le contenu en gardant N lignes vides laisserait un
+     * formulaire « remis à zéro » qui ne l'est pas.
+     */
     reset(): void {
-        for (const row of this.entries) {
-            row.form.reset();
-        }
+        this.clear();
     }
 
     /** Touche et valide chaque ligne — appelé par la soumission du parent. */

@@ -36,6 +36,7 @@ export function useFieldArrayOn<TRow extends FieldsShape>(
             move: (from: number, to: number) => void;
             clear: () => void;
             mount: () => void;
+            unmount: () => void;
             listen: (listener: () => void) => () => void;
             getSnapshot: () => readonly FieldArrayRow<TRow>[];
         },
@@ -46,6 +47,7 @@ export function useFieldArrayOn<TRow extends FieldsShape>(
 
     useEffect(() => {
         controller.mount();
+        return () => controller.unmount();
     }, [controller]);
 
     const append = useCallback(() => controller.append(), [controller]);

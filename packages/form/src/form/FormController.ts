@@ -12,6 +12,7 @@ import type { FieldChanges } from "../behavior/IBehavior";
 import { FieldArrayController } from "../array/FieldArrayController";
 import type { ArrayNameOf, PlainNameOf, RowOf } from "../array/FieldArray";
 import { Lifecycle } from "../lifecycle";
+import { UiState } from "../state";
 import { DependencyGraph } from "./DependencyGraph";
 import { FormSnapshot, type FieldSummary } from "./FormSnapshot";
 import type { FormStatus, FormView } from "./FormView";
@@ -28,7 +29,7 @@ export type FieldNameOf<TFields extends FieldsShape> = PlainNameOf<TFields>;
 /** Passes de convergence avant d'abandonner : couvre les lookups en chaîne. */
 const MAX_SETTLE_ROUNDS = 5;
 /** Filet de sécurité : le graphe interdit les cycles, ceci attrape les oscillations. */
-const MAX_PROPAGATION_STEPS = 100;
+const MAX_PROPAGATION_DEPTH = 50;
 
 export interface FormParams {
     name: string;
@@ -70,8 +71,10 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
      * empilée au lieu d'être perdue : c'est ce qui fait qu'une chaîne
      * **synchrone** a → b → c va jusqu'au bout.
      */
-    private readonly queue: { name: string; changes: FieldChanges }[] = [];
+    private readonly queue: { name: string; changes: FieldChanges; depth: number }[] = [];
     private draining = false;
+    /** Profondeur du maillon en cours de traitement, pour borner les chaînes. */
+    private depth = 0;
 
     constructor(params: FormParams) {
         this.name = params.name;
@@ -144,7 +147,11 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
                 name: id,
                 settleTimeout: this.settleTimeout,
             }),
-            onChanged: () => this.commit(),
+            onChanged: () => this.notifyFieldChanged(name, {
+                // Une liste qui change, c'est une valeur qui change : les
+                // validators qui la déclarent dans `watch` doivent être rejoués.
+                value: true, validity: false, activity: false,
+            }),
         });
 
         this.arrays.set(name, controller as unknown as FieldArrayController<FieldsShape>);
@@ -190,7 +197,7 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             return;
         }
 
-        this.queue.push({ name, changes });
+        this.queue.push({ name, changes, depth: this.depth + 1 });
 
         // Déjà dans la boucle : l'écriture qui vient d'être faite sera traitée
         // par le tour suivant. Sans cette file, la garde de réentrance avalait
@@ -201,44 +208,82 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
 
         this.draining = true;
         try {
-            let steps = 0;
             while (this.queue.length > 0) {
-                steps += 1;
-                if (steps > MAX_PROPAGATION_STEPS) {
-                    // Le graphe interdit les cycles, donc on ne devrait jamais
-                    // arriver ici — sauf si un behavior fait osciller une valeur.
+                const next = this.queue.shift();
+                if (!next) {
+                    continue;
+                }
+                // La borne porte sur la **profondeur de chaîne**, jamais sur le
+                // volume : cent champs observant un même pays, c'est cent
+                // dispatches pour une seule étape, et c'est parfaitement normal.
+                if (next.depth > MAX_PROPAGATION_DEPTH) {
                     throw new Error(
                         `[slz] Propagation ne converge pas dans "${this.name}" `
-                        + `après ${MAX_PROPAGATION_STEPS} étapes : un behavior écrit-il en boucle ?`,
+                        + `après ${MAX_PROPAGATION_DEPTH} maillons : un behavior écrit-il en boucle ?`,
                     );
                 }
-                const next = this.queue.shift();
-                if (next) {
-                    this.dispatch(next.name, next.changes);
-                }
+                this.depth = next.depth;
+                this.dispatch(next.name, next.changes);
             }
         } finally {
             this.draining = false;
+            this.depth = 0;
             this.queue.length = 0;
         }
     }
 
     private dispatch(name: string, changes: FieldChanges): void {
         const observers = this.graph.observersOf(name);
-        const source = this.fields.get(name);
-        if (observers.length === 0 || !source) {
+        if (observers.length === 0) {
             return;
         }
 
-        const view: AnyFieldView = source.view();
+        // La source est un champ, ou une liste : les deux s'observent.
+        const view = this.fields.get(name)?.view() ?? this.arrayView(name);
+        if (!view) {
+            return;
+        }
+
         for (const observer of observers) {
             this.fields.get(observer)?.notifyDependency(view, changes);
         }
     }
 
+    /**
+     * Projection d'une liste sous la forme que voit un observateur.
+     *
+     * Sa valeur est le tableau de ses lignes, et son verdict celui de
+     * l'ensemble — ce qu'il faut pour qu'une règle « la somme fait 100 »
+     * déclare simplement `watch: ["lines"]`.
+     */
+    private arrayView(name: string): AnyFieldView | null {
+        const rows = this.arrays.get(name);
+        if (!rows) {
+            return null;
+        }
+        const blocking = !rows.isValid;
+        return {
+            name,
+            value: rows.values(),
+            ui: new UiState(blocking ? "error" : "valid", rows.isBusy ? "loading" : "idle", []),
+            validity: blocking ? "error" : "valid",
+            errors: [],
+            issues: [],
+            blocking,
+            visible: true,
+            options: [],
+            mounted: true,
+        };
+    }
+
     // ── lifecycle ────────────────────────────────────────────────────────
     mount(): void {
         this.lifecycle.mount();
+        // Symétrique de `unmount`, qui descend jusqu'aux champs : sans ça un
+        // cycle démontage/remontage vidait le payload en silence.
+        for (const field of this.fields.values()) {
+            field.mount();
+        }
         for (const rows of this.arrays.values()) {
             rows.mount();
         }

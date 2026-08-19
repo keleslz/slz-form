@@ -205,17 +205,26 @@ describe("parité — ce qui exigeait de modifier le cœur", () => {
             };
         };
 
-        const form = new FormController<{ city: string }>({ name: "p8" });
-        const city = form.field("city", { behaviors: [paginated()] });
+        // Deux champs, **une seule instance** de behavior : c'est là que
+        // l'isolation se vérifie. Avec un seul champ, la propriété annoncée ne
+        // serait jamais exercée.
+        const shared = paginated();
+        const form = new FormController<{ city: string; town: string }>({ name: "p8" });
+        const city = form.field("city", { behaviors: [shared] });
+        const town = form.field("town", { behaviors: [shared] });
         city.mount();
+        town.mount();
         form.mount();
-        await wait(30);
+        await wait(40);
         expect(city.snapshot.options).toHaveLength(2);
+        expect(town.snapshot.options).toHaveLength(2);
 
         city.blur();
-        await wait(30);
+        await wait(40);
         expect(city.snapshot.options).toHaveLength(4);
         expect(city.snapshot.options[2]?.value).toBe("p2-a");
+        // L'autre champ n'a pas bougé : les accumulations ne se mélangent pas.
+        expect(town.snapshot.options).toHaveLength(2);
     });
 
     it("chaîne synchrone : plus besoin de différer l'écriture d'une microtâche", async () => {

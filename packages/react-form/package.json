@@ -1,7 +1,7 @@
 {
   "name": "slz-react-form",
   "version": "0.1.0",
-  "description": "Adapter React de slz-form : un provider et deux hooks, aucune logique m\u00e9tier.",
+  "description": "Adapter React de slz-form : un provider et des hooks, sans logique m\u00e9tier.",
   "keywords": [
     "form",
     "forms",

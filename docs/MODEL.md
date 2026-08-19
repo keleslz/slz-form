@@ -2,7 +2,9 @@
 
 > Document de référence à valider. Il fixe l'objectif, les entités, les
 > arbitrages tranchés et la façon dont chaque invariant est tenu.
-> Statut : implémenté et vérifié dans le navigateur (`examples/react`).
+> Statut : implémenté, couvert par `packages/form/test` (60 tests) ; le parcours
+> navigateur (`examples/react`, 43 assertions) couvre le socle, pas encore les
+> listes répétables ni `readonly`.
 
 ---
 
@@ -178,12 +180,15 @@ Couvrent les cas courants sans écrire de behavior :
 | `loadOptions({ field, on, watch, debounce, fetch })` | charge les options : au montage, sur dépendance, ou à la frappe |
 | `prefill(fetcher)` | remplit le champ au montage, verrouillé et `loading`, sans le marquer touché |
 | `lockWhile(condition, watch)` | verrouillage conditionnel, y compris inter-champs |
-| `lockUntilValid({ watch })` | verrouille tant qu'un champ observé n'est pas **valide** |
+
 | `lookup({ field, watch, debounce, fetch })` | appelle une API et **écrit** la valeur du champ |
 | `suggest({ field, debounce, fetch })` | champ de recherche : suggestions à la frappe, sans verrou |
 | `hideWhen(watch, predicate)` | émet `invisible` |
 | `dependsOn(watch, effect)` | échappatoire générique pour toute réaction inter-champs |
 | `createBehavior(def)` | typage d'un littéral de behavior |
+
+`behaviorsFor(form)` en dérive des variantes typées, plus `lockUntilValid({ watch })`,
+qui verrouille tant qu'un champ observé porte un constat bloquant.
 
 Nouvelle entité : **`FieldArrayController`**, obtenu par `form.array(name)`.
 Une ligne est un `FormController` à part entière, identifiée et jamais indexée.

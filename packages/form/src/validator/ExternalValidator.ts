@@ -20,6 +20,12 @@ import { IValidator, type ValidationIssue, type ValidationReport } from "./IVali
  * train de corriger.
  */
 export class ExternalValidator<T = string> extends IValidator<T> {
+    /**
+     * « Le serveur dit que ce champ manque » est le cas central d'un 422 : les
+     * constats injectés doivent pouvoir porter sur une valeur vide.
+     */
+    override readonly validateWhenEmpty = true;
+
     private stored: readonly ValidationIssue[] = [];
     private boundTo: T | undefined;
     private bound = false;

@@ -157,7 +157,10 @@ export function behaviorsFor<TFields extends FieldsShape>(_form: FormController<
         lockUntilValid<W extends Name>(params: { watch: readonly W[] }): IBehavior<never, never> {
             const watch = params.watch.map((field) => ({ field, on: ["validity"] as const }));
             const compute = (ctx: BehaviorContext<never, never>) => {
-                const allValid = params.watch.every((field) => ctx.watched(field)?.validity === "valid");
+                // `blocking` et non `validity` : un champ prérempli et correct
+                // reste `pristine` tant qu'on n'y a pas touché, et le verrouiller
+                // pour ça ne se débloquerait jamais.
+                const allValid = params.watch.every((field) => ctx.watched(field)?.blocking === false);
                 return allValid ? ctx.state.unlock() : ctx.state.lock();
             };
             return { watch, onMount: compute, onDependencyChanged: compute };

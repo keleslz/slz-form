@@ -153,12 +153,14 @@ describe("champs répétables", () => {
         parts.row(b)?.field("share").mount();
         parts.row(a)?.field("share").change(60);
         parts.row(b)?.field("share").change(30);
-        await total.validateNow();
+        // Pas de `validateNow` : c'est bien `watch` qui doit rejouer la règle.
+        await wait(30);
 
         expect(total.snapshot.errors[0]).toBe("la somme fait 90, pas 100");
+        expect(form.snapshot.isValid).toBe(false);
 
         parts.row(b)?.field("share").change(40);
-        await total.validateNow();
+        await wait(30);
         expect(total.snapshot.errors).toEqual([]);
     });
 

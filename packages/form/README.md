@@ -334,7 +334,8 @@ type — le compilateur échoue au parsing avant même de regarder les types.
 | `IValidator<T>` | autorité de validité, générique sur le type de valeur |
 
 Behaviors prêts à l'emploi : `loadOptions`, `lookup`, `suggest`, `prefill`,
-`lockWhile`, `lockUntilValid`, `hideWhen`, `dependsOn`, `createBehavior`.
+`lockWhile`, `hideWhen`, `dependsOn`, `createBehavior`. `behaviorsFor(form)` y
+ajoute `lockUntilValid({ watch })`, typé sur la map du formulaire.
 
 📄 Modélisation complète, arbitrages et invariants d'architecture :
 [`docs/MODEL.md`](https://github.com/keleslz/slz-form-event/blob/master/docs/MODEL.md)

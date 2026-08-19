@@ -18,9 +18,14 @@ import {
  */
 export class CompositeValidator<T = string> extends IValidator<T> {
     override readonly watch: readonly string[] | undefined;
+    /**
+     * Hérité des membres : si l'un d'eux veut se prononcer sur du vide, le
+     * composite doit l'appeler. Sans ça, composer une règle lui retirait
+     * silencieusement cette capacité.
+     */
+    override readonly validateWhenEmpty: boolean;
 
     private readonly members: readonly IValidator<T>[];
-    private readonly unsubscribes: (() => void)[] = [];
 
     constructor(members: readonly IValidator<T>[]) {
         super();
@@ -28,15 +33,21 @@ export class CompositeValidator<T = string> extends IValidator<T> {
 
         const watched = [...new Set(members.flatMap((member) => member.watch ?? []))];
         this.watch = watched.length > 0 ? watched : undefined;
+        this.validateWhenEmpty = members.some((member) => member.validateWhenEmpty === true);
 
         // Un membre qui se déclare périmé (issues injectées) rend le composite
         // périmé : la demande de revalidation doit remonter jusqu'au champ.
+        //
+        // L'abonnement vit aussi longtemps que le composite, qui possède ses
+        // membres. Le couper au démontage le rendait définitif — un cycle
+        // démontage/remontage, que React fait en StrictMode, laissait les
+        // erreurs serveur muettes.
         for (const member of members) {
-            this.unsubscribes.push(member.subscribe(() => {
+            member.subscribe(() => {
                 if (member.consumeStale()) {
                     this.requestRevalidation();
                 }
-            }));
+            });
         }
     }
 
@@ -65,11 +76,4 @@ export class CompositeValidator<T = string> extends IValidator<T> {
         super.reset();
     }
 
-    /** Coupe les abonnements aux membres — appelé quand le champ est démonté. */
-    dispose(): void {
-        for (const unsubscribe of this.unsubscribes) {
-            unsubscribe();
-        }
-        this.unsubscribes.length = 0;
-    }
 }

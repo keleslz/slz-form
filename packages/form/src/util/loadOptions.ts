@@ -68,6 +68,7 @@ export function loadOptions<T = string, M = never>(
     // une réponse plus récente — le même problème que le validator règle déjà.
     const runs = new Map<string, number>();
     const debouncers = new Map<string, Debouncer>();
+    const keyOf = (ctx: BehaviorContext<T, M>): string => `${ctx.form.name}\u0000${ctx.name}`;
     const debouncerOf = (name: string): Debouncer => {
         const existing = debouncers.get(name);
         if (existing) {
@@ -79,19 +80,22 @@ export function loadOptions<T = string, M = never>(
     };
 
     const load = async (ctx: BehaviorContext<T, M>): Promise<BehaviorState> => {
-        const run = (runs.get(ctx.name) ?? 0) + 1;
-        runs.set(ctx.name, run);
+        // Clé qualifiée par le formulaire porteur : deux lignes d'une liste ont
+        // les mêmes noms de champ, et le nom seul les ferait se marcher dessus.
+        const key = keyOf(ctx);
+        const run = (runs.get(key) ?? 0) + 1;
+        runs.set(key, run);
 
         ctx.push(pending(ctx.state));
 
-        if (delay > 0 && !(await debouncerOf(ctx.name).wait(delay))) {
+        if (delay > 0 && !(await debouncerOf(key).wait(delay))) {
             return ctx.state;
         }
         if (ctx.signal.aborted) {
             return ctx.state;
         }
 
-        const fresh = (): boolean => !ctx.signal.aborted && runs.get(ctx.name) === run;
+        const fresh = (): boolean => !ctx.signal.aborted && runs.get(key) === run;
 
         try {
             const options = await fetcher(ctx);
@@ -107,7 +111,7 @@ export function loadOptions<T = string, M = never>(
 
         // Une réponse dépassée ne touche pas non plus à l'état d'attente : le
         // run le plus récent est encore en vol, il doit rester `loading`.
-        return runs.get(ctx.name) === run ? ctx.state.idle().unlock().show() : ctx.state;
+        return runs.get(key) === run ? ctx.state.idle().unlock().show() : ctx.state;
     };
 
     return {
@@ -125,8 +129,8 @@ export function loadOptions<T = string, M = never>(
             }
             : undefined,
         onSubmit: (ctx) => {
-            debouncers.get(ctx.name)?.flush();
+            debouncers.get(keyOf(ctx))?.flush();
         },
-        onUnmount: (ctx) => debouncers.get(ctx.name)?.cancel(),
+        onUnmount: (ctx) => debouncers.get(keyOf(ctx))?.cancel(),
     };
 }

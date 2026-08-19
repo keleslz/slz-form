@@ -31,6 +31,8 @@ export class DebouncedValidator<T = string> extends IValidator<T> {
      * un champ masque un accesseur de sous-classe.
      */
     override readonly watch: readonly string[] | undefined;
+    /** Hérité aussi : le décorateur ne change rien aux règles qu'il diffère. */
+    override readonly validateWhenEmpty: boolean | undefined;
 
     private readonly inner: IValidator<T>;
     private readonly delay: number;
@@ -41,6 +43,7 @@ export class DebouncedValidator<T = string> extends IValidator<T> {
         this.inner = inner;
         this.delay = delay;
         this.watch = inner.watch;
+        this.validateWhenEmpty = inner.validateWhenEmpty;
     }
 
     protected async validate(value: T, report: ValidationReport, ctx: ValidationContext): Promise<void> {

@@ -24,5 +24,12 @@ un formulaire prérempli jugé invalide, un champ invisible obligatoire rendant 
 soumission impossible, et un champ figé condamnant toutes les soumissions
 suivantes.
 
-Tous ces ajouts sont additifs : les validators, behaviors et appels existants
-compilent et se comportent à l'identique.
+Les validators, behaviors et appels de la vue existants compilent et se
+comportent à l'identique — la démo passe ses 43 assertions sans être touchée.
+
+Deux points de la surface bas niveau bougent malgré tout, pour qui l'utilisait
+directement : `ValidatorState` porte désormais `issues` à côté de `errors`, et
+`FieldHost.notifyFieldChanged` reçoit un jeu de changements au lieu d'un
+booléen. `IValidator.handle(value)` reste appelable sans contexte. `UiFlag`
+s'élargit à `readonly`, ce qui rend non exhaustif un `switch` consommateur qui
+en couvrait toutes les valeurs.

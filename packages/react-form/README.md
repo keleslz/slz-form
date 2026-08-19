@@ -85,6 +85,23 @@ function InvoiceLines() {
 }
 ```
 
+Un champ de ligne se câble avec `useFieldOn`, en lui passant le formulaire de
+la ligne :
+
+```tsx
+function LineLabel({ row }: { row: FieldArrayRow<InvoiceLine> }) {
+    const field = useFieldOn(row.form, { name: "label", required: true });
+
+    return (
+        <input
+            value={field.value ?? ""}
+            onChange={(e) => field.onChange(e.target.value)}
+            onBlur={field.onBlur}
+        />
+    );
+}
+```
+
 `row.id` est stable : il ne change ni à la suppression d'une autre ligne, ni au
 réordonnancement. C'est une clé React fiable, et c'est ce qui évite qu'un
 déplacement casse les dépendances déclarées.
@@ -98,7 +115,8 @@ Taper dans une ligne ne re-rend pas les autres.
 |---|---|
 | `hooksFor(form)` | rend `useField`, `useFieldArray` et `useForm` liés à un formulaire, typés par sa map |
 | `useField` | un champ : valeur, constats, flags, handlers |
-| `useFieldArray` | les lignes d'une liste répétable : `rows`, `append`, `remove`, `move` |
+| `useFieldArray` | les lignes d'une liste répétable : `rows`, `append`, `remove`, `move`, `clear` |
+| `useFieldOn(form, params)` | `useField` lié à un formulaire donné — sert à câbler un champ de ligne |
 | `FormProvider` | publie le `FormRegister` dans l'arbre, pour l'accès transverse |
 | `useFormRegister` | accès direct au register |
 

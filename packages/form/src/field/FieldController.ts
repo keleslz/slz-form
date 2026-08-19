@@ -128,6 +128,16 @@ export class FieldController<T = string, M = never> {
      * que le consommateur ait à la déclencher.
      */
     dependencies(): readonly string[] {
+        for (const behavior of this.behaviors) {
+            for (const target of behavior.watch ?? []) {
+                if (watchedTriggers(target).length === 0) {
+                    throw new Error(
+                        `[slz] Behavior on "${this.name}" watches "${watchedName(target)}" `
+                        + "with an empty `on`: it would never fire. Remove `on` for the default.",
+                    );
+                }
+            }
+        }
         return [...new Set([
             ...this.behaviors.flatMap((behavior) => (behavior.watch ?? []).map(watchedName)),
             ...(this.validator.watch ?? []),
@@ -196,9 +206,6 @@ export class FieldController<T = string, M = never> {
         // le signal est avorté, donc plus rien ne viendrait la libérer.
         for (const behavior of this.behaviors) {
             this.statesByBehavior.set(behavior, BehaviorState.neutral);
-        }
-        if (this.validator instanceof CompositeValidator) {
-            this.validator.dispose();
         }
         this.commit();
     }
@@ -318,6 +325,10 @@ export class FieldController<T = string, M = never> {
             this.statesByBehavior.set(behavior, BehaviorState.neutral);
         }
         this.commit();
+        // Le verdict doit repartir de la valeur restaurée. Sans ça, un champ
+        // obligatoire redevenu vide se déclarait soumettable — le montage
+        // revalide justement pour éviter ça, la remise à zéro le doit aussi.
+        void this.revalidate();
     }
 
     // ── read surface ─────────────────────────────────────────────────────
@@ -362,13 +373,19 @@ export class FieldController<T = string, M = never> {
         }
         const signal = this.abort.signal;
         for (const behavior of this.behaviors) {
-            const target = behavior.watch?.find((watched) => watchedName(watched) === dependency.name);
-            if (!target) {
+            // `filter` et non `find` : un behavior peut déclarer le même champ
+            // plusieurs fois, avec des axes différents. Ne lire que la première
+            // déclaration rendrait les suivantes muettes.
+            const targets = (behavior.watch ?? [])
+                .filter((watched) => watchedName(watched) === dependency.name);
+            if (targets.length === 0) {
                 continue;
             }
             // Un behavior n'est réveillé que par les axes qu'il a demandés.
             // `["value"]` par défaut, ce qui laisse l'arbitrage 18 intact.
-            if (!watchedTriggers(target).some((trigger) => changes[trigger])) {
+            const woken = targets.some((target) =>
+                watchedTriggers(target).some((trigger) => changes[trigger]));
+            if (!woken) {
                 continue;
             }
             const ctx = this.buildContext(behavior, signal);
