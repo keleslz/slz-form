@@ -131,10 +131,10 @@ describe("troisième tour de revue", () => {
     it("un champ démonté ne laisse pas d'abonné sur un membre partagé", async () => {
         const shared = new ExternalValidator<string>();
         let subscribers = 0;
-        const realSubscribe = shared.subscribe.bind(shared);
-        shared.subscribe = (listener) => {
+        const realOnStale = shared.onStale.bind(shared);
+        shared.onStale = (listener) => {
             subscribers += 1;
-            const off = realSubscribe(listener);
+            const off = realOnStale(listener);
             return () => { subscribers -= 1; off(); };
         };
 
@@ -250,12 +250,20 @@ describe("troisième tour de revue", () => {
         form.mount();
 
         const id = rows.append();
-        const field = rows.row(id)?.field("label", { required: true });
+        const row = rows.row(id);
+        // Montée par `append()`, sans que personne s'en occupe.
+        expect(row?.form.isMounted).toBe(true);
+
+        const field = row?.field("label", { required: true });
         field?.mount();
         await wait(20);
-
-        expect(field?.isMounted).toBe(true);
         expect(form.snapshot.isValid).toBe(false);
+
+        // Une ligne ajoutée à un formulaire monté est vivante : son propre
+        // `values()` répond, et un champ créé après coup s'y rattache.
+        field?.change("posé");
+        await wait(20);
+        expect(row?.values()).toEqual({ label: "posé" });
     });
 
     it("form.isBusy tient compte des lignes", async () => {
@@ -278,21 +286,29 @@ describe("troisième tour de revue", () => {
         expect(form.isBusy).toBe(true);
     });
 
-    it("retirer une ligne coupe son abonnement au parent", async () => {
+    it("une ligne retirée n'influence plus le formulaire", async () => {
         type Fields = { rows: FieldArray<{ label: string }> };
         const form = new FormController<Fields>({ name: "t15" });
         const rows = form.array("rows");
         form.mount();
 
         const id = rows.append();
-        const field = rows.row(id)?.field("label");
+        const row = rows.row(id);
+        const field = row?.field("label");
         field?.mount();
-        rows.remove(id);
+        field?.change("avant retrait");
+        await wait(20);
 
+        rows.remove(id);
         const before = form.snapshot;
-        field?.change("après retrait");
+
+        // La ligne vit encore comme objet : on la sollicite directement, sans
+        // passer par le champ démonté, pour vérifier que le parent n'écoute plus.
+        row?.form.field("label", {});
+        row?.form.mount();
         await wait(20);
 
         expect(form.snapshot).toBe(before);
+        expect(form.values()).toEqual({ rows: [] });
     });
 });

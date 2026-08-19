@@ -10,7 +10,7 @@ import {
     type IBehavior,
     type ValidationReport,
 } from "../src/index";
-import { wait } from "./helpers";
+import { until, wait } from "./helpers";
 
 /** Signale toujours, y compris sur une valeur vide. */
 class AlwaysFails extends IValidator<string> {
@@ -128,7 +128,7 @@ describe("constats de revue", () => {
         form.mount();
 
         expect(() => source.change("x")).not.toThrow();
-        await wait(30);
+        await until(() => form.get("o119")?.snapshot.value === "o119:x");
         expect(form.get("o119")?.snapshot.value).toBe("o119:x");
     });
 

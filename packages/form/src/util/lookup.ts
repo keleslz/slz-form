@@ -26,12 +26,19 @@ export interface LookupParams {
  * validator *juge* une valeur et ne peut pas y toucher ; un behavior *écrit* et
  * ne peut pas se prononcer sur la validité. Aucun des deux ne remplace l'autre.
  *
+ * Passer par `behaviorsFor(form)` évite tout cast : le nom observé est contraint
+ * à la map, et sa valeur arrive typée.
+ *
  * ```ts
+ * const { lookup } = behaviorsFor(form);
+ *
  * // le champ « ville » se remplit à partir du code postal
- * lookup((ctx) => fetchCity(ctx.watched("postcode")?.value as string), {
+ * lookup({
+ *     field: "city",
  *     watch: ["postcode"],
  *     debounce: 400,
- * })
+ *     fetch: ({ postcode }) => fetchCity(postcode),   // postcode: string
+ * });
  * ```
  *
  * L'écriture passe par `ctx.setValue`, qui ne marque pas le champ touché : une

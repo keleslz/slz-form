@@ -40,11 +40,21 @@ export class ExternalValidator<T = string> extends IValidator<T> {
      * champ, dont la valeur diffère, effaçait les constats du premier.
      */
     private readonly boundTo = new Map<string, T | undefined>();
+    /**
+     * Les champs dont la valeur a changé depuis le `set`.
+     *
+     * Sans cet ensemble, supprimer la seule liaison libérait le champ pour un
+     * tour puis le reliait au tour suivant — donc à la valeur corrigée. Le
+     * constat ressuscitait à la soumission, et le formulaire ne pouvait plus
+     * jamais être soumis.
+     */
+    private readonly released = new Set<string>();
 
     /** Publie des constats et demande une revalidation du champ. */
     set(issues: readonly ValidationIssue[]): void {
         this.stored = issues;
         this.boundTo.clear();
+        this.released.clear();
         this.requestRevalidation();
     }
 
@@ -54,6 +64,7 @@ export class ExternalValidator<T = string> extends IValidator<T> {
         }
         this.stored = [];
         this.boundTo.clear();
+        this.released.clear();
         this.requestRevalidation();
     }
 
@@ -61,6 +72,7 @@ export class ExternalValidator<T = string> extends IValidator<T> {
     override reset(): void {
         this.stored = [];
         this.boundTo.clear();
+        this.released.clear();
         super.reset();
     }
 
@@ -71,6 +83,12 @@ export class ExternalValidator<T = string> extends IValidator<T> {
 
         const key = `${ctx.form.name}.${ctx.name}`;
 
+        // Déjà corrigé : ce champ ne porte plus le constat, et ne le reprendra
+        // pas tant que le serveur n'aura pas répondu de nouveau.
+        if (this.released.has(key)) {
+            return;
+        }
+
         if (!this.boundTo.has(key)) {
             // Première exécution après `set` pour ce champ : les constats se
             // lient à la valeur qui était en place au moment de l'appel serveur.
@@ -79,6 +97,7 @@ export class ExternalValidator<T = string> extends IValidator<T> {
             // Ce champ a été corrigé : il cesse de porter le constat, sans
             // toucher aux autres champs qui portent la même instance.
             this.boundTo.delete(key);
+            this.released.add(key);
             return;
         }
 

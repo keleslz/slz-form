@@ -179,6 +179,8 @@ export abstract class IValidator<T = string> {
     private readonly staleListeners = new Set<ValidatorListener>();
     /** Jeton de run monotone — un résultat périmé ne doit pas écraser un plus frais. */
     private run = 0;
+    /** Statut d'avant l'entrée en `loading`, pour pouvoir y revenir. */
+    private beforeLoading: ValidatorStatus = "pristine";
 
     /**
      * Les règles propres au champ. Les constats passent par `report` ; renvoyer
@@ -224,6 +226,12 @@ export abstract class IValidator<T = string> {
         // la saisie suivante.
         const pending = this.runInto(value, report, ctx);
         if (pending instanceof Promise) {
+            // Ne pas mémoriser `loading` lui-même : une seconde validation
+            // lancée alors que la première est encore en vol écraserait sinon
+            // le seul statut vers lequel on puisse revenir.
+            if (this.state.status !== "loading") {
+                this.beforeLoading = this.state.status;
+            }
             this.setState(makeState("loading", this.state.issues));
             try {
                 await pending;
@@ -296,6 +304,21 @@ export abstract class IValidator<T = string> {
     protected requestRevalidation(): void {
         for (const listener of this.staleListeners) {
             listener();
+        }
+    }
+
+    /**
+     * Abandonne une validation en vol : sort de `loading` en gardant le dernier
+     * verdict, et invalide le run pour que son résultat tardif soit écarté.
+     *
+     * Sans ça, une règle dont la promesse ne retombe jamais laissait le champ
+     * occupé et condamnait toutes les soumissions suivantes — le pendant côté
+     * behavior était traité, celui-ci non.
+     */
+    abandon(): void {
+        this.run += 1;
+        if (this.state.status === "loading") {
+            this.setState(makeState(this.beforeLoading, this.state.issues));
         }
     }
 

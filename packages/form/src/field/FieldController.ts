@@ -282,16 +282,15 @@ export class FieldController<T = string, M = never> {
      * FormController appelle ceci quand la convergence expire.
      */
     recover(): void {
-        let changed = false;
+        // Le validator contribue aussi à l'axe activité : le laisser en vol
+        // suffisait à garder `isBusy` vrai, donc à condamner le formulaire.
+        this.validator.abandon();
         for (const [behavior, state] of this.statesByBehavior) {
             if (state.activity === "loading") {
                 this.statesByBehavior.set(behavior, state.idle().unlock());
-                changed = true;
             }
         }
-        if (changed) {
-            this.commit();
-        }
+        this.commit();
     }
 
     // ── events ───────────────────────────────────────────────────────────

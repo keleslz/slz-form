@@ -76,6 +76,9 @@ fonction générique ne voit plus.
 - `packages/form/src/field/FieldController.ts` et `validator/IValidator.ts` —
   la valeur est passée à `validate` après que la classe de base a vérifié
   qu'elle n'est pas vide.
+- `packages/form/src/state/UiState.ts` et `state/BehaviorState.ts` — `has()`
+  accepte un `UiFlag` plat et le teste contre l'axe cumulatif ; le rétrécir est
+  précisément ce que la lecture plate promet au consommateur.
 
 **Cette liste est limitative.** Un `as` ailleurs est un défaut de conception des
 types, pas une commodité — et jamais dans le code consommateur. Quand on en
