@@ -469,9 +469,11 @@ export class FieldController<T = string, M = never> {
                 if (signal.aborted) {
                     return;
                 }
-                // A rejected behavior must not leave the field stuck on `loading`.
+                // Un behavior rejeté ne doit laisser derrière lui ni `loading`
+                // ni le verrou que son état d'attente avait posé — sinon le
+                // champ reste inutilisable après un simple échec réseau.
                 const previous = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
-                this.statesByBehavior.set(behavior, previous.idle());
+                this.statesByBehavior.set(behavior, previous.idle().unlock());
                 this.commit();
             });
     }

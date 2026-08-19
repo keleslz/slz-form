@@ -7,5 +7,5 @@
     // still runs unchanged under Node, Deno, Bun or a worker.
     "lib": ["ES2023", "DOM"]
   },
-  "include": ["src"]
+  "include": ["src", "test", "vitest.config.ts"]
 }

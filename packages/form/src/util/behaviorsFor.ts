@@ -86,6 +86,8 @@ export function behaviorsFor<TFields extends FieldsShape>(_form: FormController<
             debounce?: number;
             pending?: PendingState;
             resetOnReload?: boolean;
+            /** Appelé si le chargement échoue — sans quoi l'échec ressemble à une liste vide. */
+            onError?: (error: unknown) => void;
             fetch: (
                 deps: Deps<K, W>,
             ) => Promise<readonly FieldOption<OptionValueOf<TFields[K]>, MetaOf<TFields[K]>>[]>;
@@ -99,6 +101,7 @@ export function behaviorsFor<TFields extends FieldsShape>(_form: FormController<
                     debounce: params.debounce,
                     pending: params.pending,
                     resetOnReload: params.resetOnReload,
+                    onError: params.onError && ((error) => params.onError?.(error)),
                 },
             );
         },

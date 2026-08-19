@@ -22,6 +22,7 @@
     "build:packages": "npm run build -w packages/form && npm run build -w packages/react-form",
     "build:examples": "npm run build -w examples/react",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
     "lint": "eslint packages examples",
     "release": "npm run build:packages && changeset publish",
     "changeset": "changeset",
@@ -39,6 +40,7 @@
     "globals": "^17.6.0",
     "tsup": "^8.5.0",
     "typescript": "~6.0.2",
-    "typescript-eslint": "^8.59.2"
+    "typescript-eslint": "^8.59.2",
+    "vitest": "^4.1.11"
   }
 }

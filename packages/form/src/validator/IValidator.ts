@@ -146,6 +146,17 @@ export abstract class IValidator<T = string> {
      */
     readonly watch?: readonly string[];
 
+    /**
+     * Exécuter les règles **même sur une valeur vide**.
+     *
+     * Par défaut une valeur vide court-circuite : seul `required` s'exprime, ce
+     * qui évite qu'un validator d'email crie sur un champ facultatif laissé
+     * blanc. Mais une règle qui décide elle-même de l'obligation — « obligatoire
+     * si le compte est pro » — doit pouvoir se prononcer sur du vide. Elle le
+     * déclare, et reçoit alors une valeur éventuellement `undefined`.
+     */
+    readonly validateWhenEmpty?: boolean;
+
     private state: ValidatorState = { status: "pristine", issues: [] };
     private options: ValidationOptions = {};
     private readonly listeners = new Set<ValidatorListener>();
@@ -189,7 +200,7 @@ export abstract class IValidator<T = string> {
 
         if (this.options.required && empty) {
             report.error(this.options.requiredMessage ?? "This field is required", { code: "required" });
-        } else if (!empty) {
+        } else if (!empty || this.validateWhenEmpty === true) {
             const pending = this.validate(value as T, report, ctx);
             if (pending instanceof Promise) {
                 this.setState({ status: "loading", issues: this.state.issues });
