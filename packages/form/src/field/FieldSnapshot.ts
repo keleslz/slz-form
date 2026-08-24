@@ -1,4 +1,4 @@
-import type { UiFlag, UiState, ValidityFlag } from "../state";
+import type { AnyUiFlag, UiState } from "../state";
 import { errorsOf, sameIssues, type ValidationIssue } from "../validator/IValidator";
 import type { OptionValue } from "./Field";
 import type { FieldOption } from "./FieldOption";
@@ -9,15 +9,15 @@ export interface FieldSnapshotParams<T, M = never> {
     readonly ui: UiState;
     readonly issues: readonly ValidationIssue[];
     readonly options: readonly FieldOption<OptionValue<T>, M>[];
-    readonly touched: boolean;
-    readonly focused: boolean;
-    readonly required: boolean;
-    readonly submitting: boolean;
-    readonly mounted: boolean;
 }
 
 /**
  * The immutable value the consumer renders from — nothing more (invariant 21).
+ *
+ * Deux choses, et deux seulement : des **flags**, lus par `hasFlag` / `hasAny`,
+ * qui disent dans quel état est le champ ; et des **données** — valeur, options,
+ * messages — qui disent ce qu'il contient. Aucun booléen d'état (invariant 32) :
+ * un besoin de `isX` signale un flag manquant.
  *
  * Two snapshots that describe the same state are `equals`, which is how the
  * controller keeps the **same object reference** when nothing changed. That
@@ -30,11 +30,6 @@ export class FieldSnapshot<T = string, M = never> {
     readonly ui: UiState;
     readonly issues: readonly ValidationIssue[];
     readonly options: readonly FieldOption<OptionValue<T>, M>[];
-    readonly touched: boolean;
-    readonly focused: boolean;
-    readonly required: boolean;
-    readonly submitting: boolean;
-    readonly mounted: boolean;
 
     constructor(params: FieldSnapshotParams<T, M>) {
         this.name = params.name;
@@ -42,44 +37,21 @@ export class FieldSnapshot<T = string, M = never> {
         this.ui = params.ui;
         this.issues = params.issues;
         this.options = params.options;
-        this.touched = params.touched;
-        this.focused = params.focused;
-        this.required = params.required;
-        this.submitting = params.submitting;
-        this.mounted = params.mounted;
     }
 
-    has(...flags: UiFlag[]): boolean {
-        return this.ui.has(...flags);
+    /** ET — le champ porte **tous** ces flags. */
+    hasFlag(...flags: AnyUiFlag[]): boolean {
+        return this.ui.hasFlag(...flags);
     }
 
-    get validity(): ValidityFlag {
-        return this.ui.validity;
+    /** OU — le champ porte **au moins un** de ces flags. */
+    hasAny(...flags: AnyUiFlag[]): boolean {
+        return this.ui.hasAny(...flags);
     }
 
-    get isPristine(): boolean {
-        return this.ui.validity === "pristine";
-    }
-
-    get isValid(): boolean {
-        return this.ui.validity === "valid";
-    }
-
-    get isLoading(): boolean {
-        return this.ui.activity === "loading";
-    }
-
-    get isLocked(): boolean {
-        return this.ui.has("locked");
-    }
-
-    get isVisible(): boolean {
-        return !this.ui.has("invisible");
-    }
-
-    /** An error the consumer should surface: invalid *and* already interacted with. */
-    get showError(): boolean {
-        return this.ui.validity === "error" && this.touched;
+    /** Projection à plat — débogage, rendu de l'état brut. */
+    get flags(): readonly AnyUiFlag[] {
+        return this.ui.flags;
     }
 
     get error(): string | undefined {
@@ -91,39 +63,15 @@ export class FieldSnapshot<T = string, M = never> {
         return errorsOf(this.issues);
     }
 
-    /**
-     * Le **verdict**, indépendamment de l'affichage.
-     *
-     * `validity` dit ce qu'on montre : il reste `pristine` tant que le champ n'a
-     * pas été touché, pour qu'un prefill n'allume pas d'erreur. `isBlocking` dit
-     * ce qui est vrai — c'est lui qui décide si le formulaire est soumettable.
-     */
-    get isBlocking(): boolean {
-        return this.issues.some((issue) => issue.severity === "error");
-    }
-
     /** Les constats qui ne bloquent pas — la vue en fait ce qu'elle veut. */
     get warnings(): readonly string[] {
         return this.issues.filter((issue) => issue.severity === "warning").map((issue) => issue.message);
-    }
-
-    /**
-     * Lisible et sélectionnable, mais non modifiable — distinct de `isLocked`,
-     * qui grise le champ.
-     */
-    get isReadOnly(): boolean {
-        return this.ui.has("readonly");
     }
 
     equals(other: FieldSnapshot<T, M>): boolean {
         return this.name === other.name
             && Object.is(this.value, other.value)
             && this.ui.equals(other.ui)
-            && this.touched === other.touched
-            && this.focused === other.focused
-            && this.required === other.required
-            && this.submitting === other.submitting
-            && this.mounted === other.mounted
             && sameIssues(this.issues, other.issues)
             && sameOptions(this.options, other.options);
     }

@@ -97,12 +97,12 @@ describe("champs répétables", () => {
         lines.row(id)?.field("label", { required: true }).mount();
         await wait(20);
 
-        expect(form.snapshot.isValid).toBe(false);
+        expect(form.snapshot.hasFlag("valid")).toBe(false);
         await expect(form.submit()).resolves.toBe(false);
 
         lines.row(id)?.field("label").change("Prestation");
         await wait(20);
-        expect(form.snapshot.isValid).toBe(true);
+        expect(form.snapshot.hasFlag("valid")).toBe(true);
     });
 
     it("retirer la ligne fautive rend le formulaire soumettable", async () => {
@@ -113,11 +113,11 @@ describe("champs répétables", () => {
         const id = lines.append();
         lines.row(id)?.field("label", { required: true }).mount();
         await wait(20);
-        expect(form.snapshot.isValid).toBe(false);
+        expect(form.snapshot.hasFlag("valid")).toBe(false);
 
         lines.remove(id);
         await wait(20);
-        expect(form.snapshot.isValid).toBe(true);
+        expect(form.snapshot.hasFlag("valid")).toBe(true);
     });
 
     it("une règle inter-lignes s'écrit dans un validator du parent, via son watch", async () => {
@@ -157,7 +157,7 @@ describe("champs répétables", () => {
         await wait(30);
 
         expect(total.snapshot.errors[0]).toBe("la somme fait 90, pas 100");
-        expect(form.snapshot.isValid).toBe(false);
+        expect(form.snapshot.hasFlag("valid")).toBe(false);
 
         parts.row(b)?.field("share").change(40);
         await wait(30);

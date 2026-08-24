@@ -49,11 +49,11 @@ describe("parité — ce qui exigeait de modifier le cœur", () => {
         pwd.change("secret");
         confirm.change("secret");
         await wait(20);
-        expect(confirm.snapshot.validity).toBe("valid");
+        expect(confirm.snapshot.ui.validity).toBe("valid");
 
         pwd.change("autre");
         await wait(30);
-        expect(confirm.snapshot.validity).toBe("error");
+        expect(confirm.snapshot.ui.validity).toBe("error");
     });
 
     it("réagir à l'ÉTAT d'un voisin, et non à sa valeur", async () => {
@@ -61,7 +61,7 @@ describe("parité — ce qui exigeait de modifier le cœur", () => {
             watch: [{ field: "src", on: ["validity"] }],
             onMount: (ctx) => ctx.state.lock(),
             onDependencyChanged: (ctx, dependency) =>
-                (dependency.validity === "valid" ? ctx.state.unlock() : ctx.state.lock()),
+                (dependency.ui.validity === "valid" ? ctx.state.unlock() : ctx.state.lock()),
         };
 
         class NonEmpty extends IValidator<string> {
@@ -77,11 +77,11 @@ describe("parité — ce qui exigeait de modifier le cœur", () => {
         dst.mount();
         form.mount();
         await wait(20);
-        expect(dst.snapshot.isLocked).toBe(true);
+        expect(dst.snapshot.hasFlag("locked")).toBe(true);
 
         src.change("rempli");
         await wait(30);
-        expect(dst.snapshot.isLocked).toBe(false);
+        expect(dst.snapshot.hasFlag("locked")).toBe(false);
     });
 
     it("`required` conditionnel : la règle vit dans le validator, pas dans la vue", async () => {
@@ -107,11 +107,11 @@ describe("parité — ce qui exigeait de modifier le cœur", () => {
         type.change("particulier");
         vat.change(" ");
         await wait(20);
-        expect(vat.snapshot.validity).toBe("valid");
+        expect(vat.snapshot.ui.validity).toBe("valid");
 
         type.change("pro");
         await wait(30);
-        expect(vat.snapshot.validity).toBe("error");
+        expect(vat.snapshot.ui.validity).toBe("error");
     });
 
     it("erreurs serveur : un validator les porte, l'invariant 13 tient", async () => {
@@ -126,7 +126,7 @@ describe("parité — ce qui exigeait de modifier le cœur", () => {
         serverIssues.set([{ message: "Déjà pris", severity: "error", code: "taken" }]);
         await wait(30);
         expect(email.snapshot.issues[0]?.code).toBe("taken");
-        expect(form.snapshot.isValid).toBe(false);
+        expect(form.snapshot.hasFlag("valid")).toBe(false);
     });
 
     it("avertissement non bloquant : signalé, sans peser sur la soumission", async () => {
@@ -161,8 +161,8 @@ describe("parité — ce qui exigeait de modifier le cœur", () => {
 
         status.change("quoted");
         await wait(20);
-        expect(amount.snapshot.isReadOnly).toBe(true);
-        expect(amount.snapshot.isLocked).toBe(false);
+        expect(amount.snapshot.hasFlag("readonly")).toBe(true);
+        expect(amount.snapshot.hasFlag("locked")).toBe(false);
     });
 
     it("échec réseau : discernable d'une liste légitimement vide", async () => {
@@ -256,12 +256,12 @@ describe("parité — ce qui exigeait de modifier le cœur", () => {
 
         brand.change("renault");
         await wait(30);
-        expect(other.snapshot.isVisible).toBe(false);
+        expect(other.snapshot.hasFlag("invisible")).toBe(true);
         await expect(form.submit()).resolves.toBe(true);
 
         brand.change("autre");
         await wait(30);
-        expect(other.snapshot.isVisible).toBe(true);
+        expect(other.snapshot.hasFlag("invisible")).toBe(false);
         await expect(form.submit()).resolves.toBe(false);
     });
 });

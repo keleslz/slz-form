@@ -27,7 +27,7 @@ describe("troisième tour de revue", () => {
         field.change("x");
         await wait(60);
 
-        expect(field.snapshot.isLoading).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
         expect(field.isBusy).toBe(false);
         // La valeur n'est pas jugée, donc elle bloque — mais rien n'est figé :
         // la soumission rend un booléen et le formulaire reste utilisable.
@@ -92,15 +92,15 @@ describe("troisième tour de revue", () => {
         src.mount();
         dst.mount();
         form.mount();
-        expect(dst.snapshot.isLocked).toBe(true);
+        expect(dst.snapshot.hasFlag("locked")).toBe(true);
 
-        await until(() => !src.snapshot.isBlocking, { timeout: 2000 });
-        await until(() => !dst.snapshot.isLocked, { timeout: 2000 });
+        await until(() => src.snapshot.errors.length === 0, { timeout: 2000 });
+        await until(() => !dst.snapshot.hasFlag("locked"), { timeout: 2000 });
         // Aucune interaction utilisateur : `src` reste `pristine` à l'affichage,
         // mais son verdict a changé, et c'est lui qui compte.
-        expect(src.snapshot.validity).toBe("pristine");
-        expect(src.snapshot.isBlocking).toBe(false);
-        expect(dst.snapshot.isLocked).toBe(false);
+        expect(src.snapshot.ui.validity).toBe("pristine");
+        expect(src.snapshot.errors.length > 0).toBe(false);
+        expect(dst.snapshot.hasFlag("locked")).toBe(false);
     });
 
     it("partager une instance de validator entre deux champs est refusé", () => {
@@ -239,11 +239,11 @@ describe("troisième tour de revue", () => {
 
         field.change("x");
         await wait(60);
-        expect(field.snapshot.validity).toBe("error");
+        expect(field.snapshot.ui.validity).toBe("error");
 
         field.change("y");
         await wait(10);
-        expect(field.snapshot.validity).toBe("error");
+        expect(field.snapshot.ui.validity).toBe("error");
     });
 
     it("append() monte la ligne quand le formulaire est monté", async () => {
@@ -260,7 +260,7 @@ describe("troisième tour de revue", () => {
         const field = row?.field("label", { required: true });
         field?.mount();
         await wait(20);
-        expect(form.snapshot.isValid).toBe(false);
+        expect(form.snapshot.hasFlag("valid")).toBe(false);
 
         // Une ligne ajoutée à un formulaire monté est vivante : son propre
         // `values()` répond, et un champ créé après coup s'y rattache.

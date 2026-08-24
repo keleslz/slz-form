@@ -36,7 +36,7 @@ describe("A1 — le validator déclare ses dépendances et lit le formulaire", (
         end.change("2026-01-05");
         await wait(20);
 
-        expect(end.snapshot.validity).toBe("error");
+        expect(end.snapshot.ui.validity).toBe("error");
         expect(end.snapshot.issues[0]?.code).toBe("order");
     });
 
@@ -79,8 +79,8 @@ describe("A2 — constats structurés", () => {
 
         expect(field.snapshot.warnings).toEqual(["semble court"]);
         expect(field.snapshot.errors).toEqual([]);
-        expect(field.snapshot.validity).toBe("valid");
-        expect(form.snapshot.isValid).toBe(true);
+        expect(field.snapshot.ui.validity).toBe("valid");
+        expect(form.snapshot.hasFlag("valid")).toBe(true);
     });
 
     it("le code permet de router un constat sans que le moteur en décide", async () => {
@@ -137,11 +137,11 @@ describe("A3 — watch avec déclencheurs", () => {
         form.mount();
         await wait(20);
 
-        expect(dst.snapshot.isLocked).toBe(true);
+        expect(dst.snapshot.hasFlag("locked")).toBe(true);
 
         src.change("rempli");
         await wait(30);
-        expect(dst.snapshot.isLocked).toBe(false);
+        expect(dst.snapshot.hasFlag("locked")).toBe(false);
     });
 });
 
@@ -181,7 +181,7 @@ describe("A4 — composition de validators", () => {
 
         field.change("ada@lovelace.dev");
         await wait(20);
-        expect(field.snapshot.validity).toBe("valid");
+        expect(field.snapshot.ui.validity).toBe("valid");
 
         serverIssues.set([{ message: "Déjà pris", severity: "error", code: "taken" }]);
         await wait(30);
@@ -202,8 +202,8 @@ describe("A5 et A6 — disponibilité", () => {
         form.mount();
         await wait(10);
 
-        expect(field.snapshot.isReadOnly).toBe(true);
-        expect(field.snapshot.isLocked).toBe(false);
+        expect(field.snapshot.hasFlag("readonly")).toBe(true);
+        expect(field.snapshot.hasFlag("locked")).toBe(false);
     });
 
     it("la vue peut verrouiller, et effacer une valeur qu'elle pilote", () => {
@@ -213,7 +213,7 @@ describe("A5 et A6 — disponibilité", () => {
         form.mount();
 
         field.update({ locked: true });
-        expect(field.snapshot.isLocked).toBe(true);
+        expect(field.snapshot.hasFlag("locked")).toBe(true);
 
         field.update({ value: undefined });
         expect(field.snapshot.value).toBeUndefined();

@@ -213,7 +213,7 @@ describe("useForm", () => {
             return (
                 <div>
                     <input aria-label="a" value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value)} />
-                    <span data-testid="valid">{String(state.isValid)}</span>
+                    <span data-testid="valid">{String(state.hasFlag("valid"))}</span>
                 </div>
             );
         }
@@ -253,11 +253,11 @@ describe("le hook pilote réellement le moteur", () => {
         const input = screen.getByLabelText("a");
 
         await act(async () => { fireEvent.focus(input); await tick(); });
-        expect(form.get("a")?.snapshot.focused).toBe(true);
+        expect(form.get("a")?.snapshot.hasFlag("focused")).toBe(true);
 
         await act(async () => { fireEvent.blur(input); await tick(); });
-        expect(form.get("a")?.snapshot.focused).toBe(false);
-        expect(form.get("a")?.snapshot.touched).toBe(true);
+        expect(form.get("a")?.snapshot.hasFlag("focused")).toBe(false);
+        expect(form.get("a")?.snapshot.hasFlag("touched")).toBe(true);
     });
 
     it("les props repoussées par le parent atteignent le contrôleur", async () => {
@@ -266,7 +266,7 @@ describe("le hook pilote réellement le moteur", () => {
 
         function Field({ locked }: { locked: boolean }): React.ReactElement {
             const field = useField({ name: "a", required: true, locked });
-            return <span data-testid="locked">{String(field.isLocked)}</span>;
+            return <span data-testid="locked">{String(field.hasFlag("locked"))}</span>;
         }
 
         const view = render(<Field locked={false} />);
@@ -275,7 +275,7 @@ describe("le hook pilote réellement le moteur", () => {
 
         await act(async () => { view.rerender(<Field locked />); await tick(); });
         expect(screen.getByTestId("locked").textContent).toBe("true");
-        expect(form.get("a")?.snapshot.isLocked).toBe(true);
+        expect(form.get("a")?.snapshot.hasFlag("locked")).toBe(true);
     });
 
     it("un champ non piloté n'est pas effacé par les mises à jour", async () => {
@@ -445,17 +445,17 @@ describe("le cycle de vie côté React", () => {
 
         function Field({ required }: { required: boolean }): React.ReactElement {
             const field = useField({ name: "a", required });
-            return <span data-testid="r">{String(field.required)}</span>;
+            return <span data-testid="r">{String(field.hasFlag("required"))}</span>;
         }
 
         const view = render(<Field required={false} />);
         await act(async () => { await tick(); });
         expect(screen.getByTestId("r").textContent).toBe("false");
-        expect(form.snapshot.isValid).toBe(true);
+        expect(form.snapshot.hasFlag("valid")).toBe(true);
 
         await act(async () => { view.rerender(<Field required />); await tick(); });
         expect(screen.getByTestId("r").textContent).toBe("true");
         // Et la conséquence réelle : un champ vide devenu obligatoire invalide.
-        expect(form.snapshot.isValid).toBe(false);
+        expect(form.snapshot.hasFlag("valid")).toBe(false);
     });
 });

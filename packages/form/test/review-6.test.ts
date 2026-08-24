@@ -34,8 +34,8 @@ describe("sixième tour de revue", () => {
 
         // `required` a parlé avant l'échec : son constat doit survivre.
         expect(field.snapshot.errors).toEqual(["This field is required"]);
-        expect(field.snapshot.isBlocking).toBe(true);
-        expect(form.snapshot.isValid).toBe(false);
+        expect(field.snapshot.errors.length > 0).toBe(true);
+        expect(form.snapshot.hasFlag("valid")).toBe(false);
         await expect(form.submit()).resolves.toBe(false);
     });
 
@@ -87,8 +87,8 @@ describe("sixième tour de revue", () => {
         await wait(80);
 
         expect(field.snapshot.errors.length).toBeGreaterThan(0);
-        expect(field.snapshot.validity).not.toBe("pristine");
-        expect(field.snapshot.showError).toBe(true);
+        expect(field.snapshot.ui.validity).not.toBe("pristine");
+        expect(field.snapshot.hasFlag("error")).toBe(true);
     });
 
     it("récupérer un champ figé lui rend sa visibilité", async () => {
@@ -111,7 +111,7 @@ describe("sixième tour de revue", () => {
         await expect(form.submit()).resolves.toBe(false);
 
         // Le champ doit revenir visible, et sa valeur rester dans le payload.
-        expect(field.snapshot.isVisible).toBe(true);
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
         expect(form.values()).toEqual({ a: "valeur utilisateur" });
     });
 
@@ -129,9 +129,9 @@ describe("sixième tour de revue", () => {
         form.mount();
         await wait(60);
 
-        expect(field.snapshot.isVisible).toBe(true);
-        expect(field.snapshot.isReadOnly).toBe(false);
-        expect(field.snapshot.isLoading).toBe(false);
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
+        expect(field.snapshot.hasFlag("readonly")).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
     });
 
     it("un constat serveur corrigé ne revient pas à la soumission", async () => {
@@ -174,7 +174,7 @@ describe("sixième tour de revue", () => {
 
         await expect(form.submit()).resolves.toBe(false);
         expect(field.isBusy).toBe(false);
-        expect(field.snapshot.isLoading).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
 
         await expect(form.submit()).resolves.toBe(true);
     });

@@ -1,76 +1,78 @@
 import type { BehaviorState } from "./BehaviorState";
-import type { ActivityFlag, AvailabilityFlag, UiFlag, ValidityFlag } from "./UiFlag";
+import type { ActivityFlag, AnyUiFlag, ValidityFlag } from "./UiFlag";
 
 /**
  * The merged UI state of one Field — what the consumer reads.
  *
- * Merge rules, one per axis:
- *   validity     ← the Validator alone (invariant 13)
- *   activity     ← `loading` if *any* behavior, or the validator, is in flight
- *   availability ← union of every behavior's flags (a single `lock()` locks)
+ * Merge rules:
+ *   validity ← the Validator alone (invariant 13)
+ *   activity ← `loading` if *any* behavior, or the validator, is in flight
+ *   markers  ← union of every behavior's flags, plus the controller's own
+ *              (a single `lock()` locks)
  *
- * Removing a flag is therefore well defined: on an exclusive axis you replace,
- * on the cumulative axis you stop emitting.
+ * Removing a flag is therefore well defined: in an exclusive group you replace,
+ * among the markers you stop emitting.
  */
 export class UiState {
     readonly validity: ValidityFlag;
     readonly activity: ActivityFlag;
-    readonly availability: readonly AvailabilityFlag[];
+    readonly markers: readonly AnyUiFlag[];
 
-    constructor(validity: ValidityFlag, activity: ActivityFlag, availability: readonly AvailabilityFlag[]) {
+    constructor(validity: ValidityFlag, activity: ActivityFlag, markers: readonly AnyUiFlag[]) {
         this.validity = validity;
         this.activity = activity;
-        this.availability = Object.freeze([...new Set(availability)].sort());
+        this.markers = Object.freeze([...new Set(markers)].sort());
     }
 
     /**
      * @param validating  the validator is in flight — counts toward `loading`
-     * @param extra       availability the controller itself contributes (e.g. `locked` while submitting)
+     * @param extra       markers the controller itself contributes (`touched`,
+     *                    `locked` while submitting, …)
      */
     static merge(
         validity: ValidityFlag,
         states: Iterable<BehaviorState>,
         validating = false,
-        extra: readonly AvailabilityFlag[] = [],
+        extra: readonly AnyUiFlag[] = [],
     ): UiState {
         let activity: ActivityFlag = validating ? "loading" : "idle";
-        const availability: AvailabilityFlag[] = [...extra];
+        const markers: AnyUiFlag[] = [...extra];
 
         for (const state of states) {
             if (state.activity === "loading") {
                 activity = "loading";
             }
-            availability.push(...state.availability);
+            markers.push(...state.markers);
         }
 
-        return new UiState(validity, activity, availability);
+        return new UiState(validity, activity, markers);
     }
 
-    /** `true` if the field carries **at least one** of the given flags. */
-    has(...flags: UiFlag[]): boolean {
-        return flags.some((flag) => this.holds(flag));
-    }
-
-    /** `true` if the field carries **every** given flag. */
-    hasEvery(...flags: UiFlag[]): boolean {
+    /** ET — `true` si le champ porte **tous** les flags donnés. */
+    hasFlag(...flags: AnyUiFlag[]): boolean {
         return flags.every((flag) => this.holds(flag));
     }
 
-    /** Flat projection — handy for debugging and for rendering the raw state. */
-    get flags(): readonly UiFlag[] {
-        return [this.validity, this.activity, ...this.availability];
+    /** OU — `true` si le champ porte **au moins un** des flags donnés. */
+    hasAny(...flags: AnyUiFlag[]): boolean {
+        return flags.some((flag) => this.holds(flag));
+    }
+
+    /** Projection à plat — pour le débogage et le rendu de l'état brut. */
+    get flags(): readonly AnyUiFlag[] {
+        return [this.validity, this.activity, ...this.markers];
     }
 
     equals(other: UiState): boolean {
         return this.validity === other.validity
             && this.activity === other.activity
-            && this.availability.length === other.availability.length
-            && this.availability.every((flag, i) => flag === other.availability[i]);
+            && this.markers.length === other.markers.length
+            && this.markers.every((flag, i) => flag === other.markers[i]);
     }
 
-    private holds(flag: UiFlag): boolean {
+    private holds(flag: AnyUiFlag): boolean {
         return this.validity === flag
             || this.activity === flag
-            || this.availability.includes(flag as AvailabilityFlag);
+            || this.markers.includes(flag);
     }
 }

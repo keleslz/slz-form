@@ -33,7 +33,7 @@ describe("régressions", () => {
         form.mount();
         await wait(10);
 
-        expect(form.snapshot.isValid).toBe(true);
+        expect(form.snapshot.hasFlag("valid")).toBe(true);
     });
 
     it("B2 — un champ obligatoire et vide invalide le formulaire, même non touché", async () => {
@@ -42,7 +42,7 @@ describe("régressions", () => {
         form.mount();
         await wait(10);
 
-        expect(form.snapshot.isValid).toBe(false);
+        expect(form.snapshot.hasFlag("valid")).toBe(false);
     });
 
     it("B3 — un champ non touché n'affiche pas d'erreur mais porte le verdict", async () => {
@@ -52,9 +52,9 @@ describe("régressions", () => {
         form.mount();
         await wait(10);
 
-        expect(field.snapshot.validity).toBe("pristine");
-        expect(field.snapshot.showError).toBe(false);
-        expect(field.snapshot.isBlocking).toBe(true);
+        expect(field.snapshot.ui.validity).toBe("pristine");
+        expect(field.snapshot.hasFlag("error")).toBe(false);
+        expect(field.snapshot.errors.length > 0).toBe(true);
     });
 
     it("B4 — un champ invisible et obligatoire ne bloque ni la soumission ni le payload", async () => {
@@ -69,7 +69,7 @@ describe("régressions", () => {
         form.mount();
         await wait(20);
 
-        expect(hidden.snapshot.isVisible).toBe(false);
+        expect(hidden.snapshot.hasFlag("invisible")).toBe(true);
         await expect(form.submit()).resolves.toBe(true);
         expect(form.values()).not.toHaveProperty("y");
     });
@@ -142,11 +142,11 @@ describe("régressions", () => {
         pwd.change("abc");
         confirm.change("abc");
         await wait(20);
-        expect(confirm.snapshot.validity).toBe("valid");
+        expect(confirm.snapshot.ui.validity).toBe("valid");
 
         pwd.change("xyz");
         await wait(30);
-        expect(confirm.snapshot.validity).toBe("error");
+        expect(confirm.snapshot.ui.validity).toBe("error");
     });
 
     it("B8 — une chaîne synchrone a → b → c va jusqu'au bout", async () => {
@@ -198,7 +198,7 @@ describe("régressions", () => {
         strict.mount();
         checkbox.change(false);
         await wait(20);
-        expect(checkbox.snapshot.validity).toBe("error");
+        expect(checkbox.snapshot.ui.validity).toBe("error");
 
         const lenient = new FormController<{ c: boolean }>({ name: "b11b" });
         const flag = lenient.field("c", { required: true });
@@ -206,7 +206,7 @@ describe("régressions", () => {
         lenient.mount();
         flag.change(false);
         await wait(20);
-        expect(flag.snapshot.validity).toBe("valid");
+        expect(flag.snapshot.ui.validity).toBe("valid");
     });
 
     it("B12 — un échec de chargement est signalé, pas confondu avec une liste vide", async () => {
@@ -273,7 +273,7 @@ describe("régressions", () => {
         form.mount();
         await wait(40);
 
-        expect(field.snapshot.isLocked).toBe(false);
-        expect(field.snapshot.isLoading).toBe(false);
+        expect(field.snapshot.hasFlag("locked")).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
     });
 });

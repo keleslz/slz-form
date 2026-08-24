@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import type {
+    AnyFormFlag,
     ArrayNameOf,
     FieldsShape,
     FormController,
+    FormFlag,
     FormSnapshot,
     MetaOf,
     ValueOf,
@@ -11,12 +13,23 @@ import type { RowOf } from "slz-form";
 import { useFieldOn, type UseFieldParams, type UseFieldResult } from "./useField";
 import { useFieldArrayOn, type UseFieldArrayResult } from "./useFieldArray";
 
+/**
+ * Ce qu'un formulaire rend — mêmes règles qu'un champ : des flags, des données,
+ * des actions.
+ *
+ * ```tsx
+ * <button disabled={!form.hasFlag("valid", "idle")}>Envoyer</button>
+ * ```
+ */
 export interface UseFormResult {
     snapshot: FormSnapshot;
     values: Readonly<Record<string, unknown>>;
     errors: Readonly<Record<string, readonly string[]>>;
-    isValid: boolean;
-    isSubmitting: boolean;
+    flags: readonly FormFlag[];
+    /** ET — le formulaire porte **tous** ces flags. */
+    hasFlag: (...flags: AnyFormFlag[]) => boolean;
+    /** OU — le formulaire porte **au moins un** de ces flags. */
+    hasAny: (...flags: AnyFormFlag[]) => boolean;
     submit: () => Promise<boolean>;
     reset: () => void;
 }
@@ -73,13 +86,22 @@ export function hooksFor<TFields extends FieldsShape>(form: FormController<TFiel
         const reset = useCallback(() => {
             form.reset();
         }, []);
+        const hasFlag = useCallback(
+            (...flags: AnyFormFlag[]) => snapshot.hasFlag(...flags),
+            [snapshot],
+        );
+        const hasAny = useCallback(
+            (...flags: AnyFormFlag[]) => snapshot.hasAny(...flags),
+            [snapshot],
+        );
 
         return {
             snapshot,
             values: snapshot.values,
             errors: snapshot.errors,
-            isValid: snapshot.isValid,
-            isSubmitting: snapshot.isSubmitting,
+            flags: snapshot.flags,
+            hasFlag,
+            hasAny,
             submit,
             reset,
         };

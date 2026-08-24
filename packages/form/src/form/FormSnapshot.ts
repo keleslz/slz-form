@@ -1,28 +1,34 @@
-import type { ValidityFlag } from "../state";
+import type { AnyFormFlag, FormFlag } from "./FormFlag";
+import type { UiState } from "../state";
 import type { FormStatus } from "./FormView";
 
+/** Un champ, vu du formulaire : ses flags et ses données. */
 export interface FieldSummary {
     readonly name: string;
     readonly value: unknown;
-    /** Ce qu'on affiche — `pristine` tant que le champ n'a pas été touché. */
-    readonly validity: ValidityFlag;
+    readonly ui: UiState;
+    /**
+     * Les constats bloquants. `errors` vide **est** le verdict « ce champ ne
+     * bloque pas » — le flag `error`, lui, dit seulement ce qu'on affiche.
+     */
     readonly errors: readonly string[];
-    /** Le verdict, indépendant de l'interaction : c'est lui qui décide de `isValid`. */
-    readonly blocking: boolean;
-    readonly visible: boolean;
-    readonly mounted: boolean;
 }
 
-/** L'état d'une liste de lignes, vu du formulaire parent. */
+/** Une liste de lignes, vue du formulaire parent. */
 export interface ArraySummary {
     readonly name: string;
-    readonly valid: boolean;
+    readonly ui: UiState;
     readonly values: readonly Readonly<Record<string, unknown>>[];
+    /** Les constats bloquants de toutes ses lignes, à plat. */
+    readonly errors: readonly string[];
 }
 
 /**
  * The form's state at an instant T — an aggregate over its fields, kept
  * deliberately thin (invariant 21).
+ *
+ * Comme un champ : des **flags**, lus par `hasFlag` / `hasAny`, et des
+ * **données**. Aucun booléen d'état (invariant 32).
  *
  * Consuming it is opt-in: subscribing here means "I care about the whole form"
  * (a submit button, a debug panel). Fields never read it, so a change on one
@@ -47,26 +53,31 @@ export class FormSnapshot {
     }
 
     /**
-     * Comptent seuls les champs **montés et visibles** : un champ démonté ou
-     * masqué ne fait pas partie du formulaire qu'on remplit. Sans ça, un champ
-     * conditionnel obligatoire mais invisible rendait la soumission impossible
-     * sans que l'utilisateur puisse rien y faire.
+     * ET — le formulaire porte **tous** ces flags.
      *
-     * Le critère est `blocking`, pas `validity` : un formulaire prérempli et
-     * correct est valide même si personne n'a encore touché à ses champs.
+     * ```tsx
+     * <button disabled={!form.hasFlag("valid", "idle")}>Envoyer</button>
+     * ```
      */
-    get isValid(): boolean {
-        return this.contributing.every((field) => !field.blocking)
-            && this.arrays.every((rows) => rows.valid);
+    hasFlag(...flags: AnyFormFlag[]): boolean {
+        return flags.every((flag) => this.holds(flag));
     }
 
-    /** Les champs qui pèsent sur la validité et sur le payload. */
-    private get contributing(): readonly FieldSummary[] {
-        return this.fields.filter((field) => field.mounted && field.visible);
+    /** OU — le formulaire porte **au moins un** de ces flags. */
+    hasAny(...flags: AnyFormFlag[]): boolean {
+        return flags.some((flag) => this.holds(flag));
     }
 
-    get isSubmitting(): boolean {
-        return this.status === "submitting";
+    /** Projection à plat — débogage, rendu de l'état brut. */
+    get flags(): readonly FormFlag[] {
+        const flags: FormFlag[] = [this.validity, this.status];
+        if (this.isLoading) {
+            flags.push("loading");
+        }
+        if (this.isTouched) {
+            flags.push("touched");
+        }
+        return flags;
     }
 
     get values(): Readonly<Record<string, unknown>> {
@@ -87,6 +98,11 @@ export class FormSnapshot {
                 errors[field.name] = field.errors;
             }
         }
+        for (const rows of this.arrays) {
+            if (rows.errors.length > 0) {
+                errors[rows.name] = rows.errors;
+            }
+        }
         return errors;
     }
 
@@ -102,26 +118,75 @@ export class FormSnapshot {
             && this.arrays.length === other.arrays.length
             && this.arrays.every((rows, i) => sameArray(rows, other.arrays[i]));
     }
+
+    /**
+     * Le verdict, pas l'affichage.
+     *
+     * Comptent seuls les champs **montés et visibles** : un champ démonté ou
+     * masqué ne fait pas partie du formulaire qu'on remplit. Sans ça, un champ
+     * conditionnel obligatoire mais invisible rendait la soumission impossible
+     * sans que l'utilisateur puisse rien y faire.
+     *
+     * Le critère est `errors`, pas le flag `error` du champ : un formulaire
+     * prérempli et correct est valide même si personne n'a encore rien touché
+     * (arbitrage 24).
+     */
+    private get validity(): FormValidity {
+        const clean = this.contributing.every((field) => field.errors.length === 0)
+            && this.arrays.every((rows) => rows.errors.length === 0);
+        return clean ? "valid" : "error";
+    }
+
+    /** Les champs qui pèsent sur la validité et sur le payload. */
+    private get contributing(): readonly FieldSummary[] {
+        return this.fields.filter((field) => field.ui.hasFlag("mounted") && !field.ui.hasFlag("invisible"));
+    }
+
+    private get isLoading(): boolean {
+        return this.contributing.some((field) => field.ui.hasFlag("loading"))
+            || this.arrays.some((rows) => rows.ui.hasFlag("loading"));
+    }
+
+    private get isTouched(): boolean {
+        return this.fields.some((field) => field.ui.hasFlag("touched"));
+    }
+
+    private holds(flag: AnyFormFlag): boolean {
+        switch (flag) {
+            case "valid":
+            case "error":
+                return this.validity === flag;
+            case "loading":
+                return this.isLoading;
+            case "touched":
+                return this.isTouched;
+            default:
+                return this.status === flag;
+        }
+    }
 }
+
+type FormValidity = "valid" | "error";
 
 function sameSummary(a: FieldSummary, b: FieldSummary | undefined): boolean {
     return b !== undefined
         && a.name === b.name
         && Object.is(a.value, b.value)
-        && a.validity === b.validity
-        && a.blocking === b.blocking
-        && a.visible === b.visible
-        && a.mounted === b.mounted
-        && a.errors.length === b.errors.length
-        && a.errors.every((message, i) => message === b.errors[i]);
+        && a.ui.equals(b.ui)
+        && sameMessages(a.errors, b.errors);
 }
 
 function sameArray(a: ArraySummary, b: ArraySummary | undefined): boolean {
     return b !== undefined
         && a.name === b.name
-        && a.valid === b.valid
+        && a.ui.equals(b.ui)
+        && sameMessages(a.errors, b.errors)
         && a.values.length === b.values.length
         && a.values.every((row, i) => sameRow(row, b.values[i]));
+}
+
+function sameMessages(a: readonly string[], b: readonly string[]): boolean {
+    return a.length === b.length && a.every((message, i) => message === b[i]);
 }
 
 function sameRow(a: Readonly<Record<string, unknown>>, b: Readonly<Record<string, unknown>> | undefined): boolean {

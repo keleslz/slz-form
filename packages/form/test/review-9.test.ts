@@ -39,7 +39,7 @@ describe("neuvième tour de revue", () => {
             form.mount();
 
             field.change("libre@x.com");
-            await until(() => field.snapshot.validity === "valid", { timeout: 2000 });
+            await until(() => field.snapshot.ui.validity === "valid", { timeout: 2000 });
             await expect(form.submit(), label).resolves.toBe(true);
 
             // La vérification distante casse : la nouvelle valeur n'est jugée
@@ -49,7 +49,7 @@ describe("neuvième tour de revue", () => {
             field.change("doublon@x.com");
             await until(() => !field.isBusy, { timeout: 2000 });
 
-            expect(field.snapshot.isBlocking, label).toBe(true);
+            expect(field.snapshot.errors.length > 0, label).toBe(true);
             await expect(form.submit(), label).resolves.toBe(false);
         }
     });
@@ -81,7 +81,7 @@ describe("neuvième tour de revue", () => {
 
         // La valeur corrigée n'est pas jugée : elle bloque, mais pas avec le
         // message d'une autre saisie.
-        expect(field.snapshot.isBlocking).toBe(true);
+        expect(field.snapshot.errors.length > 0).toBe(true);
         expect(field.snapshot.errors).not.toContain("déjà pris");
     });
 
@@ -102,7 +102,7 @@ describe("neuvième tour de revue", () => {
         form.mount();
 
         field.change("premier@x.com");
-        await until(() => field.snapshot.validity === "valid", { timeout: 2000 });
+        await until(() => field.snapshot.ui.validity === "valid", { timeout: 2000 });
 
         field.change("rempli@x.com");
         await until(() => !field.isBusy, { timeout: 2000 });
@@ -147,7 +147,7 @@ describe("neuvième tour de revue", () => {
         await until(() => !field.isBusy, { timeout: 2000 });
 
         // La règle a conclu : elle avertit sans bloquer, et la soumission passe.
-        expect(field.snapshot.isBlocking).toBe(false);
+        expect(field.snapshot.errors.length > 0).toBe(false);
         expect(field.snapshot.warnings).toEqual(["Vérification indisponible"]);
         await expect(form.submit()).resolves.toBe(true);
     });
@@ -164,7 +164,7 @@ describe("neuvième tour de revue", () => {
         field.mount();
         form.mount();
         field.change("x");
-        await until(() => field.snapshot.isBlocking, { timeout: 2000 });
+        await until(() => field.snapshot.errors.length > 0, { timeout: 2000 });
 
         expect(field.snapshot.issues.map((issue) => issue.code)).toContain("unverified");
     });
@@ -182,7 +182,7 @@ describe("neuvième tour de revue", () => {
         field.change("x");
         await until(() => !field.isBusy, { timeout: 2000 });
 
-        expect(field.snapshot.isBlocking).toBe(true);
+        expect(field.snapshot.errors.length > 0).toBe(true);
         await expect(form.submit()).resolves.toBe(false);
     });
 
@@ -199,7 +199,7 @@ describe("neuvième tour de revue", () => {
         field.mount();
         form.mount();
         field.change("x");
-        await until(() => field.snapshot.isLoading, { timeout: 1000 });
+        await until(() => field.snapshot.hasFlag("loading"), { timeout: 1000 });
 
         validator.reset();
         await wait(120);

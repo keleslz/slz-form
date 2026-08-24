@@ -50,8 +50,8 @@ describe("huitième tour de revue", () => {
             field.change("ada2@lovelace.dev");
             await wait(80);
 
-            expect(field.snapshot.isBlocking, label).toBe(true);
-            expect(form.snapshot.isValid, label).toBe(false);
+            expect(field.snapshot.errors.length > 0, label).toBe(true);
+            expect(form.snapshot.hasFlag("valid"), label).toBe(false);
             await expect(form.submit(), label).resolves.toBe(false);
         }
     });
@@ -81,7 +81,7 @@ describe("huitième tour de revue", () => {
         field.change("second");
         await wait(80);
 
-        expect(field.snapshot.isBlocking).toBe(true);
+        expect(field.snapshot.errors.length > 0).toBe(true);
         await expect(form.submit()).resolves.toBe(false);
     });
 
@@ -101,7 +101,7 @@ describe("huitième tour de revue", () => {
         await wait(80);
 
         expect(field.snapshot.errors).toEqual(["This field is required"]);
-        expect(field.snapshot.isBlocking).toBe(true);
+        expect(field.snapshot.errors.length > 0).toBe(true);
     });
 
     it("une remise à zéro de constats partagés prévient tous les champs", async () => {
@@ -144,10 +144,10 @@ describe("huitième tour de revue", () => {
 
         pwd.change("secret");
         confirm.change("secret");
-        await until(() => confirm.snapshot.validity === "valid", { timeout: 2000 });
+        await until(() => confirm.snapshot.ui.validity === "valid", { timeout: 2000 });
 
         pwd.change("autre");
-        await until(() => confirm.snapshot.validity === "error", { timeout: 2000 });
+        await until(() => confirm.snapshot.ui.validity === "error", { timeout: 2000 });
         expect(confirm.snapshot.errors).toEqual(["ne correspond pas"]);
     });
 

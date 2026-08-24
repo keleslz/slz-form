@@ -22,9 +22,9 @@ describe("propriétés revendiquées", () => {
         field.mount();
         form.mount();
 
-        expect(field.snapshot.touched).toBe(false);
+        expect(field.snapshot.hasFlag("touched")).toBe(false);
         field.blur();
-        expect(field.snapshot.touched).toBe(true);
+        expect(field.snapshot.hasFlag("touched")).toBe(true);
     });
 
     it("soumettre fait partir la validation différée sans attendre son délai", async () => {
@@ -147,11 +147,11 @@ describe("propriétés revendiquées", () => {
         form.mount();
 
         const pending = form.submit();
-        await until(() => field.snapshot.isLocked);
-        expect(field.snapshot.submitting).toBe(true);
+        await until(() => field.snapshot.hasFlag("locked"));
+        expect(form.getSnapshot().hasFlag("submitting")).toBe(true);
 
         await pending;
-        expect(field.snapshot.isLocked).toBe(false);
+        expect(field.snapshot.hasFlag("locked")).toBe(false);
     });
 
     it("une ligne invalide fait échouer la soumission du formulaire", async () => {
@@ -257,10 +257,10 @@ describe("propriétés revendiquées", () => {
         target.mount();
         form.mount();
         await wait(20);
-        expect(target.snapshot.isVisible).toBe(true);
+        expect(target.snapshot.hasFlag("invisible")).toBe(false);
 
         source.change("cacher");
-        await until(() => !target.snapshot.isVisible);
-        expect(target.snapshot.isVisible).toBe(false);
+        await until(() => target.snapshot.hasFlag("invisible"));
+        expect(target.snapshot.hasFlag("invisible")).toBe(true);
     });
 });

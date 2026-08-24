@@ -5,8 +5,8 @@ import type {
     FormController,
     IBehavior,
     IValidator,
+    AnyUiFlag,
     OptionValue,
-    UiFlag,
     UiState,
     ValidationIssue,
 } from "slz-form";
@@ -35,6 +35,11 @@ export interface UseFieldParams<V = string, M = never> {
     readOnly?: boolean;
 }
 
+/**
+ * Ce qu'un champ rend : des **flags** pour l'état, des **données** pour le
+ * contenu, des handlers pour l'interaction. Aucun booléen d'état (invariant 32)
+ * — un besoin de `isX` signale un flag manquant, pas un accesseur à ajouter.
+ */
 export interface UseFieldResult<V = string, M = never> {
     name: string;
     value: V | undefined;
@@ -46,19 +51,11 @@ export interface UseFieldResult<V = string, M = never> {
     /** Les constats non bloquants. */
     warnings: readonly string[];
     ui: UiState;
-    flags: readonly UiFlag[];
-    hasFlag: (...flags: UiFlag[]) => boolean;
-    isPristine: boolean;
-    isValid: boolean;
-    isLoading: boolean;
-    isLocked: boolean;
-    isReadOnly: boolean;
-    isVisible: boolean;
-    showError: boolean;
-    touched: boolean;
-    focused: boolean;
-    required: boolean;
-    submitting: boolean;
+    flags: readonly AnyUiFlag[];
+    /** ET — le champ porte **tous** ces flags. */
+    hasFlag: (...flags: AnyUiFlag[]) => boolean;
+    /** OU — le champ porte **au moins un** de ces flags. */
+    hasAny: (...flags: AnyUiFlag[]) => boolean;
     onChange: (next: V | undefined) => void;
     onBlur: () => void;
     onFocus: () => void;
@@ -128,7 +125,8 @@ export function useFieldOn<V, M>(
     const onChange = useCallback((next: V | undefined) => controller.change(next), [controller]);
     const onBlur = useCallback(() => controller.blur(), [controller]);
     const onFocus = useCallback(() => controller.focus(), [controller]);
-    const hasFlag = useCallback((...flags: UiFlag[]) => snapshot.ui.has(...flags), [snapshot]);
+    const hasFlag = useCallback((...flags: AnyUiFlag[]) => snapshot.hasFlag(...flags), [snapshot]);
+    const hasAny = useCallback((...flags: AnyUiFlag[]) => snapshot.hasAny(...flags), [snapshot]);
 
     return {
         name: snapshot.name,
@@ -139,19 +137,9 @@ export function useFieldOn<V, M>(
         issues: snapshot.issues,
         warnings: snapshot.warnings,
         ui: snapshot.ui,
-        flags: snapshot.ui.flags,
+        flags: snapshot.flags,
         hasFlag,
-        isPristine: snapshot.isPristine,
-        isValid: snapshot.isValid,
-        isLoading: snapshot.isLoading,
-        isLocked: snapshot.isLocked,
-        isReadOnly: snapshot.isReadOnly,
-        isVisible: snapshot.isVisible,
-        showError: snapshot.showError,
-        touched: snapshot.touched,
-        focused: snapshot.focused,
-        required: snapshot.required,
-        submitting: snapshot.submitting,
+        hasAny,
         onChange,
         onBlur,
         onFocus,

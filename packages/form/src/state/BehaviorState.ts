@@ -1,4 +1,4 @@
-import type { ActivityFlag, AvailabilityFlag, UiFlag } from "./UiFlag";
+import type { ActivityFlag, AnyUiFlag } from "./UiFlag";
 
 /**
  * The slice of UI state a **single** Behavior owns.
@@ -8,30 +8,46 @@ import type { ActivityFlag, AvailabilityFlag, UiFlag } from "./UiFlag";
  * the single source of truth (invariant 2). A Behavior instance carries
  * *configuration* (a URL, a debounce); never field state.
  *
- * A Behavior never carries the validity axis — that belongs to the Validator
+ * A Behavior never carries the validity group — that belongs to the Validator
  * (invariant 13).
  */
 export class BehaviorState {
     static readonly neutral: BehaviorState = new BehaviorState("idle", []);
 
     readonly activity: ActivityFlag;
-    readonly availability: readonly AvailabilityFlag[];
+    readonly markers: readonly AnyUiFlag[];
 
-    constructor(activity: ActivityFlag, availability: readonly AvailabilityFlag[]) {
+    constructor(activity: ActivityFlag, markers: readonly AnyUiFlag[]) {
         this.activity = activity;
-        this.availability = Object.freeze([...new Set(availability)].sort());
+        this.markers = Object.freeze([...new Set(markers)].sort());
     }
 
-    // ── activity axis (exclusive: setting one replaces the other) ─────────
+    // ── exclusive group (setting one replaces the other) ──────────────────
     loading(): BehaviorState {
-        return this.activity === "loading" ? this : new BehaviorState("loading", this.availability);
+        return this.activity === "loading" ? this : new BehaviorState("loading", this.markers);
     }
 
     idle(): BehaviorState {
-        return this.activity === "idle" ? this : new BehaviorState("idle", this.availability);
+        return this.activity === "idle" ? this : new BehaviorState("idle", this.markers);
     }
 
-    // ── availability axis (cumulative: added / removed independently) ─────
+    // ── cumulative markers (added / removed independently) ────────────────
+    /**
+     * Pose un flag — un des flags du moteur, ou **un des tiens**.
+     *
+     * C'est ce qui rend l'inconnu exprimable : un behavior peut publier
+     * `mark("skeleton")` et la vue le lire par `hasFlag("skeleton")`, sans que
+     * le moteur ait à connaître le mot.
+     */
+    mark(flag: AnyUiFlag): BehaviorState {
+        return this.with(flag);
+    }
+
+    /** Cesse d'émettre un flag — l'absence vaut défaut. */
+    unmark(flag: AnyUiFlag): BehaviorState {
+        return this.without(flag);
+    }
+
     lock(): BehaviorState {
         return this.with("locked");
     }
@@ -62,27 +78,27 @@ export class BehaviorState {
         return BehaviorState.neutral;
     }
 
-    has(flag: UiFlag): boolean {
-        return this.activity === flag || this.availability.includes(flag as AvailabilityFlag);
+    has(flag: AnyUiFlag): boolean {
+        return this.activity === flag || this.markers.includes(flag);
     }
 
     equals(other: BehaviorState): boolean {
         return this.activity === other.activity
-            && this.availability.length === other.availability.length
-            && this.availability.every((flag, i) => flag === other.availability[i]);
+            && this.markers.length === other.markers.length
+            && this.markers.every((flag, i) => flag === other.markers[i]);
     }
 
-    private with(flag: AvailabilityFlag): BehaviorState {
-        if (this.availability.includes(flag)) {
+    private with(flag: AnyUiFlag): BehaviorState {
+        if (this.markers.includes(flag)) {
             return this;
         }
-        return new BehaviorState(this.activity, [...this.availability, flag]);
+        return new BehaviorState(this.activity, [...this.markers, flag]);
     }
 
-    private without(flag: AvailabilityFlag): BehaviorState {
-        if (!this.availability.includes(flag)) {
+    private without(flag: AnyUiFlag): BehaviorState {
+        if (!this.markers.includes(flag)) {
             return this;
         }
-        return new BehaviorState(this.activity, this.availability.filter((f) => f !== flag));
+        return new BehaviorState(this.activity, this.markers.filter((f) => f !== flag));
     }
 }

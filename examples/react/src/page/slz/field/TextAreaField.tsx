@@ -9,18 +9,18 @@ export function TextAreaField(
     const { label, hint, rows, ...params } = props;
     const field = useField({ requiredMessage: REQUIRED_MESSAGE, ...params });
 
-    if (!field.isVisible) {
+    if (field.hasFlag("invisible")) {
         return null;
     }
 
     return (
         <FieldShell
             id={shellId(params.name)} label={label} hint={hint}
-            required={field.required} showError={field.showError} error={field.error}
-            isLoading={field.isLoading} badges={field.flags}
+            required={field.hasFlag("required")} showError={field.hasFlag("error")} error={field.error}
+            isLoading={field.hasFlag("loading")} badges={field.flags}
         >
             <TextAreaInput
-                rows={rows} value={field.value ?? ""} disabled={field.isLocked}
+                rows={rows} value={field.value ?? ""} disabled={field.hasFlag("locked")}
                 onChange={field.onChange} onBlur={field.onBlur} onFocus={field.onFocus}
             />
         </FieldShell>

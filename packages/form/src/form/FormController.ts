@@ -12,7 +12,6 @@ import type { FieldChanges } from "../behavior/IBehavior";
 import { FieldArrayController } from "../array/FieldArrayController";
 import type { ArrayNameOf, PlainNameOf, RowOf } from "../array/FieldArray";
 import { Lifecycle } from "../lifecycle";
-import { UiState } from "../state";
 import { DependencyGraph } from "./DependencyGraph";
 import { FormSnapshot, type FieldSummary } from "./FormSnapshot";
 import type { FormStatus, FormView } from "./FormView";
@@ -289,18 +288,17 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         if (!rows) {
             return null;
         }
-        const blocking = !rows.isValid;
+        const ui = rows.ui;
+        const errors = rows.errors;
         return {
             name,
             value: rows.values(),
-            ui: new UiState(blocking ? "error" : "valid", rows.isBusy ? "loading" : "idle", []),
-            validity: blocking ? "error" : "valid",
-            errors: [],
+            ui,
+            errors,
             issues: [],
-            blocking,
-            visible: true,
             options: [],
-            mounted: true,
+            hasFlag: (...flags) => ui.hasFlag(...flags),
+            hasAny: (...flags) => ui.hasAny(...flags),
         };
     }
 
@@ -425,7 +423,7 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             }
         }
 
-        const valid = settled && rowsValid && this.buildSnapshot().isValid;
+        const valid = settled && rowsValid && this.buildSnapshot().hasFlag("valid");
         this.setStatus(valid ? "submitted" : "idle");
         return valid;
     }
@@ -557,17 +555,15 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             summaries.push({
                 name,
                 value: snapshot.value,
-                validity: snapshot.ui.validity,
+                ui: snapshot.ui,
                 errors: snapshot.errors,
-                blocking: snapshot.isBlocking,
-                visible: snapshot.isVisible,
-                mounted: snapshot.mounted,
             });
         }
         const arrays = [...this.arrays.entries()].map(([name, rows]) => ({
             name,
-            valid: rows.isValid,
+            ui: rows.ui,
             values: rows.values(),
+            errors: rows.errors,
         }));
         return new FormSnapshot(this.name, this.status, summaries, arrays);
     }

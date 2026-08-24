@@ -36,7 +36,7 @@ describe("septième tour de revue", () => {
         await until(() => field.snapshot.errors.length > 0, { timeout: 2000 });
 
         expect(field.snapshot.errors).toEqual(["le serveur refuse cette valeur"]);
-        expect(field.snapshot.isBlocking).toBe(true);
+        expect(field.snapshot.errors.length > 0).toBe(true);
         await expect(form.submit()).resolves.toBe(false);
     });
 
@@ -109,7 +109,7 @@ describe("septième tour de revue", () => {
 
         field.change("premier");
         await until(() => field.snapshot.errors.length > 0);
-        expect(field.snapshot.validity).toBe("error");
+        expect(field.snapshot.ui.validity).toBe("error");
 
         field.change("second");
         await wait(80);
@@ -123,7 +123,7 @@ describe("septième tour de revue", () => {
             expect(state.errors).toEqual([]);
         }
         expect(validator.hasError).toBe(validator.firstError !== null);
-        expect(field.snapshot.showError).toBe(field.snapshot.error !== undefined);
+        expect(field.snapshot.hasFlag("error")).toBe(field.snapshot.error !== undefined);
     });
 
     it("composer ne dispense pas un membre de déclarer ce qu'il lit", async () => {
@@ -204,10 +204,10 @@ describe("septième tour — coûts et restitutions", () => {
         field.mount();
         form.mount();
         await wait(20);
-        expect(field.snapshot.isReadOnly).toBe(true);
+        expect(field.snapshot.hasFlag("readonly")).toBe(true);
 
         await form.submit();
-        expect(field.snapshot.isReadOnly).toBe(false);
+        expect(field.snapshot.hasFlag("readonly")).toBe(false);
     });
 
     it("abandonner une validation écarte son résultat tardif", async () => {
@@ -222,13 +222,13 @@ describe("septième tour — coûts et restitutions", () => {
         field.mount();
         form.mount();
         field.change("x");
-        await until(() => field.snapshot.isLoading, { timeout: 1000 });
+        await until(() => field.snapshot.hasFlag("loading"), { timeout: 1000 });
 
         field.recover();
         await wait(120);
 
         // Le run abandonné ne doit pas publier son verdict après coup.
         expect(field.snapshot.errors).toEqual([]);
-        expect(field.snapshot.isLoading).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
     });
 });

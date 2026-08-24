@@ -83,7 +83,7 @@ describe("second tour de revue", () => {
         expect(calls).toBe(2);
         expect(rows.row(first)?.form.get("city")?.snapshot.value).toBe("ville-75");
         expect(rows.row(second)?.form.get("city")?.snapshot.value).toBe("ville-13");
-        expect(rows.row(first)?.form.get("city")?.snapshot.isLocked).toBe(false);
+        expect(rows.row(first)?.form.get("city")?.snapshot.hasFlag("locked")).toBe(false);
     });
 
     it("reset() recalcule les tranches au lieu de les effacer", async () => {
@@ -98,16 +98,16 @@ describe("second tour de revue", () => {
         other.mount();
         form.mount();
         await wait(30);
-        expect(other.snapshot.isVisible).toBe(false);
-        expect(form.snapshot.isValid).toBe(true);
+        expect(other.snapshot.hasFlag("invisible")).toBe(true);
+        expect(form.snapshot.hasFlag("valid")).toBe(true);
 
         form.reset();
         await wait(40);
 
         // La condition tient toujours : le champ doit rester masqué, donc hors
         // du formulaire — sinon il réapparaît et bloque la soumission.
-        expect(other.snapshot.isVisible).toBe(false);
-        expect(form.snapshot.isValid).toBe(true);
+        expect(other.snapshot.hasFlag("invisible")).toBe(true);
+        expect(form.snapshot.hasFlag("valid")).toBe(true);
     });
 
     it("un constat serveur porte sur un champ obligatoire vide, puis s'efface", async () => {
@@ -174,8 +174,8 @@ describe("second tour de revue", () => {
         await wait(30);
 
         expect(field.snapshot.value).toBe("posée par l'API");
-        expect(field.snapshot.touched).toBe(false);
-        expect(field.snapshot.validity).toBe("pristine");
+        expect(field.snapshot.hasFlag("touched")).toBe(false);
+        expect(field.snapshot.ui.validity).toBe("pristine");
     });
 
     it("un démontage en vol ne laisse pas la tranche figée", async () => {
@@ -191,11 +191,11 @@ describe("second tour de revue", () => {
         field.mount();
         form.mount();
         await wait(20);
-        expect(field.snapshot.isLoading).toBe(true);
+        expect(field.snapshot.hasFlag("loading")).toBe(true);
 
         field.unmount();
-        expect(field.snapshot.isLoading).toBe(false);
-        expect(field.snapshot.isLocked).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        expect(field.snapshot.hasFlag("locked")).toBe(false);
     });
 
     it("readOnly piloté par la vue est bien porté", () => {
@@ -205,8 +205,8 @@ describe("second tour de revue", () => {
         form.mount();
 
         field.update({ readOnly: true });
-        expect(field.snapshot.isReadOnly).toBe(true);
-        expect(field.snapshot.isLocked).toBe(false);
+        expect(field.snapshot.hasFlag("readonly")).toBe(true);
+        expect(field.snapshot.hasFlag("locked")).toBe(false);
     });
 
     it("les identifiants de ligne ne sont jamais réattribués", () => {

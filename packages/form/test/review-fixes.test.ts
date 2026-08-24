@@ -90,11 +90,11 @@ describe("constats de revue", () => {
         form.field("r", { required: true }).mount();
         form.mount();
         await wait(20);
-        expect(form.snapshot.isValid).toBe(false);
+        expect(form.snapshot.hasFlag("valid")).toBe(false);
 
         form.reset();
         await wait(30);
-        expect(form.snapshot.isValid).toBe(false);
+        expect(form.snapshot.hasFlag("valid")).toBe(false);
     });
 
     it("lockUntilValid ne verrouille pas un champ prérempli et correct", async () => {
@@ -107,9 +107,9 @@ describe("constats de revue", () => {
         form.mount();
         await wait(40);
 
-        expect(src.snapshot.validity).toBe("pristine");
-        expect(src.snapshot.isBlocking).toBe(false);
-        expect(dst.snapshot.isLocked).toBe(false);
+        expect(src.snapshot.ui.validity).toBe("pristine");
+        expect(src.snapshot.errors.length > 0).toBe(false);
+        expect(dst.snapshot.hasFlag("locked")).toBe(false);
     });
 
     it("un fan-out large n'est pas confondu avec une boucle", async () => {
@@ -161,7 +161,7 @@ describe("constats de revue", () => {
         for (const id of [a, b]) {
             const field = rows.row(id)?.form.get("city");
             expect(field?.snapshot.options).toHaveLength(1);
-            expect(field?.snapshot.isLocked).toBe(false);
+            expect(field?.snapshot.hasFlag("locked")).toBe(false);
         }
     });
 
@@ -205,7 +205,7 @@ describe("constats de revue", () => {
                 { field: "src", on: ["validity"] },
             ],
             onDependencyChanged: (_ctx, dependency) => {
-                seen.push(String(dependency.validity));
+                seen.push(String(dependency.ui.validity));
             },
         };
         class NonEmpty extends IValidator<string> {

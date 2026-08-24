@@ -20,8 +20,8 @@ export function FormDebug() {
         <>
             <div className="debug__status">
                 <span className="chip">{snapshot.status}</span>
-                <span className={`chip chip--${snapshot.isValid ? "valid" : "error"}`}>
-                    {snapshot.isValid ? "valide" : "incomplet"}
+                <span className={`chip chip--${snapshot.hasFlag("valid") ? "valid" : "error"}`}>
+                    {snapshot.hasFlag("valid") ? "valide" : "incomplet"}
                 </span>
                 <span className="chip">{snapshot.fields.length} champs</span>
                 <span className="chip" data-testid="api-calls">
@@ -32,10 +32,10 @@ export function FormDebug() {
             <table className="debug__table">
                 <tbody>
                     {snapshot.fields.map((field) => (
-                        <tr key={field.name} className={field.mounted ? "" : "is-unmounted"}>
+                        <tr key={field.name} className={field.ui.hasFlag("mounted") ? "" : "is-unmounted"}>
                             <td>{field.name}</td>
                             <td><code>{display(field.value)}</code></td>
-                            <td><span className={`chip chip--${field.validity}`}>{field.validity}</span></td>
+                            <td><span className={`chip chip--${field.ui.validity}`}>{field.ui.validity}</span></td>
                             <td className="debug__errors">{field.errors[0] ?? ""}</td>
                         </tr>
                     ))}

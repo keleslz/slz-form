@@ -9,7 +9,7 @@ import {
 } from "../behavior";
 import { Lifecycle } from "../lifecycle";
 import { BehaviorState, UiState } from "../state";
-import type { AvailabilityFlag, UiFlag, ValidityFlag } from "../state";
+import type { AnyUiFlag, ValidityFlag } from "../state";
 import {
     CompositeValidator,
     DebouncedValidator,
@@ -391,22 +391,27 @@ export class FieldController<T = string, M = never> {
         };
     };
 
-    hasFlag(...flags: UiFlag[]): boolean {
-        return this.current.ui.has(...flags);
+    /** ET — le champ porte **tous** ces flags. */
+    hasFlag(...flags: AnyUiFlag[]): boolean {
+        return this.current.ui.hasFlag(...flags);
+    }
+
+    /** OU — le champ porte **au moins un** de ces flags. */
+    hasAny(...flags: AnyUiFlag[]): boolean {
+        return this.current.ui.hasAny(...flags);
     }
 
     view(): FieldView<T, M> {
+        const snapshot = this.current;
         return {
             name: this.name,
-            value: this.current.value,
-            ui: this.current.ui,
-            validity: this.current.ui.validity,
-            errors: this.current.errors,
-            issues: this.current.issues,
-            blocking: this.current.isBlocking,
-            visible: this.current.isVisible,
-            options: this.current.options,
-            mounted: this.current.mounted,
+            value: snapshot.value,
+            ui: snapshot.ui,
+            errors: snapshot.errors,
+            issues: snapshot.issues,
+            options: snapshot.options,
+            hasFlag: (...flags) => snapshot.hasFlag(...flags),
+            hasAny: (...flags) => snapshot.hasAny(...flags),
         };
     }
 
@@ -636,7 +641,7 @@ export class FieldController<T = string, M = never> {
             // un observateur attendre indéfiniment qu'un champ prérempli
             // devienne valide.
             validity: this.current.ui.validity !== next.ui.validity
-                || this.current.isBlocking !== next.isBlocking,
+                || blocking(this.current) !== blocking(next),
             activity: this.current.ui.activity !== next.ui.activity,
         };
         this.current = next;
@@ -660,29 +665,42 @@ export class FieldController<T = string, M = never> {
                 this.validity,
                 this.statesByBehavior.values(),
                 state.status === "loading",
-                this.viewAvailability(),
+                this.ownMarkers(),
             ),
             issues: state.issues,
             options: this.options,
-            touched: this.touched,
-            focused: this.focused,
-            required: this.required,
-            submitting: this.submitting,
-            mounted: this.lifecycle.isMounted,
         });
     }
 
-    /** Ce que le contrôleur et la vue ajoutent à l'axe disponibilité. */
-    private viewAvailability(): readonly AvailabilityFlag[] {
-        const flags: AvailabilityFlag[] = [];
+    /**
+     * Les flags que le contrôleur et la vue ajoutent à ceux des behaviors.
+     *
+     * Tout ce qui était un booléen à part — l'interaction, l'obligation, la
+     * présence — est ici : c'est ce qui permet à la surface de lecture de n'être
+     * que des flags (invariant 32).
+     */
+    private ownMarkers(): readonly AnyUiFlag[] {
+        const flags: AnyUiFlag[] = [];
         // Un formulaire en cours de soumission verrouille ses champs : c'est un
         // fait de contrôleur, pas quelque chose que chaque consommateur devrait
-        // re-dériver à côté de `isLocked`.
+        // re-dériver à côté de `locked`.
         if (this.submitting || this.viewLocked) {
             flags.push("locked");
         }
         if (this.viewReadOnly) {
             flags.push("readonly");
+        }
+        if (this.required) {
+            flags.push("required");
+        }
+        if (this.touched) {
+            flags.push("touched");
+        }
+        if (this.focused) {
+            flags.push("focused");
+        }
+        if (this.lifecycle.isMounted) {
+            flags.push("mounted");
         }
         return flags;
     }
@@ -703,6 +721,17 @@ export class FieldController<T = string, M = never> {
                 return "pristine";
         }
     }
+}
+
+/**
+ * Le **verdict** : ce champ bloque-t-il, indépendamment de l'affichage ?
+ *
+ * `errors` ne retient que les constats de gravité `error`, donc en avoir un
+ * suffit. Le flag `error`, lui, reste éteint tant que le champ n'a pas été
+ * touché — un prefill ne doit pas allumer de message (arbitrage 24).
+ */
+function blocking(snapshot: { readonly errors: readonly string[] }): boolean {
+    return snapshot.errors.length > 0;
 }
 
 function isPromise(value: unknown): value is Promise<BehaviorState | void> {

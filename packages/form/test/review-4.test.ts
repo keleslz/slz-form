@@ -36,7 +36,7 @@ describe("quatrième tour de revue", () => {
 
         expect(Date.now() - started).toBeLessThan(2000);
         expect(form.snapshot.status).not.toBe("submitting");
-        expect(field.snapshot.isLocked).toBe(false);
+        expect(field.snapshot.hasFlag("locked")).toBe(false);
     });
 
     it("une garde du moteur pendant la soumission laisse le formulaire utilisable", async () => {
@@ -55,7 +55,7 @@ describe("quatrième tour de revue", () => {
         await form.submit();
 
         expect(form.snapshot.status).not.toBe("submitting");
-        expect(field.snapshot.isLocked).toBe(false);
+        expect(field.snapshot.hasFlag("locked")).toBe(false);
         await expect(form.submit()).resolves.toBeTypeOf("boolean");
     });
 
@@ -134,7 +134,7 @@ describe("quatrième tour de revue", () => {
 
         form.reset();
         await until(() => field.snapshot.errors.length === 0);
-        expect(form.snapshot.isValid).toBe(true);
+        expect(form.snapshot.hasFlag("valid")).toBe(true);
     });
 
     it("un validator peut s'annuler au démontage du champ", async () => {
@@ -245,7 +245,7 @@ describe("quatrième tour de revue", () => {
 
         expect(() => field.change("bad")).not.toThrow();
         await until(() => field.snapshot.errors.length > 0);
-        expect(field.snapshot.validity).toBe("error");
+        expect(field.snapshot.ui.validity).toBe("error");
     });
 
     it("une validation asynchrone en vol met le champ en loading", async () => {
@@ -260,11 +260,11 @@ describe("quatrième tour de revue", () => {
         form.mount();
 
         field.change("x");
-        await until(() => field.snapshot.isLoading);
-        expect(field.snapshot.isLoading).toBe(true);
+        await until(() => field.snapshot.hasFlag("loading"));
+        expect(field.snapshot.hasFlag("loading")).toBe(true);
         expect(field.isBusy).toBe(true);
 
-        await until(() => !field.snapshot.isLoading);
+        await until(() => !field.snapshot.hasFlag("loading"));
         expect(field.isBusy).toBe(false);
     });
 

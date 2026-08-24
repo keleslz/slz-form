@@ -12,7 +12,8 @@ export { BehaviorState } from "./state/BehaviorState";
 export { UiState } from "./state/UiState";
 export type {
     ActivityFlag,
-    AvailabilityFlag,
+    AnyUiFlag,
+    MarkerFlag,
     UiFlag,
     ValidityFlag,
 } from "./state/UiFlag";
@@ -72,6 +73,13 @@ export { FormRegister } from "./form/FormRegister";
 export { FormSnapshot } from "./form/FormSnapshot";
 export type { ArraySummary, FieldSummary } from "./form/FormSnapshot";
 export type { FormStatus, FormView } from "./form/FormView";
+export type {
+    AnyFormFlag,
+    FormFlag,
+    FormMarkerFlag,
+    FormSubmissionFlag,
+    FormValidityFlag,
+} from "./form/FormFlag";
 
 // ── listes répétables ─────────────────────────────────────────────────────
 export { FieldArrayController } from "./array/FieldArrayController";

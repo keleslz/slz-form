@@ -1,3 +1,4 @@
+import { UiState } from "../state";
 import type { FieldsShape } from "../field/Field";
 import type { FormController } from "../form/FormController";
 import { FieldArrayRow } from "./FieldArrayRow";
@@ -120,7 +121,26 @@ export class FieldArrayController<TRow extends FieldsShape> {
     }
 
     get isValid(): boolean {
-        return this.entries.every((row) => row.form.snapshot.isValid);
+        return this.entries.every((row) => row.form.snapshot.hasFlag("valid"));
+    }
+
+    /**
+     * Les constats bloquants de toutes les lignes, à plat.
+     *
+     * C'est ce qui rend le verdict composable : `errors` vide vaut « rien ne
+     * bloque », à tous les niveaux, y compris pour une liste imbriquée.
+     */
+    get errors(): readonly string[] {
+        return this.entries.flatMap((row) => Object.values(row.form.snapshot.errors).flat());
+    }
+
+    /** L'état d'une liste, dit avec les mots d'un champ. */
+    get ui(): UiState {
+        return new UiState(
+            this.isValid ? "valid" : "error",
+            this.isBusy ? "loading" : "idle",
+            this.mounted ? ["mounted"] : [],
+        );
     }
 
     get isBusy(): boolean {
