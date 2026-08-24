@@ -52,18 +52,46 @@ lookup({
 Aucun framework requis : ce code tourne tel quel dans un navigateur, sous Node,
 Deno ou Bun.
 
-## L'idée : l'UI est pilotée par des flags, groupés par axe
+## L'idée : l'UI est pilotée par des flags
 
-| Axe | Valeurs | Nature | Qui l'émet |
-|---|---|---|---|
-| Validité | `pristine` · `valid` · `error` | exclusif | le Validator, seul |
-| Activité | `idle` · `loading` | exclusif | Behaviors + Validator |
-| Disponibilité | `locked` · `readonly` · `invisible` | cumulatif | Behaviors + Controller + vue |
+Ce qu'un champ **est** se lit en flags ; ce qu'il **contient** se lit en données.
+Deux fonctions, et rien d'autre pour l'état :
 
-Une union plate produirait des états impossibles (`pristine` + `error`). Le
-découpage par axe rend la fusion déterministe et donne un sens précis au retrait
-d'un flag : on remplace sur un axe exclusif, on cesse d'émettre sur l'axe
-cumulatif. La lecture, elle, reste plate : `hasFlag("loading", "error")`.
+```ts
+field.hasFlag("loading", "invisible")   // ET  — toutes présentes
+field.hasAny("locked", "readonly")      // OU  — au moins une
+```
+
+| Flag | Nature | Qui l'émet |
+|---|---|---|
+| `pristine` · `valid` · `error` | s'excluent | le Validator, seul |
+| `idle` · `loading` | s'excluent | Behaviors + Validator |
+| `locked` · `readonly` · `invisible` | s'additionnent | Behaviors + Controller + vue |
+| `required` · `touched` · `focused` · `mounted` | s'additionnent | le Controller |
+| *ceux de l'application* | s'additionnent | Behaviors — `ctx.state.mark("skeleton")` |
+
+Deux natures, une règle par nature. Une union plate produirait des états
+impossibles (`pristine` + `error`) : les deux premiers groupes sont donc
+**exclusifs** et à vocabulaire fermé. Tous les autres flags **s'additionnent**,
+et l'absence vaut défaut — c'est ce qui donne un sens précis au retrait d'un
+flag : on remplace dans un groupe exclusif, on cesse d'émettre ailleurs. Un seul
+`lock()` verrouille, même si trois behaviors parlent en même temps.
+
+C'est aussi ce qui rend le vocabulaire extensible sans toucher au moteur : un
+behavior publie `mark("skeleton")`, la vue lit `hasFlag("skeleton")`, et le
+moteur n'a jamais eu à connaître le mot.
+
+Le formulaire répond aux mêmes deux fonctions, avec les mêmes mots — `valid` ·
+`error`, `idle` · `submitting` · `submitted`, `loading`, `touched` :
+
+```ts
+form.getSnapshot().hasFlag("valid", "idle");   // la soumission peut partir
+```
+
+Une nuance, structurelle : au **champ**, `error` est ce qu'on *affiche*, et il
+reste éteint tant qu'on n'a pas touché — un préremplissage n'allume rien. Au
+**formulaire**, `error` est ce qui est *vrai* : un formulaire prérempli et faux
+ne part pas. Le verdict d'un champ pris isolément, c'est `errors` non vide.
 
 ---
 

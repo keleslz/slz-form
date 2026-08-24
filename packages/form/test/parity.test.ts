@@ -10,7 +10,7 @@ import {
     type ValidationContext,
     type ValidationReport,
 } from "../src/index";
-import { copyFrom, wait } from "./helpers";
+import { copyFrom, until, wait } from "./helpers";
 
 /**
  * Le critère d'acceptation du chantier : chaque cas que l'audit avait classé
@@ -263,5 +263,33 @@ describe("parité — ce qui exigeait de modifier le cœur", () => {
         await wait(30);
         expect(other.snapshot.hasFlag("invisible")).toBe(false);
         await expect(form.submit()).resolves.toBe(false);
+    });
+
+    it("skeleton pendant un chargement : un flag de l'application suffit", async () => {
+        // Le cas qui a motivé l'ouverture du vocabulaire. Le moteur ne connaît
+        // ni « skeleton » ni ce qu'il faut en faire ; il le transporte, la vue
+        // en décide. Rien n'est capturé : tout passe par `ctx`.
+        const form = new FormController<{ profile: string }>({ name: "p11" });
+        const loadProfile: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.mark("skeleton"));
+                await wait(20);
+                if (ctx.signal.aborted) {
+                    return;
+                }
+                ctx.setValue("Ada");
+                return ctx.state.unmark("skeleton");
+            },
+        };
+        const profile = form.field("profile", { behaviors: [loadProfile] });
+        profile.mount();
+        form.mount();
+
+        await until(() => profile.snapshot.hasFlag("skeleton"));
+        // Un squelette n'est pas un verrou : la lib n'impose pas le couple.
+        expect(profile.snapshot.hasFlag("locked")).toBe(false);
+
+        await until(() => profile.snapshot.value === "Ada");
+        expect(profile.snapshot.hasFlag("skeleton")).toBe(false);
     });
 });

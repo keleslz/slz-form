@@ -458,4 +458,60 @@ describe("le cycle de vie côté React", () => {
         // Et la conséquence réelle : un champ vide devenu obligatoire invalide.
         expect(form.snapshot.hasFlag("valid")).toBe(false);
     });
+
+    it("le hook rend les deux fonctions, et rien d'autre pour l'état", async () => {
+        const form = new FormController<{ a: string }>({ name: "r-18" });
+        const { useField } = hooksFor(form);
+
+        function Field(): React.ReactElement {
+            const field = useField({ name: "a", required: true, locked: true });
+            return (
+                <span data-testid="r">
+                    {String(field.hasFlag("locked", "required"))}
+                    {"/"}
+                    {String(field.hasAny("loading", "invisible"))}
+                </span>
+            );
+        }
+
+        render(<Field />);
+        await act(async () => { await tick(); });
+        expect(screen.getByTestId("r").textContent).toBe("true/false");
+    });
+
+    it("le bouton de soumission tient en un seul appel", async () => {
+        const form = new FormController<{ a: string }>({ name: "r-19" });
+        const { useField, useForm } = hooksFor(form);
+
+        function Screen(): React.ReactElement {
+            // `required` plutôt qu'une règle : les règles d'un validator ne
+            // tournent pas sur une valeur vide, sauf à déclarer
+            // `validateWhenEmpty`.
+            const field = useField({ name: "a", required: true });
+            const { hasFlag, submit } = useForm();
+            return (
+                <>
+                    <input
+                        aria-label="a"
+                        value={field.value ?? ""}
+                        onChange={(event) => field.onChange(event.target.value)}
+                    />
+                    <button type="button" disabled={!hasFlag("valid", "idle")} onClick={() => void submit()}>
+                        Envoyer
+                    </button>
+                </>
+            );
+        }
+
+        render(<Screen />);
+        await act(async () => { await tick(); });
+        const disabled = (): boolean => screen.getByRole("button").hasAttribute("disabled");
+        expect(disabled()).toBe(true);
+
+        await act(async () => {
+            fireEvent.change(screen.getByLabelText("a"), { target: { value: "rempli" } });
+            await tick();
+        });
+        expect(disabled()).toBe(false);
+    });
 });

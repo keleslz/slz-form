@@ -24,39 +24,90 @@ adapter au-dessus (React fourni ici ; Angular et Vue suivront le même contrat).
 
 ---
 
-## 2. Le modèle d'état — trois axes
+## 2. Le modèle d'état — des flags, et deux fonctions
 
 C'est la décision structurante, celle dont tout le reste découle.
 
-Les flags ne vivent pas sur un seul plan. Une union naïve (`Set`) produit des
-états impossibles : deux behaviors qui émettent l'un `pristine` et l'autre
-`error` donnent `["pristine", "error"]`, qui n'est pas un état. Les flags sont
-donc groupés par **axe** :
+**Ce qu'un champ *est* se lit en flags ; ce qu'il *contient* se lit en données.**
+La frontière est là et nulle part ailleurs : besoin du message d'erreur →
+`errors` ; besoin de savoir s'il faut l'afficher → `hasFlag("error")`. Aucun
+booléen d'état n'existe dans la surface de lecture (invariant 32) : un besoin de
+`isX` signale un flag manquant ou un mot mal choisi, pas un accesseur à ajouter.
 
-| Axe | Valeurs | Nature | Émetteur |
-|---|---|---|---|
-| Validité | `pristine` · `valid` · `error` | exclusif | le **Validator** seul |
-| Activité | `idle` · `loading` | exclusif | les Behaviors + le Validator |
-| Disponibilité | `locked` · `readonly` · `invisible` | cumulatif | les Behaviors + le Controller + la vue (`FieldUpdate`) |
-
-Règles de fusion, une par axe :
-
-- **validité** ← le Validator, point. Aucun Behavior n'y touche : un seul
-  émetteur, donc zéro conflit à arbitrer.
-- **activité** ← `loading` dès qu'un Behavior *ou* le Validator est en vol.
-- **disponibilité** ← union. Un seul `lock()` suffit à verrouiller.
-
-**Conséquence directe : « supprimer un flag » devient défini.** Sur un axe
-exclusif on remplace, sur l'axe cumulatif on cesse d'émettre. L'UI suit
-mécaniquement, sans qu'aucun composant ne soit modifié.
-
-La surface de lecture reste **plate** : `hasFlag("loading", "error")` fonctionne
-comme prévu. L'axe est une structure interne, pas une contrainte consommateur.
+### Les deux fonctions
 
 ```ts
-field.hasFlag("locked")              // OU sur les flags donnés
-snapshot.ui.hasEvery("valid", "idle")
-snapshot.ui.flags                    // ["valid", "idle", "locked"] — projection plate
+field.hasFlag("loading", "invisible")   // ET  — toutes présentes
+field.hasAny("locked", "readonly")      // OU  — au moins une
+```
+
+Les mêmes deux, au champ comme au formulaire. Sans le ET, une condition composée
+retombe sur des booléens — c'est très exactement ce qui s'était produit.
+
+### Deux natures, une règle par nature
+
+Une union naïve (`Set`) produit des états impossibles : deux behaviors qui
+émettent l'un `pristine` et l'autre `error` donnent `["pristine", "error"]`, qui
+n'est pas un état. D'où deux natures :
+
+- **exclusive** — une valeur à la fois, poser l'une retire l'autre ;
+- **cumulée** — un ensemble, l'union fait foi (un seul `lock()` verrouille), et
+  **l'absence vaut défaut**.
+
+**Conséquence directe : « supprimer un flag » devient défini.** Dans un groupe
+exclusif on remplace, parmi les flags cumulés on cesse d'émettre. L'UI suit
+mécaniquement, sans qu'aucun composant ne soit modifié.
+
+### Les flags d'un champ
+
+| Flag | Nature | Émetteur | Sens |
+|---|---|---|---|
+| `pristine` · `valid` · `error` | exclusive | le **Validator** seul | la validité **affichée** — `pristine` tant que le champ n'a pas été touché |
+| `idle` · `loading` | exclusive | Behaviors + Validator | un travail est en vol |
+| `locked` | cumulée | Behaviors + Controller + vue | grisé, hors saisie |
+| `readonly` | cumulée | Behaviors + Controller + vue | lisible et sélectionnable, non modifiable |
+| `invisible` | cumulée | Behaviors | pas rendu — et hors du formulaire (invariant 29) |
+| `required` | cumulée | le Controller | obligatoire |
+| `touched` · `focused` | cumulée | le Controller | l'interaction |
+| `mounted` | cumulée | le Controller | fait partie du formulaire qu'on remplit |
+| *ceux de l'application* | cumulée | Behaviors | voir plus bas |
+
+### Les flags d'un formulaire — les mêmes mots
+
+| Flag | Nature | Sens |
+|---|---|---|
+| `valid` · `error` | exclusive | le **verdict** : le formulaire part, ou pas |
+| `idle` · `submitting` · `submitted` | exclusive | où en est l'envoi — c'est `FormStatus` |
+| `loading` | cumulée | un travail asynchrone est en vol quelque part |
+| `touched` | cumulée | au moins un champ a été touché |
+
+```tsx
+<button disabled={!form.hasFlag("valid", "idle")}>Envoyer</button>
+```
+
+Une nuance, structurelle, à ne pas perdre : au **champ**, `error` est ce qu'on
+*affiche*, et il reste éteint tant qu'on n'a pas touché — un prefill n'allume
+rien. Au **formulaire**, il n'y a rien à afficher : `error` y est ce qui est
+*vrai*, et un formulaire prérempli et faux ne part pas. C'est l'arbitrage 24,
+tenu par cette répartition plutôt que par un booléen `isBlocking`. Le verdict
+d'un champ pris isolément, c'est `errors` non vide.
+
+### Les flags de l'application
+
+Le vocabulaire du moteur ne peut pas prévoir les besoins d'un produit — un
+skeleton, une vérification métier en cours. Un behavior publie donc les siens :
+
+```ts
+ctx.state.mark("skeleton")     //  … et  ctx.state.unmark("skeleton")
+field.hasFlag("skeleton")      //  la vue en décide, le moteur transporte
+```
+
+**Uniquement du côté cumulé.** C'est là que deux behaviors s'additionnent sans
+pouvoir se contredire, donc ouvrir est sans risque. Les groupes exclusifs, eux,
+restent fermés : c'est là qu'on publierait un état qui n'existe pas.
+
+```ts
+snapshot.flags   // ["valid", "idle", "mounted", "required", "touched"] — projection plate
 ```
 
 ---
@@ -104,7 +155,7 @@ new FieldController({ name, required?, requiredMessage?, requiredTrue?,
 // validator : un IValidator, ou un tableau (arbitrage 23)
 ```
 Lifecycle (`mount` / `update` / `unmount` / `reset`), événements (`change` /
-`blur` / `focus` / `submit`), lecture (`hasFlag(...)`, `snapshot`, `listen`,
+`blur` / `focus` / `submit`), lecture (`hasFlag(...)` / `hasAny(...)`, `snapshot`, `listen`,
 `view()`), et deux méthodes que le FormController pilote seul : `validateNow()`
 et `recover()`.
 
@@ -269,7 +320,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 
 | # | Point | Décision | Raison |
 |---|---|---|---|
-| 1 | Merge des flags | 3 axes, fusion par axe | une union plate produit des états impossibles |
+| 1 | Merge des flags | deux natures — exclusive, cumulée | une union plate produit des états impossibles |
 | 2 | Qui émet la validité | le Validator seul | invariant 13 ; supprime tout arbitrage entre behaviors |
 | 3 | État du Behavior | le Behavior le **retourne**, le Controller le stocke | invariant 2 ; une instance partagée ne fuite pas entre champs |
 | 4 | États intermédiaires async | `ctx.push(state)` | un `await` ne retourne rien |
@@ -277,7 +328,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 6 | Résolution du form | par **nom**, via le register en contexte | aucun composant n'importe un FormController |
 | 7 | Réactivité inter-champs | `watch: WatchTarget[]` + `DependencyGraph` | invariants 7 et 23 ; `ctx.watched()` **throw** sur un nom non déclaré |
 | 8 | Cycles de dépendance | rejetés au wiring | une boucle est une erreur de conception, autant la voir tôt |
-| 9 | `hasFlag(...)` | OU (`hasEvery` pour le ET) | usage dominant |
+| 9 | `hasFlag(...)` | **ET** ; `hasAny(...)` pour le OU | sans le ET, une condition composée retombe sur des booléens — c'est ce qui s'était produit |
 | 10 | `required` vs Validator | config déclarative, injectée en option au Validator | invariant 13 : la validité reste au Validator |
 | 11 | Champ sans validator | un `DefaultValidator` est attaché d'office | un seul chemin pour la validité, zéro branche `if (validator)` |
 | 12 | `isMounted` / `isUnmounted` | dérivés d'un statut à 3 états | deux booléens indépendants peuvent diverger |
@@ -292,11 +343,14 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 21 | Forme d'un constat | `{ message, severity, code? }` | le moteur transporte de quoi router, sans jamais décider où afficher |
 | 22 | Déclencheurs de dépendance | un nom seul vaut `["value"]` ; `{ field, on }` ouvre le reste | garde l'arbitrage 18 comme défaut, et rend la réaction à l'état possible en la déclarant |
 | 23 | Plusieurs validators | un tableau devient un composite, invisible pour l'appelant | promesse déjà faite ici et dans `.CLAUDE.md` ; permet aux erreurs serveur d'être un validator |
-| 24 | Affichage vs verdict | `validity` reste `pristine` tant qu'on n'a pas touché ; `isBlocking` dit le vrai | un prefill ne doit pas allumer d'erreur, mais un formulaire prérempli et correct doit être soumettable |
+| 24 | Affichage vs verdict | le flag `error` du **champ** reste éteint tant qu'on n'a pas touché ; celui du **formulaire** est le verdict | un prefill ne doit pas allumer d'erreur, mais un formulaire prérempli et correct doit être soumettable — réparti sur deux niveaux plutôt que porté par un booléen `isBlocking` |
 | 25 | Champs répétables | une ligne **est** un formulaire, identifiée et non indexée |
 | 26 | Règle qui casse | constat `unverified` bloquant, plutôt que « valide » ou que l'ancien verdict | déclarer valide laisse passer ce que la règle aurait refusé ; garder l'ancien verdict le recolle à une autre valeur | réutilise graphe, validation et soumission ; retirer ou déplacer une ligne ne renomme rien, donc aucun `watch` ne pointe dans le vide |
 
 ---
+| 27 | Surface de lecture | deux fonctions et des flags ; aucun booléen d'état | un booléen dérivé rend le flag facultatif, donc mort — c'est ce qu'avait fait `189b8de` en livrant l'API par flags et son contournement dans le même diff |
+| 28 | Flags de l'application | `mark` / `unmark`, du côté cumulé seulement | un vocabulaire fermé bloque les besoins qu'on n'a pas prévus ; l'union de flags cumulés ne peut pas se contredire, l'ouvrir est donc sans risque |
+| 29 | Verdict d'un champ | `errors` non vide, pas un flag | deux mots voisins — `error` affiché, `blocking` vrai — se confondaient à l'usage ; le verdict est déjà porté par une donnée que la vue lit de toute façon |
 
 ## 6. Où chaque invariant est tenu
 
@@ -322,17 +376,19 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 18 | Behavior atomique ou composite | plusieurs behaviors par champ, chacun sa tranche |
 | 19 | Aucun composant propriétaire du state | les composants ne reçoivent qu'un snapshot |
 | 20 | Mutations croisées interdites | aucun chemin d'écriture vers un autre champ |
-| 21 | Snapshot minimal | 10 champs, dont `options` — pas de sac fourre-tout `data` |
+| 21 | Snapshot minimal | `name`, `value`, `ui`, `issues`, `options` — les flags portent le reste, pas de sac fourre-tout `data` |
 | 22 | Pas de rerender global | snapshot stable par référence + subscription par champ |
 | 23 | Dépendance réactive explicite | idem 7 |
 | 24 | FormController pas God Object | `DependencyGraph`, `FormSnapshot`, `FieldController` séparés |
 | 25 | Composition plutôt que duplication | `Lifecycle` partagé Form/Field ; utils composés de behaviors |
 | 26 | Le Validator lit, n'écrit pas | `ValidationContext` n'a aucune méthode de mutation ; `watched()` throw sur un nom non déclaré |
 | 27 | Le moteur ne décide pas de l'affichage | il porte `severity` et `code` ; aucun libellé, aucune couleur, aucun composant |
-| 28 | Un axe s'enrichit, ne s'ouvre pas | `readonly` a rejoint la disponibilité ; aucun sac à flags libres, qui recréerait le `Set` plat |
+| 28 | Cumulé ouvert, exclusif fermé | un groupe exclusif ne prend que des valeurs déclarées — l'ouvrir recréerait le `Set` plat et ses états impossibles ; les flags cumulés acceptent ceux de l'application, où l'union ne peut pas se contredire |
 | 29 | Masqué vaut absent | un champ `invisible` sort de la validité **et** du payload |
 | 30 | Une ligne est un formulaire | `FieldArrayController` compose des `FormController` ; aucun nommage par chemins |
 | 31 | Une passe interrompue n'est pas un verdict | une règle qui casse ne rend rien : la valeur est publiée **non vérifiée** et bloque, jamais valide, jamais jugée par le verdict d'une autre saisie |
+| 32 | Aucun booléen d'état dans la surface de lecture | `FieldSnapshot`, `FormSnapshot`, `useField()` et `useForm()` n'exposent que `hasFlag` / `hasAny`, les données et les actions |
+| 33 | Un groupe exclusif a un vocabulaire fermé | `ValidityFlag` et `ActivityFlag` sont des unions closes ; seuls les flags cumulés acceptent ceux de l'application |
 
 ---
 

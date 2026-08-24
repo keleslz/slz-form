@@ -35,18 +35,18 @@ function EmailField() {
         validator: new EmailValidator(),
     });
 
-    if (!field.isVisible) return null;
+    if (field.hasFlag("invisible")) return null;
 
     return (
         <>
             <input
                 value={field.value ?? ""}
-                disabled={field.isLocked}
+                disabled={field.hasFlag("locked")}
                 onChange={(e) => field.onChange(e.target.value)}
                 onBlur={field.onBlur}
             />
-            {field.isLoading && <Spinner />}
-            {field.showError && <p>{field.error}</p>}
+            {field.hasFlag("loading") && <Spinner />}
+            {field.hasFlag("error") && <p>{field.error}</p>}
             {field.warnings.map((warning) => <small key={warning}>{warning}</small>)}
         </>
     );
@@ -62,8 +62,45 @@ permet de router sans que le moteur s'en mêle :
 const toasts = field.issues.filter((issue) => issue.code === "toast");
 ```
 
-`field.isReadOnly` est distinct de `field.isLocked` : lisible et sélectionnable,
-mais non modifiable. Et la vue peut piloter les deux — `useField({ name, locked })`.
+L'état d'un champ se lit avec **deux fonctions**, et rien d'autre :
+
+```tsx
+field.hasFlag("locked", "required")   // ET  — toutes présentes
+field.hasAny("loading", "invisible")  // OU  — au moins une
+```
+
+`readonly` est distinct de `locked` : lisible et sélectionnable, mais non
+modifiable. La vue peut piloter les deux — `useField({ name, locked, readOnly })`.
+
+Le formulaire répond aux mêmes deux fonctions, avec les mêmes mots :
+
+```tsx
+const { hasFlag, submit } = useForm();
+
+<button disabled={!hasFlag("valid", "idle")} onClick={() => void submit()}>
+    Envoyer
+</button>
+```
+
+Une nuance à connaître : au champ, `error` est ce qu'on **affiche** — il reste
+éteint tant qu'on n'a pas touché, pour qu'un préremplissage n'allume rien. Au
+formulaire, `error` est ce qui est **vrai** : un formulaire prérempli et faux ne
+part pas. Le verdict d'un champ pris isolément, c'est `field.errors` non vide.
+
+### Tes propres flags
+
+Le moteur ne peut pas prévoir les besoins d'un produit. Un behavior publie donc
+les siens, et la vue en décide :
+
+```tsx
+// dans le behavior
+ctx.push(ctx.state.mark("skeleton"));
+// … puis, l'appel terminé
+return ctx.state.unmark("skeleton");
+
+// dans la vue
+if (field.hasFlag("skeleton")) return <Skeleton />;
+```
 
 ## Listes répétables
 

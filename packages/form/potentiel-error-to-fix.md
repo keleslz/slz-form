@@ -16,6 +16,11 @@
 >   Sans nommage par chemins — une ligne est un formulaire.
 > - Les cas ❌ et 🟡 de la §5 sont rejoués dans `test/parity.test.ts`, écrits
 >   avec un behavior ou un validator, **sans capturer le `FormController`**.
+> - La **surface de lecture** a suivi : deux fonctions — `hasFlag` (ET) et
+>   `hasAny` (OU) — et des flags, au champ comme au formulaire. Plus aucun
+>   booléen d'état, et le vocabulaire s'ouvre aux flags de l'application, ce qui
+>   règle le dernier reproche de l'audit — un besoin non prévu n'oblige plus à
+>   toucher au moteur. Voir `test/flags.test.ts` et `docs/MODEL.md` §2.
 >
 > Restent hors périmètre, désormais documentés comme tels dans le README :
 > les **masques de saisie** (valeur affichée ≠ valeur stockée) et le **rendu

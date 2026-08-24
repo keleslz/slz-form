@@ -30,12 +30,23 @@ câbler en dur.
 Devant un besoin non couvert, la question n'est jamais « où ajouter ce cas ? »
 mais « quel trou du contrat d'extension l'empêche ? ».
 
-### 3. Tout est composite
+### 3. On n'ajoute jamais un accesseur dérivé d'un flag
+
+Pas de `isVisible`, pas de `isLoading`, pas de `showError`. La surface de lecture
+d'un champ comme d'un formulaire, ce sont **`hasFlag` / `hasAny`, les données et
+les actions** — rien d'autre (invariant 32).
+
+Un besoin de `isX` ne signale jamais un accesseur manquant : il signale **un flag
+manquant, ou un mot mal choisi**. C'est l'erreur de `189b8de`, qui a livré l'API
+par flags *et* ses sept booléens dans le même diff — l'échappatoire est devenue
+la norme, et l'API par flags est morte à l'usage.
+
+### 4. Tout est composite
 
 Plusieurs behaviors et plusieurs validators par champ, chacun gardant sa tranche
 d'état ou ses règles. Aucune API ne doit supposer qu'il n'y en a qu'un.
 
-### 4. Parité avec React nu
+### 5. Parité avec React nu
 
 **Rien de ce qui est faisable avec `useState` et un `useEffect` ne doit être
 impossible avec la lib.** C'est le critère d'acceptation, et il se vérifie :
@@ -47,7 +58,7 @@ capture le `FormController` par closure.** Tout passe par `ctx`. Un cas qui
 n'y arrive qu'en capturant le formulaire n'est pas couvert — il est contourné,
 et le contournement contredit les invariants affichés par le projet.
 
-### 5. Aucune UI/UX dans le moteur
+### 6. Aucune UI/UX dans le moteur
 
 - Le moteur transporte `code` et `severity`. Il ne décide **jamais** où ni
   comment afficher : snackbar, sous le champ, ou nulle part, c'est la vue.
@@ -60,7 +71,7 @@ et le contournement contredit les invariants affichés par le projet.
 - Un adapter (`packages/react-form`) est un pont, pas un endroit où mettre des
   règles.
 
-### 6. Zéro `as` dans le code consommateur
+### 7. Zéro `as` dans le code consommateur
 
 Le narrowing tient de bout en bout : nom de champ contraint à la map, valeur
 inférée, `meta` inféré depuis le callback API.
@@ -79,22 +90,23 @@ fonction générique ne voit plus.
 - `packages/form/src/field/FieldController.ts` et `validator/IValidator.ts` —
   la valeur est passée à `validate` après que la classe de base a vérifié
   qu'elle n'est pas vide.
-- `packages/form/src/state/UiState.ts` et `state/BehaviorState.ts` — `has()`
-  accepte un `UiFlag` plat et le teste contre l'axe cumulatif ; le rétrécir est
-  précisément ce que la lecture plate promet au consommateur.
+- `packages/form/src/state/UiState.ts` et `state/BehaviorState.ts` — `AnyUiFlag`
+  est `UiFlag | (string & {})` : les flags du moteur restent proposés à
+  l'autocomplétion, et ceux de l'application passent. Ce n'est pas un `as`, mais
+  c'est le même genre de relâchement, et il est ici pour la même raison.
 
 **Cette liste est limitative.** Un `as` ailleurs est un défaut de conception des
 types, pas une commodité — et jamais dans le code consommateur. Quand on en
 ajoute un, on l'ajoute ici, avec sa raison.
 
-### 7. Lire `docs/MODEL.md` avant, le mettre à jour après
+### 8. Lire `docs/MODEL.md` avant, le mettre à jour après
 
 Avant d'implémenter : lire les invariants et les arbitrages, pour savoir lequel
 on s'apprête à toucher.
 Après : consigner ce qui a changé — un arbitrage nouveau va dans §5, un
 invariant nouveau **en fin** de la table du §6.
 
-### 8. Ne jamais renuméroter les invariants
+### 9. Ne jamais renuméroter les invariants
 
 Le code les référence par numéro (`FieldController.ts:35` — « invariants 2, 5,
 6 »). On **ajoute** à la fin. On ne réordonne pas, on n'insère pas.
@@ -103,21 +115,32 @@ Le code les référence par numéro (`FieldController.ts:35` — « invariants 2
 
 ## Le modèle, en bref
 
-### Les trois axes
+### Les flags, et les deux fonctions
 
-| Axe | Valeurs | Nature | Qui l'émet |
-|---|---|---|---|
-| Validité | `pristine` · `valid` · `error` | exclusif | le Validator, **seul** |
-| Activité | `idle` · `loading` | exclusif | Behaviors + Validator |
-| Disponibilité | `locked` · `readonly` · `invisible` | cumulatif | Behaviors + Controller + vue |
+| Flag | Nature | Qui l'émet |
+|---|---|---|
+| `pristine` · `valid` · `error` | **s'excluent** | le Validator, **seul** |
+| `idle` · `loading` | **s'excluent** | Behaviors + Validator |
+| `locked` · `readonly` · `invisible` | s'additionnent | Behaviors + Controller + vue |
+| `required` · `touched` · `focused` · `mounted` | s'additionnent | le Controller |
+| *ceux de l'application* | s'additionnent | Behaviors — `mark` / `unmark` |
 
-Une union plate produirait `pristine` + `error`, qui n'est pas un état. Le
-découpage par axe rend la fusion déterministe et donne un sens au retrait d'un
-flag : on remplace sur un axe exclusif, on cesse d'émettre sur l'axe cumulatif.
+Au formulaire, les mêmes mots : `valid` · `error` (exclusifs — c'est le verdict),
+`idle` · `submitting` · `submitted` (exclusifs), `loading` et `touched`.
 
-**Ajouter une valeur à un axe est légitime** (c'est ainsi que `readonly` est
-arrivé). **Ouvrir un axe à des flags libres ne l'est pas** : ça recrée le `Set`
-plat que le modèle existe pour écarter.
+La lecture, ce sont **deux fonctions** : `hasFlag(...)` est le **ET**,
+`hasAny(...)` le **OU**. Elles sont identiques au champ et au formulaire.
+
+Une union plate produirait `pristine` + `error`, qui n'est pas un état. D'où les
+deux natures, et le sens précis du retrait d'un flag : on remplace dans un groupe
+exclusif, on cesse d'émettre ailleurs — l'absence vaut défaut.
+
+**Cumulé ouvert, exclusif fermé.** Ajouter une valeur à un groupe exclusif est
+légitime (c'est ainsi que `readonly` est arrivé) ; **l'ouvrir à des flags libres
+ne l'est pas**, ça recrée le `Set` plat que le modèle existe pour écarter. Côté
+cumulé au contraire, deux behaviors s'additionnent sans pouvoir se contredire :
+l'application y déclare ses propres flags, et c'est ce qui rend exprimables les
+besoins qu'on n'a pas prévus.
 
 ### Qui fait quoi
 
@@ -159,13 +182,19 @@ qui couvre les quatre écritures — règle nue, composée, différée, différ�
 composée. Elles doivent se comporter **identiquement** : c'est là que les
 divergences se sont logées à répétition.
 
-### `validity` n'est pas le verdict
+### L'affichage n'est pas le verdict
 
-- `validity` est ce qu'on **affiche** : `pristine` tant que le champ n'a pas été
-  touché, pour qu'un prefill n'allume pas d'erreur.
-- `isBlocking` est ce qui est **vrai**, et c'est lui qui décide de `isValid`.
+- Au **champ**, `error` est ce qu'on **affiche** : éteint tant que le champ n'a
+  pas été touché, pour qu'un prefill n'allume pas d'erreur.
+- Au **formulaire**, `error` est ce qui est **vrai** : un formulaire prérempli et
+  faux ne part pas, même si aucun champ ne s'allume.
+- Le verdict d'un champ pris isolément, c'est **`errors` non vide**. Il n'a
+  volontairement pas de flag : `error` et un `blocking` voisin se confondaient à
+  l'usage, et le verdict est déjà porté par une donnée que la vue lit de toute
+  façon.
 
-Ne pas les confondre, et ne pas « corriger » l'un en cassant l'autre.
+Ne pas les confondre, et ne pas « corriger » l'un en cassant l'autre : c'est
+l'arbitrage 24, et il tient par cette répartition sur deux niveaux.
 
 ### Une ligne est un formulaire
 

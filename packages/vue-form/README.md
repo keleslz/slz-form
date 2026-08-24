@@ -23,6 +23,12 @@ Points à respecter, identiques à l'adapter React :
   autres ;
 - `mount()` au montage, `unmount()` à la destruction.
 
+La **surface de lecture** est la même que côté React, et elle est courte : les
+deux fonctions `hasFlag` (ET) et `hasAny` (OU), les données — `value`,
+`options`, `errors` / `error` / `warnings` / `issues` —, les handlers et le
+contrôleur. **Aucun booléen d'état** (invariant 32) : un adapter qui rajoute un
+`isVisible` de confort réintroduit exactement ce que le moteur a retiré.
+
 ## Point d'attention spécifique
 
 `shallowRef` plutôt que `ref` : le snapshot est déjà immuable et stable par
