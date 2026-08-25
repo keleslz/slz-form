@@ -106,7 +106,16 @@ on s'apprête à toucher.
 Après : consigner ce qui a changé — un arbitrage nouveau va dans §5, un
 invariant nouveau **en fin** de la table du §6.
 
-### 9. Ne jamais renuméroter les invariants
+### 9. Les messages de commit sont en **anglais**
+
+Titre et corps. C'est la seule chose du dépôt qui l'est : la documentation, les
+commentaires du code et les échanges restent en français. Un historique se lit
+par des gens qui n'ont pas forcément le français, et il est la seule partie du
+travail qu'on ne peut pas réécrire après coup.
+
+Ça vaut aussi pour les titres et descriptions de pull request.
+
+### 10. Ne jamais renuméroter les invariants
 
 Le code les référence par numéro (`FieldController.ts:35` — « invariants 2, 5,
 6 »). On **ajoute** à la fin. On ne réordonne pas, on n'insère pas.

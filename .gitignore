@@ -23,3 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 e2e/output/
+
+# Site de documentation — Docusaurus
+website/node_modules
+website/build
+website/.docusaurus
+# La référence API est **générée** par TypeDoc à chaque build : la commiter,
+# c'est publier une copie qui ment dès la prochaine signature qui bouge.
+website/docs/reference/

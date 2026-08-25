@@ -1,0 +1,13 @@
+{
+  "extends": "@docusaurus/tsconfig",
+  "compilerOptions": {
+    // `baseUrl` vient du tsconfig de Docusaurus, qui l'utilise pour l'alias
+    // `@site/*`. TypeScript 6 le déprécie et en fait une erreur ; le dépôt est
+    // en `~6.0.2`. On ne peut pas le retirer d'un `extends`, et le
+    // contourner en réécrivant `paths` casserait l'alias.
+    //
+    // À supprimer dès que Docusaurus publie un tsconfig sans `baseUrl`.
+    "ignoreDeprecations": "6.0"
+  },
+  "exclude": [".docusaurus", "build"]
+}
