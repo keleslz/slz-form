@@ -2,7 +2,7 @@
 
 > Document de référence à valider. Il fixe l'objectif, les entités, les
 > arbitrages tranchés et la façon dont chaque invariant est tenu.
-> Statut : implémenté, couvert par `packages/form/test` (224 tests) et `packages/react-form/test` (19 tests) ; le parcours
+> Statut : implémenté, couvert par `packages/form/test` (231 tests) et `packages/react-form/test` (19 tests) ; le parcours
 > navigateur (`examples/react`, 43 assertions) couvre le socle, pas encore les
 > listes répétables ni `readonly`.
 
@@ -416,7 +416,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 33 | Un groupe exclusif a un vocabulaire fermé | `ValidityFlag` et `ActivityFlag` sont des unions closes ; seuls les flags cumulés acceptent ceux de l'application, et `RESERVED_FLAGS` s'en dérive au lieu de les recopier |
 | 34 | Le démontage n'abandonne rien en vol | `unmount()` neutralise les tranches **et** appelle `validator.abandon()` ; sans quoi un champ démonté restait `loading` pour toujours |
 | 35 | Aucun hook ne peut faire dérailler le moteur | les sept hooks passent par `invoke`, la souscription à leur promesse aussi, et `isPromise` ne lève jamais — lire ou appeler `.then` d'un objet piégé ne sort ni de `mount()`, ni de `change()`, ni de `unmount()` |
-| 36 | La référence d'une restitution appartient à la passe | `Pass { before, generation }`, ouverte avant l'appel du hook, fermée dès qu'elle retombe — ou tout de suite si elle n'a pas ouvert d'attente. Une attente allumée hors de tout hook (`ctx.push` d'un abonnement) ouvre une passe **détachée**, refermée au retour à `idle` |
+| 36 | Toute attente a un titulaire, et toute restitution une référence | `Pass { before, generation, detached, owned }`. Une passe s'ouvre avant l'appel du hook et se ferme dès qu'elle retombe ; celle qui allume `loading` en devient **titulaire** ; une attente qu'aucune passe ouverte ne tient plus est **réadoptée**, avec l'état d'entrée de celle qui la tenait. C'est ce qui rend le repli de `recover()` inatteignable |
 
 ---
 

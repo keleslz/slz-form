@@ -1763,3 +1763,226 @@ describe("deux passes ouvertes : laquelle fait référence", () => {
         expect(field.snapshot.hasFlag("loading")).toBe(false);
     });
 });
+
+describe("une attente a toujours un titulaire", () => {
+    it("un rejet ne laisse pas le champ occupé à cause d'une passe discrète", async () => {
+        const form = new FormController<{ a: string }>({ name: "f70" });
+        const behavior: IBehavior<string> = {
+            // Discret : il attend sans jamais allumer `loading` — un
+            // pré-chargement, un `setOptions` tardif.
+            onMount: async (ctx) => {
+                await wait(60);
+                ctx.setOptions([{ value: "x", label: "x" }]);
+            },
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(10);
+                throw new Error("HS");
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("x");
+        await until(() => !field.snapshot.hasFlag("loading"), { timeout: 1000 });
+        // Compter les passes ouvertes au lieu des attentes détenues faisait
+        // publier ici un `loading` que personne n'éteindrait : spinner à vie et
+        // soumission qui part pour tout le `settleTimeout`.
+        expect(field.isBusy).toBe(false);
+
+        await wait(80);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        expect(field.isBusy).toBe(false);
+    });
+
+    it("un travail détaché éteint par un abonnement ne laisse pas de fantôme", async () => {
+        const form = new FormController<{ a: string }>({ name: "f71", settleTimeout: 200 });
+        const external: { stop?: () => void } = {};
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => {
+                external.stop = () => ctx.push(ctx.state.idle());
+                return ctx.state.loading();
+            },
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(10);
+                throw new Error("HS");
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("loading"));
+
+        external.stop?.();
+        await until(() => !field.snapshot.hasFlag("loading"), { timeout: 1000 });
+        expect(field.isBusy).toBe(false);
+
+        field.change("x");
+        await until(() => !field.snapshot.hasFlag("loading"), { timeout: 1000 });
+        // La passe du montage, ouverte par un hook synchrone, n'était refermée
+        // par personne : elle passait pour une sœur au travail.
+        expect(field.isBusy).toBe(false);
+        expect(await form.submit()).toBe(true);
+    });
+
+    it("une écriture d'abonnement pendant une passe sans avis garde une référence", async () => {
+        const form = new FormController<{ siret: string }>({ name: "f72", settleTimeout: 40 });
+        const external: { start?: () => void } = {};
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => {
+                external.start = () => ctx.push(ctx.state.loading().hide());
+                return ctx.state;
+            },
+            // Asynchrone et sans avis : il ne reprendra pas l'attente à son compte.
+            onChange: async () => { await wait(200); },
+        };
+        const field = form.field("siret", {
+            required: true,
+            initialValue: "42",
+            behaviors: [behavior],
+        });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("42");
+        external.start?.();
+        await until(() => field.snapshot.hasFlag("invisible"));
+
+        expect(await form.submit()).toBe(false);
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
+        expect(form.getSnapshot().values).toEqual({ siret: "42" });
+    });
+
+    it("un changement d'avant montage ne laisse pas d'attente orpheline", async () => {
+        const form = new FormController<{ siret: string }>({ name: "f73", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().hide());
+                await wait(200);
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("siret", { required: true, behaviors: [behavior] });
+        // `change()` avant le montage : la passe part, le montage renouvelle le
+        // contexte, et elle sortait sans que personne ne reprenne son attente.
+        field.change("42");
+        field.mount();
+        form.mount();
+        await wait(30);
+        expect(field.snapshot.hasFlag("invisible")).toBe(true);
+
+        // La convergence expire : quelle que soit l'issue de cette
+        // soumission-là, le champ ne doit pas rester masqué et hors payload.
+        await form.submit();
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        expect(form.getSnapshot().values).toEqual({ siret: "42" });
+        expect(await form.submit()).toBe(true);
+    });
+
+    it("un fantôme du même behavior ne sert plus de référence à recover()", async () => {
+        const form = new FormController<{ a: string }>({ name: "f74", settleTimeout: 40 });
+        const external: { stop?: () => void } = {};
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => {
+                external.stop = () => ctx.push(ctx.state.idle());
+                return ctx.state.loading();
+            },
+            onFocus: (ctx) => ctx.state.mark("verified"),
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(10_000);
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("loading"));
+        external.stop?.();
+        await until(() => !field.snapshot.hasFlag("loading"), { timeout: 1000 });
+
+        field.focus();
+        expect(field.snapshot.hasFlag("verified")).toBe(true);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("loading"));
+        expect(await form.submit()).toBe(false);
+
+        // La passe du montage étant la plus ancienne, `recover()` rendait contre
+        // elle et effaçait ce qui avait été posé après.
+        expect(field.snapshot.hasFlag("verified")).toBe(true);
+    });
+});
+
+describe("une attente devenue orpheline est réadoptée", () => {
+    it("la passe qui la tenait retombe sans avis, l'attente reste rendue", async () => {
+        const form = new FormController<{ siret: string }>({ name: "f75", settleTimeout: 40 });
+        const external: { start?: () => void } = {};
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => {
+                external.start = () => ctx.push(ctx.state.loading().hide());
+                return ctx.state;
+            },
+            // Asynchrone, et sans avis : sa promesse retombe sans rien rendre.
+            onChange: async () => { await wait(30); },
+        };
+        const field = form.field("siret", { required: true, behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("42");
+        external.start?.();
+        await until(() => field.snapshot.hasFlag("invisible"));
+
+        // On attend que la passe retombe : l'attente n'a plus de titulaire.
+        await wait(60);
+        expect(field.snapshot.hasFlag("invisible")).toBe(true);
+
+        expect(await form.submit()).toBe(false);
+        // Sans réadoption, `recover()` n'avait plus rien à quoi comparer : il
+        // rendait contre l'état courant, c'est-à-dire ne rendait rien.
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
+        expect(form.getSnapshot().values).toEqual({ siret: "42" });
+    });
+
+    it("un titulaire qui a rendu son attente ne la retient plus", async () => {
+        const form = new FormController<{ a: string }>({ name: "f76" });
+        let call = 0;
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                call += 1;
+                if (call === 1) {
+                    ctx.push(ctx.state.loading());
+                    await wait(10);
+                    ctx.push(ctx.state.idle());
+                    await wait(10_000);
+                    return ctx.state;
+                }
+                ctx.push(ctx.state.loading());
+                await wait(20);
+                throw new Error("HS");
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("x");
+        await wait(30);
+        field.change("y");
+        await until(() => !field.snapshot.hasFlag("loading"), { timeout: 1000 });
+
+        // La première passe est encore ouverte, mais elle a rendu son attente :
+        // la garder « titulaire » faisait republier `loading` à la seconde en
+        // échouant, et le champ restait occupé.
+        expect(field.isBusy).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+    });
+});

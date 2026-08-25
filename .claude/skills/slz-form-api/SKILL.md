@@ -250,6 +250,8 @@ Ce qui a échoué, et pourquoi, pour ne pas y revenir :
 | une référence partagée par behavior | deux auteurs et deux comptabilités qui se contredisent |
 | fermer une passe en regardant l'activité du **behavior** | `run` en dispatche une par behavior : chaque `focus` ou `blur` pendant un appel en laisse une ouverte, et `recover()` rend contre elle |
 | n'ouvrir de passe que depuis un hook | un `ctx.push` d'abonnement allume `loading` hors de tout hook : sans référence, `recover()` ne rend rien |
+| déduire « une sœur travaille » du **nombre** de passes ouvertes | une passe ouverte n'est pas une passe en vol : `release` publiait un `loading` que personne n'éteindrait, et le champ restait occupé à vie |
+| laisser une passe retomber sans reprendre son attente | l'attente devient orpheline, et `recover()` n'a plus rien à quoi la comparer |
 
 La référence appartient donc à la **passe** (`Pass { before, generation }`),
 ouverte avant l'appel du hook et fermée dès qu'elle retombe — ou tout de suite
@@ -257,6 +259,12 @@ si elle n'a ouvert aucune attente. Deux corollaires, chacun payé d'un tour de
 revue : une passe ne reste ouverte que si **elle-même** a allumé `loading`, et
 une attente allumée hors de tout hook ouvre une passe **détachée**, refermée au
 retour à `idle`.
+
+La règle qui ferme la classe, et qu'il faut vérifier à chaque modification :
+**toute écriture qui allume `loading` a un titulaire, et toute restitution une
+référence.** Une passe qui retombe en laissant l'attente allumée la fait
+réadopter ; c'est ce qui rend inatteignable le repli de `recover()`, lequel
+rendrait contre l'état courant — c'est-à-dire ne rendrait rien.
 
 Toute modification de `dispatch`, `setSlice`, `release` ou `recover` commence par
 un test dans `flags.test.ts`, et se vérifie avec **deux passes ouvertes en même

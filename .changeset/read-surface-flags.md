@@ -51,7 +51,9 @@ Le comportement d'un behavior asynchrone se resserre, et c'est visible :
   valeur qui réapparaît toute seule, c'est fini ;
 - **un behavior qui échoue rend son attente, et elle seule.** Ce que l'attente a
   ajouté part, ce qu'elle a retiré reste retiré, et ce qu'il avait posé avant
-  survit. S'il n'était jamais entré en attente, sa tranche est intacte ;
+  survit. S'il n'était jamais entré en attente, sa tranche est intacte. Si une
+  autre de ses passes travaille encore, le champ reste `loading` — l'échec de
+  l'une ne déclare pas l'autre terminée ;
 - **un `DebouncedValidator` reste joignable après un remontage.** Son
   abonnement au validator décoré était coupé définitivement au démontage : sous
   `StrictMode`, tout champ devenait sourd aux constats d'un `ExternalValidator`
