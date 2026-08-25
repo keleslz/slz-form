@@ -232,13 +232,31 @@ BASE_URL=http://localhost:4173 npm run test:e2e -w examples/react
 
 ### Rendre l'attente d'un behavior
 
-Six tours de revue d'affilée y ont trouvé un bloquant, toujours le même
+Douze tours de revue d'affilée y ont trouvé un bloquant, toujours le même
 symptôme : un champ obligatoire reste masqué après un échec, sort du payload, et
 le formulaire part vide en se croyant valide.
 
-La règle tient en une phrase : **on rend ce que la passe a ajouté, et rien
-d'autre** — l'intersection entre la tranche courante et l'état d'entrée de la
-passe. Ce qu'elle a retiré reste retiré ; ce qui était là avant elle survit.
+La cause, une fois nommée : la tranche d'état est **partagée** par behavior —
+`ctx.state` la rend telle quelle, et les helpers en dépendent — pendant que le
+travail, lui, est **par passe**. Toutes les tentatives qui ont échoué cherchaient
+à deviner, depuis cette tranche partagée, ce qu'une passe avait voulu.
+
+Trois règles, et elles se tiennent :
+
+1. **L'activité est dérivée** : le behavior est `loading` si et seulement si une
+   passe ouverte la veut. Une sœur qui retourne `ctx.state.idle()` ne dit plus
+   que « moi, j'ai fini ».
+2. **On rend ce que la passe a ajouté** (`Pass.added`), et rien d'autre. Ce
+   qu'elle a retiré reste retiré ; ce qu'une autre a posé survit.
+3. **Une intention se déclare** : seul un `loading()` / `idle()` appelé compte
+   (`BehaviorState.activityStated`). Poser un marqueur pendant une attente n'est
+   pas la revendiquer.
+
+Et la question qui n'a pas de réponse déductible — *une passe qui retombe
+tient-elle encore l'attente ?* — est **rendue au behavior** : sa dernière parole
+tranche. Un hook synchrone parle une dernière fois en poussant, un hook
+asynchrone en retombant ; pour garder l'attente au-delà, il la redéclare en
+sortie (`return ctx.state.loading()`), ou la rallume depuis son rappel externe.
 
 Ce qui a échoué, et pourquoi, pour ne pas y revenir :
 
@@ -254,33 +272,28 @@ Ce qui a échoué, et pourquoi, pour ne pas y revenir :
 | deviner l'écrivain (« la dernière passe ouverte ») | faux dès qu'une passe sœur s'ouvre après celle qui écrit — un `blur` suffit : le voisin devient titulaire, et le vrai travailleur ne l'est pas |
 | distinguer « fait durable » et « décoration » par la position d'un `await` | indécidable : deux passes au flux identique, `verified`+`locked` d'un côté, `skeleton`+`invisible` de l'autre, exigeraient des issues opposées |
 | lire une transition d'activité, ou un nombre de passes, pour savoir qui tient l'attente | la passe le dit — chaque relecture par un proxy a coûté un tour de revue |
-| un seul booléen pour « qui tient la référence » et « quelqu'un travaille » | les deux questions n'ont pas la même arité : une réponse pour la première, plusieurs pour la seconde. Un écho synchrone de `loading` passait pour un travailleur, une passe discrète gardait le champ occupé |
+| un seul booléen pour « qui tient la référence » et « quelqu'un travaille » | les deux questions n'ont pas la même arité — mais elles disparaissent toutes les deux dès que l'activité est dérivée de l'intention des passes |
 | ne rendre qu'une passe quand `recover()` les abandonne toutes | ce qu'une autre avait posé restait — champ masqué à vie, hors payload, formulaire déclaré valide |
-| oublier `inFlight` sur **un** des trois créateurs d'attente détachée | le rejet d'une sœur éteint une attente que personne n'a rendue, et le verrou posé avec elle sort du champ d'action de `recover()`, qui ne visite que les tranches encore `loading` |
-| laisser une passe retomber sans reprendre son attente | l'attente devient orpheline, et `recover()` n'a plus rien à quoi la comparer |
-
-La référence appartient donc à la **passe** (`Pass { before, generation, … }`),
-ouverte avant l'appel du hook et fermée dès qu'elle retombe — ou tout de suite
-si elle n'a ouvert aucune attente. Deux corollaires, chacun payé d'un tour de
-revue : une passe ne reste ouverte que si **elle-même** a allumé `loading`, et
-une attente allumée hors de tout hook ouvre une passe **détachée**, refermée au
-retour à `idle`.
+| réadopter une attente laissée orpheline par une passe retombée | il n'y a pas d'orpheline à réadopter : une attente est voulue par une passe ouverte, ou elle n'est pas |
+| refuser le retour au repos tant qu'une attente détachée est en vol | la passe détachée n'étant fermée **que** par ce retour au repos, la garde s'auto-bloque — quatre suites se sont mises à pendre |
+| ouvrir une passe **anonyme** pour l'attente d'un rappel externe | elle lui donne une référence mais lui retire la parole : le même rappel disant `idle` n'a toujours pas de passe ouverte, donc l'attente qu'il vient d'éteindre reste allumée jusqu'à la soumission. C'est **sa** passe qui rouvre, détachée |
+| rendre une passe **supplantée** comme on rend une passe abandonnée | ce qu'elle avait posé a déjà été effacé par ce qui l'a supplantée : son `added` désigne maintenant les flags d'autrui, et `reset()` perdait le fait que le remontage venait de reposer. Une passe supplantée **lâche** son attente, elle ne rend rien |
+| garder l'attente d'une passe asynchrone qui retombe sans rien dire | une réponse périmée occupe le champ à vie ; c'est le cas fréquent, et il n'a aucun moyen de se signaler |
+| l'éteindre **aussi** quand la passe la redéclare en sortie | la même ligne dirait deux choses selon qu'elle est écrite avant ou après un `await` |
 
 La règle qui ferme la classe, et qu'il faut vérifier à chaque modification :
-**toute écriture qui allume `loading` a un titulaire, et toute restitution une
-référence.** Le titulaire ne se déduit pas : `setSlice` reçoit la passe qui
-écrit. `holds` dit qui tient la référence, `publishes && inFlight` dit si
-quelqu'un travaille encore — **une attente détachée compte comme en vol** —, et
-`recover()` rend **toutes** les passes qu'il abandonne. La propriété se vérifie
-**à l'état quiescent** : `release` republie l'attente avant que l'adoption ne lui
-rende un titulaire, et cette fenêtre d'une instruction est normale. Dix tours de revue ont raffiné un proxy pour cette question ; il n'y en
-a pas de bon, et il n'y en a pas non plus pour « ce fait est-il durable ? ». Une passe qui retombe en laissant l'attente allumée la fait
-réadopter ; c'est ce qui rend inatteignable le repli de `recover()`, lequel
-rendrait contre l'état courant — c'est-à-dire ne rendrait rien.
+**l'attente publiée est ce que les passes ouvertes veulent, et une restitution
+ne retire que ce que la passe rendue a ajouté.** L'écrivain ne se déduit pas :
+`setSlice` reçoit la passe qui écrit.
 
-Toute modification de `dispatch`, `setSlice`, `release` ou `recover` commence par
-un test dans `flags.test.ts`, et se vérifie avec **deux passes ouvertes en même
-temps** : c'est la configuration où toutes les tentatives précédentes ont cédé.
+Toute modification de `dispatch`, `setSlice`, `settle`, `release` ou `recover`
+commence par un test dans `flags.test.ts`, et se vérifie avec **deux passes
+ouvertes en même temps** : c'est la configuration où toutes les tentatives
+précédentes ont cédé. Le filet de bout en bout est
+`packages/form/test/passes.invariants.test.ts` — il croise des formes de hooks
+et n'observe que ce qu'un consommateur voit (payload à la soumission, attente
+fuitée). Écrire le filet **avant** le correctif, et vérifier qu'il est rouge sur
+le moteur d'avant, est ce qui a fini par fermer la classe.
 
 ## Pièges déjà rencontrés
 

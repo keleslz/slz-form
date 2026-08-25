@@ -372,8 +372,9 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 29 | Verdict d'un champ | `errors` non vide, pas un flag | deux mots voisins — `error` affiché, `blocking` vrai — se confondaient à l'usage ; le verdict est déjà porté par une donnée que la vue lit de toute façon |
 | 30 | Verdict d'une liste | comme le formulaire : `valid` / `error`, jamais `pristine` | une liste est un agrégat, pas un champ qu'on touche ; sa validité est ce qui est vrai |
 | 31 | Travail en vol du formulaire | les champs **montés**, visibles ou non | la convergence attend un champ masqué ; un champ démonté, personne ne l'attend, et son activité ne redescendrait jamais |
-| 32 | Rendre une ou N passes | l'**intersection** avec l'état d'entrée de **chacune** des passes rendues — un rejet en rend une, `recover()` les rend toutes | ce qu'une passe a ajouté part, ce qu'elle a retiré reste retiré. Distinguer « fait durable » de « décoration transitoire » parmi **ses propres** ajouts n'est pas observable : deux passes au flux identique — `verified`+`locked` d'un côté, `skeleton`+`invisible` de l'autre — exigeraient des issues opposées |
+| 32 | Rendre une ou N passes | ce que **cette** passe a ajouté, et rien d'autre (`Pass.added`) — un rejet en rend une, `recover()` les rend toutes | ce qu'elle a ajouté part, ce qu'elle a retiré reste retiré. L'intersection avec son état d'entrée disait la même chose tant qu'une seule passe écrivait ; à deux, elle effaçait ce qu'une sœur **vivante** avait posé depuis. Distinguer « fait durable » de « décoration transitoire » parmi ses propres ajouts n'est toujours pas observable : deux passes au flux identique — `verified`+`locked` d'un côté, `skeleton`+`invisible` de l'autre — exigeraient des issues opposées |
 | 33 | Passe supplantée | une génération **par behavior**, capturée par la passe ; une passe plus ancienne n'écrit plus rien — ni tranche, ni valeur, ni options | sans ça, une promesse retombée après coup rasait la tranche qu'on venait de rendre. Par behavior et non par champ : `recover()` passe sur tous les champs montés dès que la convergence expire, et un compteur de champ rendait muet, définitivement, un voisin qui n'avait rien en vol |
+| 34 | La dernière parole d'une passe | l'attente d'une passe dure jusqu'à ce qu'elle ait fini de parler : un hook synchrone parle une dernière fois en **poussant**, un hook asynchrone en **retombant** | une attente poussée en cours de route s'éteint donc avec la promesse, sauf si le hook la redéclare en sortie (`return ctx.state.loading()`). L'inverse — la garder par défaut — laissait une réponse périmée occuper le champ à vie, et c'est le cas fréquent ; deviner lequel des deux le behavior voulait est ce qui a coûté douze tours. Un envoi externe a deux façons de le dire, et les deux sont explicites : la redéclarer, ou la rallumer depuis son rappel |
 
 ---
 
@@ -416,7 +417,8 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 33 | Un groupe exclusif a un vocabulaire fermé | `ValidityFlag` et `ActivityFlag` sont des unions closes ; seuls les flags cumulés acceptent ceux de l'application, et `RESERVED_FLAGS` s'en dérive au lieu de les recopier |
 | 34 | Le démontage n'abandonne rien en vol | `unmount()` neutralise les tranches **et** appelle `validator.abandon()` ; sans quoi un champ démonté restait `loading` pour toujours |
 | 35 | Aucun hook ne peut faire dérailler le moteur | les sept hooks passent par `invoke`, la souscription à leur promesse aussi, et `isPromise` ne lève jamais — lire ou appeler `.then` d'un objet piégé ne sort ni de `mount()`, ni de `change()`, ni de `unmount()` |
-| 36 | Toute attente a une référence, et « quelqu'un travaille » se lit à part | `Pass { before, generation, detached, holds, publishes, inFlight }`. L'écrivain **se déclare** : `setSlice` reçoit la passe qui écrit. `holds` répond à « qui tient la référence ? » — une seule passe à la fois, celle qui a **allumé** l'attente ; `publishes && inFlight` répond à « quelqu'un travaille-t-il encore ? » — plusieurs passes possibles. Un booléen unique pour les deux ne pouvait pas trancher. Et **une attente détachée est du travail en vol** : les trois chemins qui en créent une doivent poser `inFlight`, sinon le rejet d'une sœur éteint une attente que personne n'a rendue. La propriété se lit **au repos** : `release` republie l'attente avant que l'adoption ne lui rende un titulaire, et cette fenêtre d'une instruction est normale |
+| 36 | L'activité publiée suit le travail en vol | `Pass { generation, detached, added, wantsLoading }`. La tranche reste **partagée** par behavior — `ctx.state` la rend telle quelle, les helpers en dépendent — mais l'**intention** est par passe : `setSlice` reçoit la passe qui écrit et lui impute ce qui apparaît. L'activité en est **dérivée** — `loading` si et seulement si une passe ouverte la veut —, donc une sœur qui retourne `ctx.state.idle()` ne dit plus que « moi, j'ai fini » ; et `release` ne retire que `added`, donc ce qu'une sœur vivante a posé survit. Deux corollaires payés d'un mutant chacun : une passe retombée qui écrit encore — un rappel externe parle en son nom — **rouvre la sienne**, détachée, au lieu d'en ouvrir une anonyme qui ne saurait plus l'écouter ; et une passe **supplantée** lâche son attente sans rien rendre, ce qu'elle avait posé ayant déjà été effacé par ce qui l'a supplantée |
+| 37 | Une intention déclarée n'est pas un écho | `BehaviorState.activityStated` : seul un `loading()` / `idle()` **appelé** vaut intention. `ctx.state` rend la tranche fusionnée, attente comprise : sans ce témoin, un `ctx.state.mark("badge")` posé pendant une attente la revendiquait sans le savoir, et un `push` de marqueur suffisait à la tenir |
 
 ---
 
@@ -456,30 +458,22 @@ inchangés).
 4. ~~**Packaging.**~~ Fait. `packages/form` et `packages/react-form` sont deux
    packages publiables, construits par tsup (ESM + `.d.ts`), avec changesets et
    CI. Reste à faire côté compte npm uniquement.
-5. **Le repos publié ne suit pas le travail réellement en vol.** Deux
-   symptômes, une seule cause — l'activité publiée d'un champ est une donnée
-   partagée par toutes les passes d'un behavior, alors que le travail, lui, est
-   par passe.
+5. ~~**Le repos publié ne suit pas le travail réellement en vol.**~~ Fait.
+   L'activité d'un champ n'est plus la dernière écriture d'un behavior mais une
+   **dérivée** de ce que ses passes ouvertes veulent, et une restitution ne
+   retire que ce que la passe rendue avait ajouté (invariants 36 et 37,
+   arbitrages 32 et 34). Une sœur qui réussit n'éteint plus l'attente d'une
+   autre, une sœur qui échoue ne défait plus ce qu'une passe vivante a écrit —
+   donc un champ masqué ne rentre plus dans le payload et `submit()` n'aboutit
+   plus avant convergence. Prix assumé : une passe asynchrone qui pousse
+   `loading` puis retombe sans rien dire de l'activité **rend** l'attente ; pour
+   la garder, elle la redéclare en sortie.
 
-   - Une passe qui **échoue** retire ce qu'une sœur **vivante** avait écrit : la
-     restitution intersecte avec l'état d'entrée de la passe rendue, et ignore
-     les passes encore ouvertes. Le masquage est perdu **définitivement** — la
-     sœur relit `ctx.state` après coup et n'a aucune raison de le reposer.
-   - Une passe qui **réussit** en retournant `ctx.state.idle()` éteint l'attente
-     détachée d'une sœur : `ctx.state` est la tranche fusionnée du behavior.
-
-   Dans les deux cas, la conséquence dépasse l'affichage : un champ que le
-   behavior tenait masqué **rentre dans le payload**, et `submit()` rend `true`
-   avant que la valeur attendue soit posée. Les helpers livrés — `lookup`,
-   `loadOptions` — s'en protègent avec un jeton de run ; un behavior écrit à la
-   main, non.
-
-   Le moteur a l'information : il connaît les passes ouvertes, leur état
-   d'entrée et leur travail en vol. Ce n'est pas indécidable, c'est non
-   implémenté. Antérieur au chantier des flags (reproduit sur les révisions qui
-   le précèdent), et non traité ici : une première tentative a fait pendre
-   quatre suites, et ce mécanisme a déjà coûté douze tours de revue — il mérite
-   son propre chantier, avec le harnais de fuzz qui a servi à le mesurer.
+   Ce qui l'a fermé, après douze tours qui ne l'avaient pas fermé : le filet
+   d'abord (`packages/form/test/passes.invariants.test.ts`, 49 paires de formes
+   de hooks, deux oracles observables — soumis avant convergence, attente
+   fuitée), vérifié **rouge sur le moteur d'avant** avant d'être déclaré vert
+   sur celui d'après.
 
 6. **Adapters Angular et Vue.** `packages/angular-form` et `packages/vue-form`
    n'ont encore que leur README : le contrat à implémenter y est décrit.
