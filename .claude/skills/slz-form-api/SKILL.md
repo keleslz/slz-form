@@ -271,7 +271,9 @@ La règle qui ferme la classe, et qu'il faut vérifier à chaque modification :
 référence.** Le titulaire ne se déduit pas : `setSlice` reçoit la passe qui
 écrit. `holds` dit qui tient la référence, `publishes && inFlight` dit si
 quelqu'un travaille encore — **une attente détachée compte comme en vol** —, et
-`recover()` rend **toutes** les passes qu'il abandonne. Dix tours de revue ont raffiné un proxy pour cette question ; il n'y en
+`recover()` rend **toutes** les passes qu'il abandonne. La propriété se vérifie
+**à l'état quiescent** : `release` republie l'attente avant que l'adoption ne lui
+rende un titulaire, et cette fenêtre d'une instruction est normale. Dix tours de revue ont raffiné un proxy pour cette question ; il n'y en
 a pas de bon, et il n'y en a pas non plus pour « ce fait est-il durable ? ». Une passe qui retombe en laissant l'attente allumée la fait
 réadopter ; c'est ce qui rend inatteignable le repli de `recover()`, lequel
 rendrait contre l'état courant — c'est-à-dire ne rendrait rien.

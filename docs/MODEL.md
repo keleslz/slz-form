@@ -370,7 +370,6 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 27 | Surface de lecture | deux fonctions et des flags ; aucun booléen d'état | un booléen dérivé rend le flag facultatif, donc mort — c'est ce qu'avait fait `189b8de` en livrant l'API par flags et son contournement dans le même diff |
 | 28 | Flags de l'application | `mark`, `unmark` et le constructeur refusent les mots du moteur | un vocabulaire fermé bloque les besoins qu'on n'a pas prévus ; l'union de flags cumulés ne peut pas se contredire, l'ouvrir est donc sans risque — mais poser `error` ou `loading` par ce chemin publierait un état impossible, d'où `RESERVED_FLAGS` |
 | 29 | Verdict d'un champ | `errors` non vide, pas un flag | deux mots voisins — `error` affiché, `blocking` vrai — se confondaient à l'usage ; le verdict est déjà porté par une donnée que la vue lit de toute façon |
-| 31bis | Une passe qui échoue peut retirer ce qu'une sœur **vivante** a écrit | *ouvert* — le moteur a l'information (il connaît les passes ouvertes et leur état d'entrée), la restitution ne s'en sert pas. Conséquence à connaître : un champ qu'une passe vivante venait de masquer redevient visible et **rentre dans le payload** le temps qu'elle le remasque. Ce n'est pas seulement visuel |
 | 30 | Verdict d'une liste | comme le formulaire : `valid` / `error`, jamais `pristine` | une liste est un agrégat, pas un champ qu'on touche ; sa validité est ce qui est vrai |
 | 31 | Travail en vol du formulaire | les champs **montés**, visibles ou non | la convergence attend un champ masqué ; un champ démonté, personne ne l'attend, et son activité ne redescendrait jamais |
 | 32 | Rendre une ou N passes | l'**intersection** avec l'état d'entrée de **chacune** des passes rendues — un rejet en rend une, `recover()` les rend toutes | ce qu'une passe a ajouté part, ce qu'elle a retiré reste retiré. Distinguer « fait durable » de « décoration transitoire » parmi **ses propres** ajouts n'est pas observable : deux passes au flux identique — `verified`+`locked` d'un côté, `skeleton`+`invisible` de l'autre — exigeraient des issues opposées |
@@ -417,7 +416,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 33 | Un groupe exclusif a un vocabulaire fermé | `ValidityFlag` et `ActivityFlag` sont des unions closes ; seuls les flags cumulés acceptent ceux de l'application, et `RESERVED_FLAGS` s'en dérive au lieu de les recopier |
 | 34 | Le démontage n'abandonne rien en vol | `unmount()` neutralise les tranches **et** appelle `validator.abandon()` ; sans quoi un champ démonté restait `loading` pour toujours |
 | 35 | Aucun hook ne peut faire dérailler le moteur | les sept hooks passent par `invoke`, la souscription à leur promesse aussi, et `isPromise` ne lève jamais — lire ou appeler `.then` d'un objet piégé ne sort ni de `mount()`, ni de `change()`, ni de `unmount()` |
-| 36 | Toute attente a une référence, et « quelqu'un travaille » se lit à part | `Pass { before, generation, detached, holds, publishes, inFlight }`. L'écrivain **se déclare** : `setSlice` reçoit la passe qui écrit. `holds` répond à « qui tient la référence ? » — une seule passe à la fois, celle qui a **allumé** l'attente ; `publishes && inFlight` répond à « quelqu'un travaille-t-il encore ? » — plusieurs passes possibles. Un booléen unique pour les deux ne pouvait pas trancher. Et **une attente détachée est du travail en vol** : les trois chemins qui en créent une doivent poser `inFlight`, sinon le rejet d'une sœur éteint une attente que personne n'a rendue |
+| 36 | Toute attente a une référence, et « quelqu'un travaille » se lit à part | `Pass { before, generation, detached, holds, publishes, inFlight }`. L'écrivain **se déclare** : `setSlice` reçoit la passe qui écrit. `holds` répond à « qui tient la référence ? » — une seule passe à la fois, celle qui a **allumé** l'attente ; `publishes && inFlight` répond à « quelqu'un travaille-t-il encore ? » — plusieurs passes possibles. Un booléen unique pour les deux ne pouvait pas trancher. Et **une attente détachée est du travail en vol** : les trois chemins qui en créent une doivent poser `inFlight`, sinon le rejet d'une sœur éteint une attente que personne n'a rendue. La propriété se lit **au repos** : `release` republie l'attente avant que l'adoption ne lui rende un titulaire, et cette fenêtre d'une instruction est normale |
 
 ---
 
@@ -457,5 +456,30 @@ inchangés).
 4. ~~**Packaging.**~~ Fait. `packages/form` et `packages/react-form` sont deux
    packages publiables, construits par tsup (ESM + `.d.ts`), avec changesets et
    CI. Reste à faire côté compte npm uniquement.
-5. **Adapters Angular et Vue.** `packages/angular-form` et `packages/vue-form`
+5. **Le repos publié ne suit pas le travail réellement en vol.** Deux
+   symptômes, une seule cause — l'activité publiée d'un champ est une donnée
+   partagée par toutes les passes d'un behavior, alors que le travail, lui, est
+   par passe.
+
+   - Une passe qui **échoue** retire ce qu'une sœur **vivante** avait écrit : la
+     restitution intersecte avec l'état d'entrée de la passe rendue, et ignore
+     les passes encore ouvertes. Le masquage est perdu **définitivement** — la
+     sœur relit `ctx.state` après coup et n'a aucune raison de le reposer.
+   - Une passe qui **réussit** en retournant `ctx.state.idle()` éteint l'attente
+     détachée d'une sœur : `ctx.state` est la tranche fusionnée du behavior.
+
+   Dans les deux cas, la conséquence dépasse l'affichage : un champ que le
+   behavior tenait masqué **rentre dans le payload**, et `submit()` rend `true`
+   avant que la valeur attendue soit posée. Les helpers livrés — `lookup`,
+   `loadOptions` — s'en protègent avec un jeton de run ; un behavior écrit à la
+   main, non.
+
+   Le moteur a l'information : il connaît les passes ouvertes, leur état
+   d'entrée et leur travail en vol. Ce n'est pas indécidable, c'est non
+   implémenté. Antérieur au chantier des flags (reproduit sur les révisions qui
+   le précèdent), et non traité ici : une première tentative a fait pendre
+   quatre suites, et ce mécanisme a déjà coûté douze tours de revue — il mérite
+   son propre chantier, avec le harnais de fuzz qui a servi à le mesurer.
+
+6. **Adapters Angular et Vue.** `packages/angular-form` et `packages/vue-form`
    n'ont encore que leur README : le contrat à implémenter y est décrit.
