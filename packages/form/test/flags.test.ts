@@ -870,3 +870,120 @@ describe("un validator différé reste joignable après un remontage", () => {
         await until(() => field.snapshot.errors.includes("encore pris"), { timeout: 2000 });
     });
 });
+
+describe("une passe supplantée n'écrit plus rien", () => {
+    it("un push qui retombe après recover() ne rallume pas loading", async () => {
+        const form = new FormController<{ a: string }>({ name: "f39", settleTimeout: 80 });
+        const twoPhase: IBehavior<string> = {
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().lock());
+                await wait(200);
+                // Seconde phase — un retry, un lookup chaîné. Elle retombe
+                // après que la convergence a expiré et appelé `recover()`.
+                ctx.push(ctx.state.loading().lock());
+                await wait(50);
+                return ctx.state.idle().unlock();
+            },
+        };
+        const field = form.field("a", { behaviors: [twoPhase] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("loading"));
+        await form.submit();
+        await wait(400);
+
+        // La garde ne couvrait que la sortie de la passe : `push` pouvait
+        // encore allumer `loading`, et `release` — écarté par le jeton — ne
+        // venait plus l'éteindre. Le champ restait occupé pour toujours, donc
+        // toute soumission suivante échouait.
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        expect(field.isBusy).toBe(false);
+        expect(await form.submit()).toBe(true);
+    });
+
+    it("une valeur qui retombe après reset() n'est plus écrite", async () => {
+        const form = new FormController<{ a: string }>({ name: "f40" });
+        const slow: IBehavior<string> = {
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(60);
+                ctx.setValue("Paris");
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("a", { behaviors: [slow] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("75001");
+        await until(() => field.snapshot.hasFlag("loading"));
+        field.reset();
+
+        await wait(120);
+        // « Annuler » puis la valeur qui réapparaît toute seule.
+        expect(field.snapshot.value).toBe(undefined);
+    });
+});
+
+describe("rien ne fait dérailler le démontage", () => {
+    it("un onUnmount qui rend un thenable sans catch", async () => {
+        const form = new FormController<{ a: string; b: string }>({ name: "f41" });
+        const exotic: IBehavior<string> = {
+            // `isPromise` ne teste que `then` : appeler `.catch` dessus levait
+            // depuis `unmount()` lui-même.
+            onUnmount: () => ({ then: (_: unknown, reject: (e: unknown) => void) => { reject(new Error("bim")); } }) as never,
+        };
+        const a = form.field("a", { behaviors: [exotic] });
+        const b = form.field("b", {});
+        a.mount();
+        b.mount();
+        form.mount();
+        await wait(10);
+
+        const original = console.error;
+        console.error = () => undefined;
+        try {
+            expect(() => form.unmount()).not.toThrow();
+        } finally {
+            console.error = original;
+        }
+        expect(b.isUnmounted).toBe(true);
+        expect(a.snapshot.hasFlag("mounted")).toBe(false);
+    });
+});
+
+describe("un rejet sans attente ne rase rien", () => {
+    it("un hook async qui échoue sans jamais pousser garde sa tranche", async () => {
+        const form = new FormController<{ kind: string; extra: string }>({ name: "f42" });
+        const audited: IBehavior<string> = {
+            onMount: (ctx) => ctx.state.hide().mark("audit"),
+            onChange: async () => {
+                // Aucun `ctx.push` : le cas de loin le plus courant.
+                await wait(10);
+                throw new Error("audit indisponible");
+            },
+        };
+        const kind = form.field("kind", {});
+        const extra = form.field("extra", { required: true, behaviors: [audited] });
+        kind.mount();
+        extra.mount();
+        form.mount();
+        await wait(20);
+        expect(extra.snapshot.hasFlag("invisible", "audit")).toBe(true);
+        expect(form.getSnapshot().hasFlag("valid")).toBe(true);
+
+        extra.change("x");
+        await wait(60);
+
+        // Sans attente enregistrée il n'y a rien à rendre : raser la tranche
+        // faisait réapparaître un champ que le behavior avait masqué, le
+        // faisait entrer dans le payload et condamnait la soumission.
+        expect(extra.snapshot.hasFlag("invisible", "audit")).toBe(true);
+        expect(Object.keys(form.getSnapshot().values)).not.toContain("extra");
+        expect(form.getSnapshot().hasFlag("valid")).toBe(true);
+    });
+});

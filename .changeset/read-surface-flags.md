@@ -40,6 +40,23 @@ en perdant `valid`, et `FieldArrayController.isValid` disparaît au profit de
 `ui` et `errors`. Nouveaux exports : `BehaviorFlag`, `AnyUiFlag`, `MarkerFlag`,
 `BEHAVIOR_FLAGS`, `MARKER_FLAGS`, `RESERVED_FLAGS`, `isReservedFlag`.
 
+Le comportement d'un behavior asynchrone se resserre, et c'est visible :
+
+- **une passe supplantée n'écrit plus rien.** `recover()` — que la soumission
+  déclenche quand la convergence expire — et `reset()` ouvrent une nouvelle
+  génération : `ctx.push`, `ctx.setValue` et `ctx.setOptions` d'une passe plus
+  ancienne sont ignorés, et son résultat comme son rejet ne tranchent plus. Un
+  « Annuler » suivi de la valeur qui réapparaît toute seule, c'est fini ;
+- **un behavior qui échoue rend son attente, et elle seule.** Ce que l'attente a
+  ajouté part, ce qu'elle a retiré reste retiré, et ce qu'il avait posé avant
+  survit. S'il n'était jamais entré en attente, sa tranche est intacte ;
+- **un `DebouncedValidator` reste joignable après un remontage.** Son
+  abonnement au validator décoré était coupé définitivement au démontage : sous
+  `StrictMode`, tout champ devenait sourd aux constats d'un `ExternalValidator`
+  différé ;
+- **`onUnmount` ne peut plus faire dérailler le démontage**, qu'il lève ou qu'il
+  soit écrit `async`.
+
 Deux gardes s'ajoutent au passage, toutes deux visibles d'un consommateur.
 `BehaviorState` refuse les mots du moteur — dans `mark`/`unmark` **et** dans son
 constructeur, sinon un behavior qui retourne une tranche construite à la main

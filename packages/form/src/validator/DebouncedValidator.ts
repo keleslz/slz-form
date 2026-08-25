@@ -54,7 +54,8 @@ export class DebouncedValidator<T = string> extends IValidator<T> {
      * revalidation venue du validator décoré doit remonter jusqu'au champ,
      * sinon des constats injectés resteraient muets.
      *
-     * Repris à chaque passe, et pas seulement à la construction : `detach()`
+     * Repris à chaque passe — depuis `runInto`, le seul point que toute passe
+     * traverse — et pas seulement à la construction : `detach()`
      * coupe l'abonnement quand le champ se démonte, et rien ne le rétablissait.
      * Un champ conditionnel masqué une fois — ou n'importe quel champ sous
      * `StrictMode`, qui monte, démonte et remonte — cessait définitivement de
@@ -68,8 +69,21 @@ export class DebouncedValidator<T = string> extends IValidator<T> {
         this.unsubscribeInner = this.inner.onStale(() => this.requestRevalidation());
     }
 
-    protected async validate(value: T, report: ValidationReport, ctx: ValidationContext): Promise<void> {
+    /**
+     * **Point de passage garanti**, comme pour le composite : `validate()` est
+     * sauté sur une valeur vide sans `validateWhenEmpty`, donc s'y réabonner
+     * laissait un champ resté vide sourd après un `detach()`.
+     */
+    override runInto(
+        value: T | undefined,
+        report: ValidationReport,
+        ctx: ValidationContext,
+    ): void | Promise<void> {
         this.listenInner();
+        return super.runInto(value, report, ctx);
+    }
+
+    protected async validate(value: T, report: ValidationReport, ctx: ValidationContext): Promise<void> {
         if (!(await this.debouncer.wait(this.delay))) {
             // Remplacée par une frappe plus récente : ne rien signaler. Le jeton
             // de run de la base empêche de toute façon la publication.

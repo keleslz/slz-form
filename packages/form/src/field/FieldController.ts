@@ -261,7 +261,14 @@ export class FieldController<T = string, M = never> {
             // rattrapée — c'est-à-dire la fin du process sous Node.
             const result = this.invoke(() => behavior.onUnmount?.(ctx));
             if (isPromise(result)) {
-                void result.catch((error: unknown) => reportEngineError(this.name, error));
+                // `Promise.resolve` et non `result.catch` : `isPromise` ne
+                // vérifie que `then`. Un thenable sans `catch` faisait lever
+                // `unmount()` lui-même, donc sautait la neutralisation des
+                // tranches, l'abandon du validator et le `commit` final —
+                // exactement la panne que le passage par `invoke` corrigeait.
+                void Promise.resolve(result).catch(
+                    (error: unknown) => reportEngineError(this.name, error),
+                );
             }
         }
         // Un démontage en vol laissait la tranche sur `loading` + `locked` :
@@ -672,14 +679,26 @@ export class FieldController<T = string, M = never> {
         const current = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
         const before = this.slicesBeforeLoading.get(behavior);
         this.slicesBeforeLoading.delete(behavior);
+        // Sans entrée, la passe n'est jamais entrée en attente : il n'y a rien
+        // à rendre, et raser la tranche effacerait ce que `onMount` avait posé.
+        // C'est le chemin le plus courant — un hook `async` qui n'appelle jamais
+        // `ctx.push`.
         const kept = before === undefined
-            ? []
+            ? current.markers
             : current.markers.filter((flag) => before.has(flag));
         this.statesByBehavior.set(behavior, new BehaviorState("idle", kept));
     }
 
     private buildContext(behavior: IBehavior<T, M>, signal: AbortSignal): BehaviorContext<T, M> {
         const watch = (behavior.watch ?? []).map(watchedName);
+        // La génération de la passe qui reçoit ce contexte. `recover()` et
+        // `reset()` tranchent pour tout le champ : ce qu'écrit une passe
+        // supplantée n'a plus à être publié. Sans cette capture, la garde ne
+        // couvrait que la **sortie** de la passe — `ctx.push` pouvait donc
+        // encore allumer `loading`, et plus rien ne venait l'éteindre, puisque
+        // `release` était justement écarté par le jeton.
+        const generation = this.waitGeneration;
+        const superseded = (): boolean => signal.aborted || generation !== this.waitGeneration;
         // Captured explicitly: `state`, `ui` and `form` are getters, so they must
         // read the controller live — a behavior that resumes after an `await`
         // needs the current values, not those captured when the hook was called.
@@ -699,8 +718,16 @@ export class FieldController<T = string, M = never> {
             },
             signal,
             getValue: () => this.value,
-            setValue: (next) => this.assign(next),
+            setValue: (next) => {
+                if (superseded()) {
+                    return;
+                }
+                this.assign(next);
+            },
             setOptions: (options) => {
+                if (superseded()) {
+                    return;
+                }
                 this.options = options;
                 this.commit();
             },
@@ -713,7 +740,7 @@ export class FieldController<T = string, M = never> {
                 return this.host?.formView().field(name) ?? null;
             },
             push: (state) => {
-                if (signal.aborted) {
+                if (superseded()) {
                     return;
                 }
                 this.setSlice(behavior, state);

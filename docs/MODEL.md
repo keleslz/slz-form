@@ -2,7 +2,7 @@
 
 > Document de référence à valider. Il fixe l'objectif, les entités, les
 > arbitrages tranchés et la façon dont chaque invariant est tenu.
-> Statut : implémenté, couvert par `packages/form/test` (193 tests) et `packages/react-form/test` (19 tests) ; le parcours
+> Statut : implémenté, couvert par `packages/form/test` (197 tests) et `packages/react-form/test` (19 tests) ; le parcours
 > navigateur (`examples/react`, 43 assertions) couvre le socle, pas encore les
 > listes répétables ni `readonly`.
 
@@ -373,7 +373,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 30 | Verdict d'une liste | comme le formulaire : `valid` / `error`, jamais `pristine` | une liste est un agrégat, pas un champ qu'on touche ; sa validité est ce qui est vrai |
 | 31 | Travail en vol du formulaire | les champs **montés**, visibles ou non | la convergence attend un champ masqué ; un champ démonté, personne ne l'attend, et son activité ne redescendrait jamais |
 | 32 | Rendre une attente | l'**intersection** avec ce qui précédait, jamais la tranche entière | `neutral` effaçait un fait posé au montage, que rien ne remettrait ; restaurer la tranche d'avant ressuscitait un flag que le behavior venait de retirer, au point de faire disparaître un champ obligatoire du payload |
-| 33 | Passe supplantée | `recover()` et `reset()` ouvrent une génération ; un rejet plus ancien ne tranche plus | sans ça, une promesse retombée après coup rasait la tranche qu'on venait de rendre — même rôle que le jeton de run d'`IValidator` |
+| 33 | Passe supplantée | `recover()` et `reset()` ouvrent une génération ; une passe plus ancienne n'écrit plus rien — ni tranche, ni valeur, ni options | sans ça, une promesse retombée après coup rasait la tranche qu'on venait de rendre — même rôle que le jeton de run d'`IValidator` |
 
 ---
 
