@@ -102,6 +102,12 @@ return ctx.state.unmark("skeleton");
 if (field.hasFlag("skeleton")) return <Skeleton />;
 ```
 
+> L'état **agrégé** d'une liste — sa validité, ses erreurs, son travail en vol —
+> se lit par `useForm().snapshot.arrays`, pas par `useFieldArray`. Ce dernier ne
+> s'abonne qu'à la **composition** de la liste (ajout, retrait, déplacement),
+> pour qu'une frappe dans une ligne ne re-rende pas les autres : y exposer des
+> flags les rendrait périmés.
+
 ## Listes répétables
 
 ```tsx

@@ -23,7 +23,12 @@ export type FormSubmissionFlag = FormStatus;
  */
 export type FormMarkerFlag = "loading" | "touched";
 
+/**
+ * Le vocabulaire d'un formulaire est **clos**, contrairement à celui d'un champ.
+ *
+ * Les flags de l'application sont posés par un behavior, donc sur un champ. Rien
+ * ne les remonte ici, et un type ouvert inviterait à écrire
+ * `form.hasFlag("skeleton")` — qui répondrait `false` en silence. Pour lire un
+ * flag applicatif, on lit le champ qui le porte.
+ */
 export type FormFlag = FormValidityFlag | FormSubmissionFlag | FormMarkerFlag;
-
-/** Le vocabulaire ouvert, comme pour un champ. */
-export type AnyFormFlag = FormFlag | (string & {});

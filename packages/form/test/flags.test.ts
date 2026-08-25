@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+    BehaviorState,
     FormController,
     IValidator,
     prefill,
+    type FieldArray,
     type IBehavior,
     type ValidationReport,
 } from "../src/index";
@@ -307,5 +309,162 @@ describe("les flags du formulaire", () => {
 
         expect(form.getSnapshot().hasFlag("valid")).toBe(true);
         expect(Object.keys(form.getSnapshot().values)).toEqual(["b"]);
+    });
+});
+
+describe("le moteur garde ses mots", () => {
+    it("mark refuse un flag du moteur au lieu de publier un état impossible", () => {
+        const form = new FormController<{ a: string }>({ name: "f17" });
+        const field = form.field("a", {});
+        field.mount();
+
+        // Sans la garde : `pristine` **et** `error` dans la même projection, et
+        // un `loading` que rien ne peut éteindre puisque l'union ne se
+        // soustrait pas.
+        const state = field.snapshot.ui;
+        expect(state.validity).toBe("pristine");
+
+        const attempts = ["error", "valid", "pristine", "loading", "idle", "touched", "mounted", "submitting"];
+        for (const flag of attempts) {
+            expect(() => BehaviorState.neutral.mark(flag), flag).toThrow(/appartient au moteur/);
+            expect(() => BehaviorState.neutral.unmark(flag), flag).toThrow(/appartient au moteur/);
+        }
+    });
+
+    it("la disponibilité et les flags de l'application passent", () => {
+        const base = BehaviorState.neutral;
+        expect(base.mark("locked").has("locked")).toBe(true);
+        expect(base.mark("skeleton").has("skeleton")).toBe(true);
+        expect(base.mark("skeleton").unmark("skeleton").has("skeleton")).toBe(false);
+    });
+
+    it("un behavior qui tente le coup ne casse rien", async () => {
+        const form = new FormController<{ a: string }>({ name: "f19" });
+        const rogue: IBehavior<string> = { onMount: (ctx) => ctx.state.mark("error") };
+        const field = form.field("a", { behaviors: [rogue] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        // Le hook a levé, le moteur l'a signalé, et l'état publié reste sain.
+        expect(field.snapshot.hasFlag("pristine")).toBe(true);
+        expect(field.snapshot.hasFlag("error")).toBe(false);
+    });
+});
+
+describe("ce qui est en vol finit toujours par être rendu", () => {
+    it("recover() rend aussi les flags de l'application", async () => {
+        const form = new FormController<{ a: string }>({ name: "f20" });
+        const stuck: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.loading().mark("skeleton"));
+                await wait(10_000);
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("a", { behaviors: [stuck] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("skeleton"));
+
+        field.recover();
+        // Sans ça, la vue reste en squelette pour toujours : le behavior est
+        // abandonné, son signal avorté, plus personne ne retirera le flag.
+        expect(field.snapshot.hasFlag("skeleton")).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+    });
+
+    it("un behavior qui rejette rend aussi les siens", async () => {
+        const form = new FormController<{ a: string }>({ name: "f21" });
+        const failing: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.loading().mark("skeleton"));
+                await wait(10);
+                throw new Error("boom");
+            },
+        };
+        const field = form.field("a", { behaviors: [failing] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("skeleton"));
+        await until(() => !field.snapshot.hasFlag("skeleton"), { timeout: 1000 });
+
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+    });
+});
+
+describe("le formulaire dit vrai sur son travail", () => {
+    it("un champ masqué qui charge garde le formulaire en loading", async () => {
+        const form = new FormController<{ a: string }>({ name: "f22" });
+        const hiddenLoad: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.hide().loading());
+                await wait(40);
+                return ctx.state.hide().idle();
+            },
+        };
+        const field = form.field("a", { behaviors: [hiddenLoad] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("loading"));
+
+        // « Masqué vaut absent » vaut pour la validité et le payload. Le travail
+        // asynchrone, lui, est bien réel — et `submit()` l'attend.
+        expect(form.isBusy).toBe(true);
+        expect(form.getSnapshot().hasFlag("loading")).toBe(true);
+    });
+
+    it("le champ dit `submitting` pendant que le formulaire part", async () => {
+        const form = new FormController<{ a: string }>({ name: "f23" });
+        const slow: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(30);
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("a", { behaviors: [slow] });
+        field.mount();
+        form.mount();
+
+        const pending = form.submit();
+        await until(() => field.snapshot.hasFlag("submitting"));
+        // Le verrou l'accompagne, sans se confondre avec lui : la vue peut
+        // distinguer « le formulaire part » de « un behavior verrouille ».
+        expect(field.snapshot.hasFlag("locked")).toBe(true);
+
+        await pending;
+        expect(field.snapshot.hasAny("submitting", "locked")).toBe(false);
+    });
+
+    it("une liste publie sa présence dès le montage, même vide", async () => {
+        type Fields = { rows: FieldArray<{ label: string }> };
+        const form = new FormController<Fields>({ name: "f24" });
+        form.array("rows");
+        form.mount();
+        await wait(10);
+
+        const rows = form.getSnapshot().arrays[0];
+        // Sans notification au montage, le flag n'apparaissait qu'au premier
+        // `append()` — une liste restée vide ne l'obtenait jamais.
+        expect(rows?.ui.hasFlag("mounted")).toBe(true);
+
+        form.unmount();
+        expect(form.getSnapshot().arrays[0]?.ui.hasFlag("mounted")).toBe(false);
+    });
+});
+
+describe("le focus ne survit pas au démontage", () => {
+    it("un champ démonté pendant qu'il avait le focus ne le publie plus", async () => {
+        const form = new FormController<{ a: string }>({ name: "f25" });
+        const field = form.field("a", {});
+        field.mount();
+        form.mount();
+        field.focus();
+        expect(field.snapshot.hasFlag("focused")).toBe(true);
+
+        field.unmount();
+        await wait(10);
+        expect(field.snapshot.hasAny("focused", "mounted")).toBe(false);
     });
 });

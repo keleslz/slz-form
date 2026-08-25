@@ -13,10 +13,12 @@ export { UiState } from "./state/UiState";
 export type {
     ActivityFlag,
     AnyUiFlag,
+    BehaviorFlag,
     MarkerFlag,
     UiFlag,
     ValidityFlag,
 } from "./state/UiFlag";
+export { ACTIVITY_FLAGS, MARKER_FLAGS, RESERVED_FLAGS, VALIDITY_FLAGS } from "./state/UiFlag";
 
 // ── validation ────────────────────────────────────────────────────────────
 export {
@@ -74,7 +76,6 @@ export { FormSnapshot } from "./form/FormSnapshot";
 export type { ArraySummary, FieldSummary } from "./form/FormSnapshot";
 export type { FormStatus, FormView } from "./form/FormView";
 export type {
-    AnyFormFlag,
     FormFlag,
     FormMarkerFlag,
     FormSubmissionFlag,

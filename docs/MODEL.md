@@ -2,7 +2,7 @@
 
 > Document de référence à valider. Il fixe l'objectif, les entités, les
 > arbitrages tranchés et la façon dont chaque invariant est tenu.
-> Statut : implémenté, couvert par `packages/form/test` (149 tests) et `packages/react-form/test` (17 tests) ; le parcours
+> Statut : implémenté, couvert par `packages/form/test` (168 tests) et `packages/react-form/test` (19 tests) ; le parcours
 > navigateur (`examples/react`, 43 assertions) couvre le socle, pas encore les
 > listes répétables ni `readonly`.
 
@@ -70,6 +70,7 @@ mécaniquement, sans qu'aucun composant ne soit modifié.
 | `required` | cumulée | le Controller | obligatoire |
 | `touched` · `focused` | cumulée | le Controller | l'interaction |
 | `mounted` | cumulée | le Controller | fait partie du formulaire qu'on remplit |
+| `submitting` | cumulée | le Controller | le formulaire est en train de partir — accompagne `locked` |
 | *ceux de l'application* | cumulée | Behaviors | voir plus bas |
 
 ### Les flags d'un formulaire — les mêmes mots
@@ -85,12 +86,22 @@ mécaniquement, sans qu'aucun composant ne soit modifié.
 <button disabled={!form.hasFlag("valid", "idle")}>Envoyer</button>
 ```
 
+`idle` n'appartient pas au même groupe des deux côtés, et c'est voulu : au champ
+il s'oppose à `loading` (un travail est en vol), au formulaire à `submitting`
+(l'envoi est parti). Un formulaire peut donc être `idle` **et** `loading` — un
+lookup tourne, mais rien n'est en cours d'envoi. Le bouton ci-dessus reste actif
+dans ce cas, à raison : `submit()` fait partir le différé puis **attend** que
+plus rien ne soit en vol avant de juger (arbitrage 19).
+
 Une nuance, structurelle, à ne pas perdre : au **champ**, `error` est ce qu'on
 *affiche*, et il reste éteint tant qu'on n'a pas touché — un prefill n'allume
 rien. Au **formulaire**, il n'y a rien à afficher : `error` y est ce qui est
 *vrai*, et un formulaire prérempli et faux ne part pas. C'est l'arbitrage 24,
 tenu par cette répartition plutôt que par un booléen `isBlocking`. Le verdict
 d'un champ pris isolément, c'est `errors` non vide.
+
+Une **liste** suit la règle du formulaire, avec le vocabulaire du champ : elle
+n'est jamais `pristine`, puisqu'elle n'est pas quelque chose qu'on touche.
 
 ### Les flags de l'application
 
@@ -105,6 +116,13 @@ field.hasFlag("skeleton")      //  la vue en décide, le moteur transporte
 **Uniquement du côté cumulé.** C'est là que deux behaviors s'additionnent sans
 pouvoir se contredire, donc ouvrir est sans risque. Les groupes exclusifs, eux,
 restent fermés : c'est là qu'on publierait un état qui n'existe pas.
+
+La garde est dans le code, pas seulement dans la doc : `mark` / `unmark`
+**refusent** les mots du moteur (`RESERVED_FLAGS`). `mark("error")` publierait
+`pristine` *et* `error` ; `mark("loading")` allumerait une activité que rien ne
+pourrait éteindre, puisque l'union des flags cumulés ne se soustrait pas. Un
+behavior émet la disponibilité — `lock()`, `readOnly()`, `hide()` — et ses
+propres mots.
 
 ```ts
 snapshot.flags   // ["valid", "idle", "mounted", "required", "touched"] — projection plate
@@ -344,13 +362,14 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 22 | Déclencheurs de dépendance | un nom seul vaut `["value"]` ; `{ field, on }` ouvre le reste | garde l'arbitrage 18 comme défaut, et rend la réaction à l'état possible en la déclarant |
 | 23 | Plusieurs validators | un tableau devient un composite, invisible pour l'appelant | promesse déjà faite ici et dans `.CLAUDE.md` ; permet aux erreurs serveur d'être un validator |
 | 24 | Affichage vs verdict | le flag `error` du **champ** reste éteint tant qu'on n'a pas touché ; celui du **formulaire** est le verdict | un prefill ne doit pas allumer d'erreur, mais un formulaire prérempli et correct doit être soumettable — réparti sur deux niveaux plutôt que porté par un booléen `isBlocking` |
-| 25 | Champs répétables | une ligne **est** un formulaire, identifiée et non indexée |
-| 26 | Règle qui casse | constat `unverified` bloquant, plutôt que « valide » ou que l'ancien verdict | déclarer valide laisse passer ce que la règle aurait refusé ; garder l'ancien verdict le recolle à une autre valeur | réutilise graphe, validation et soumission ; retirer ou déplacer une ligne ne renomme rien, donc aucun `watch` ne pointe dans le vide |
+| 25 | Champs répétables | une ligne **est** un formulaire, identifiée et non indexée | réutilise graphe, validation et soumission ; retirer ou déplacer une ligne ne renomme rien, donc aucun `watch` ne pointe dans le vide |
+| 26 | Règle qui casse | constat `unverified` bloquant, plutôt que « valide » ou que l'ancien verdict | déclarer valide laisse passer ce que la règle aurait refusé ; garder l'ancien verdict le recolle à une autre valeur |
+| 27 | Surface de lecture | deux fonctions et des flags ; aucun booléen d'état | un booléen dérivé rend le flag facultatif, donc mort — c'est ce qu'avait fait `189b8de` en livrant l'API par flags et son contournement dans le même diff |
+| 28 | Flags de l'application | `mark` / `unmark`, refusés sur les mots du moteur | un vocabulaire fermé bloque les besoins qu'on n'a pas prévus ; l'union de flags cumulés ne peut pas se contredire, l'ouvrir est donc sans risque — mais poser `error` ou `loading` par ce chemin publierait un état impossible, d'où `RESERVED_FLAGS` |
+| 29 | Verdict d'un champ | `errors` non vide, pas un flag | deux mots voisins — `error` affiché, `blocking` vrai — se confondaient à l'usage ; le verdict est déjà porté par une donnée que la vue lit de toute façon |
+| 30 | Verdict d'une liste | comme le formulaire : `valid` / `error`, jamais `pristine` | une liste est un agrégat, pas un champ qu'on touche ; sa validité est ce qui est vrai |
 
 ---
-| 27 | Surface de lecture | deux fonctions et des flags ; aucun booléen d'état | un booléen dérivé rend le flag facultatif, donc mort — c'est ce qu'avait fait `189b8de` en livrant l'API par flags et son contournement dans le même diff |
-| 28 | Flags de l'application | `mark` / `unmark`, du côté cumulé seulement | un vocabulaire fermé bloque les besoins qu'on n'a pas prévus ; l'union de flags cumulés ne peut pas se contredire, l'ouvrir est donc sans risque |
-| 29 | Verdict d'un champ | `errors` non vide, pas un flag | deux mots voisins — `error` affiché, `blocking` vrai — se confondaient à l'usage ; le verdict est déjà porté par une donnée que la vue lit de toute façon |
 
 ## 6. Où chaque invariant est tenu
 

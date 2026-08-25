@@ -120,10 +120,6 @@ export class FieldArrayController<TRow extends FieldsShape> {
         return this.entries.map((row) => row.values());
     }
 
-    get isValid(): boolean {
-        return this.entries.every((row) => row.form.snapshot.hasFlag("valid"));
-    }
-
     /**
      * Les constats bloquants de toutes les lignes, à plat.
      *
@@ -134,10 +130,19 @@ export class FieldArrayController<TRow extends FieldsShape> {
         return this.entries.flatMap((row) => Object.values(row.form.snapshot.errors).flat());
     }
 
-    /** L'état d'une liste, dit avec les mots d'un champ. */
+    /**
+     * L'état d'une liste, dit avec les mots d'un champ.
+     *
+     * Une nuance à connaître : sa validité est le **verdict**, jamais
+     * `pristine`. Une liste n'est pas un champ qu'on touche — c'est un agrégat,
+     * comme le formulaire, et l'arbitrage 24 s'y applique du côté « ce qui est
+     * vrai ». Une ligne dont un champ obligatoire est vide met donc la liste en
+     * `error` avant toute interaction, pendant que ce champ, lui, reste
+     * `pristine`.
+     */
     get ui(): UiState {
         return new UiState(
-            this.isValid ? "valid" : "error",
+            this.errors.length === 0 ? "valid" : "error",
             this.isBusy ? "loading" : "idle",
             this.mounted ? ["mounted"] : [],
         );
@@ -152,6 +157,7 @@ export class FieldArrayController<TRow extends FieldsShape> {
         for (const row of this.entries) {
             row.form.mount();
         }
+        this.publishPresence();
     }
 
     unmount(): void {
@@ -159,6 +165,7 @@ export class FieldArrayController<TRow extends FieldsShape> {
         for (const row of this.entries) {
             row.form.unmount();
         }
+        this.publishPresence();
     }
 
     /**
@@ -197,6 +204,16 @@ export class FieldArrayController<TRow extends FieldsShape> {
         const changed = !sameValues(next, this.lastValues);
         this.lastValues = next;
         this.onChanged(changed);
+    }
+
+    /**
+     * Le montage n'est pas une modification de valeur, mais il change l'état
+     * publié de la liste — son flag `mounted`. Sans cette notification, le
+     * `commit()` du parent n'a jamais lieu et le flag n'apparaît qu'au premier
+     * `append()` : une liste restée vide ne l'obtenait jamais.
+     */
+    private publishPresence(): void {
+        this.onChanged(false);
     }
 
     private publish(): void {

@@ -1,4 +1,4 @@
-import type { AnyFormFlag, FormFlag } from "./FormFlag";
+import type { FormFlag } from "./FormFlag";
 import type { UiState } from "../state";
 import type { FormStatus } from "./FormView";
 
@@ -59,12 +59,12 @@ export class FormSnapshot {
      * <button disabled={!form.hasFlag("valid", "idle")}>Envoyer</button>
      * ```
      */
-    hasFlag(...flags: AnyFormFlag[]): boolean {
+    hasFlag(...flags: FormFlag[]): boolean {
         return flags.every((flag) => this.holds(flag));
     }
 
     /** OU — le formulaire porte **au moins un** de ces flags. */
-    hasAny(...flags: AnyFormFlag[]): boolean {
+    hasAny(...flags: FormFlag[]): boolean {
         return flags.some((flag) => this.holds(flag));
     }
 
@@ -142,8 +142,17 @@ export class FormSnapshot {
         return this.fields.filter((field) => field.ui.hasFlag("mounted") && !field.ui.hasFlag("invisible"));
     }
 
+    /**
+     * Tous les champs, pas seulement ceux qui comptent.
+     *
+     * « Masqué vaut absent » (invariant 29) vaut pour la **validité et le
+     * payload** : un champ conditionnel ne doit pas condamner la soumission.
+     * Son travail asynchrone, lui, est bien réel et `submit()` l'attend — d'où
+     * le même périmètre que `FormController.isBusy`. Filtrer ici déclarait le
+     * formulaire au repos pendant qu'il attendait jusqu'à `settleTimeout`.
+     */
     private get isLoading(): boolean {
-        return this.contributing.some((field) => field.ui.hasFlag("loading"))
+        return this.fields.some((field) => field.ui.hasFlag("loading"))
             || this.arrays.some((rows) => rows.ui.hasFlag("loading"));
     }
 
@@ -151,7 +160,7 @@ export class FormSnapshot {
         return this.fields.some((field) => field.ui.hasFlag("touched"));
     }
 
-    private holds(flag: AnyFormFlag): boolean {
+    private holds(flag: FormFlag): boolean {
         switch (flag) {
             case "valid":
             case "error":

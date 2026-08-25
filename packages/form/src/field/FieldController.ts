@@ -222,6 +222,9 @@ export class FieldController<T = string, M = never> {
         if (!this.lifecycle.unmount()) {
             return;
         }
+        // Un champ démonté n'a plus le focus. Le garder publiait `focused` sur
+        // un champ qui n'est plus là.
+        this.focused = false;
         this.abort.abort();
         this.unsubscribeValidator?.();
         this.unsubscribeValidator = null;
@@ -291,9 +294,12 @@ export class FieldController<T = string, M = never> {
         this.validator.abandon();
         for (const [behavior, state] of this.statesByBehavior) {
             if (state.activity === "loading") {
-                // Même règle qu'après un rejet : tout ce que l'état d'attente
-                // avait pris est rendu, masquage compris.
-                this.statesByBehavior.set(behavior, state.idle().unlock().show().writable());
+                // Même règle qu'après un rejet : la tranche entière est rendue.
+                // Pas seulement les mots du moteur — un behavior abandonné dont
+                // le `skeleton` survivrait laisserait la vue en squelette pour
+                // toujours, puisque son signal est avorté et que plus personne
+                // ne le retirera.
+                this.statesByBehavior.set(behavior, BehaviorState.neutral);
             }
         }
         this.commit();
@@ -574,13 +580,13 @@ export class FieldController<T = string, M = never> {
                 if (signal.aborted) {
                     return;
                 }
-                // Un behavior rejeté ne doit rien laisser derrière lui de ce
-                // que son état d'attente avait posé : ni `loading`, ni le
-                // verrou, ni le masquage, ni la lecture seule. Un champ resté
-                // `invisible` sort du payload — donc une valeur obligatoire
-                // disparaît en silence et le formulaire se déclare valide.
-                const previous = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
-                this.statesByBehavior.set(behavior, previous.idle().unlock().show().writable());
+                // Un behavior rejeté ne doit rien laisser derrière lui : ni
+                // `loading`, ni le verrou, ni le masquage, ni la lecture seule,
+                // ni ses propres flags. Un champ resté `invisible` sort du
+                // payload — donc une valeur obligatoire disparaît en silence et
+                // le formulaire se déclare valide ; un `skeleton` oublié fige la
+                // vue tout aussi durablement.
+                this.statesByBehavior.set(behavior, BehaviorState.neutral);
                 this.commit();
             });
     }
@@ -684,7 +690,12 @@ export class FieldController<T = string, M = never> {
         // Un formulaire en cours de soumission verrouille ses champs : c'est un
         // fait de contrôleur, pas quelque chose que chaque consommateur devrait
         // re-dériver à côté de `locked`.
-        if (this.submitting || this.viewLocked) {
+        if (this.submitting) {
+            // Un formulaire qui part verrouille ses champs — mais la vue doit
+            // pouvoir distinguer ce verrou-là de celui d'un behavior.
+            flags.push("submitting", "locked");
+        }
+        if (this.viewLocked) {
             flags.push("locked");
         }
         if (this.viewReadOnly) {

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import type {
-    AnyFormFlag,
     ArrayNameOf,
     FieldsShape,
     FormController,
@@ -27,9 +26,9 @@ export interface UseFormResult {
     errors: Readonly<Record<string, readonly string[]>>;
     flags: readonly FormFlag[];
     /** ET — le formulaire porte **tous** ces flags. */
-    hasFlag: (...flags: AnyFormFlag[]) => boolean;
+    hasFlag: (...flags: FormFlag[]) => boolean;
     /** OU — le formulaire porte **au moins un** de ces flags. */
-    hasAny: (...flags: AnyFormFlag[]) => boolean;
+    hasAny: (...flags: FormFlag[]) => boolean;
     submit: () => Promise<boolean>;
     reset: () => void;
 }
@@ -87,11 +86,11 @@ export function hooksFor<TFields extends FieldsShape>(form: FormController<TFiel
             form.reset();
         }, []);
         const hasFlag = useCallback(
-            (...flags: AnyFormFlag[]) => snapshot.hasFlag(...flags),
+            (...flags: FormFlag[]) => snapshot.hasFlag(...flags),
             [snapshot],
         );
         const hasAny = useCallback(
-            (...flags: AnyFormFlag[]) => snapshot.hasAny(...flags),
+            (...flags: FormFlag[]) => snapshot.hasAny(...flags),
             [snapshot],
         );
 

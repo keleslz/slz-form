@@ -26,7 +26,8 @@ export type ActivityFlag = "idle" | "loading";
  * - `invisible` ne le rend pas ;
  * - `required` le déclare obligatoire ;
  * - `touched` / `focused` disent l'interaction ;
- * - `mounted` dit qu'il fait partie du formulaire qu'on remplit.
+ * - `mounted` dit qu'il fait partie du formulaire qu'on remplit ;
+ * - `submitting` dit que le formulaire est en train de partir.
  */
 export type MarkerFlag =
     | "locked"
@@ -35,7 +36,8 @@ export type MarkerFlag =
     | "required"
     | "touched"
     | "focused"
-    | "mounted";
+    | "mounted"
+    | "submitting";
 
 /** Le vocabulaire du moteur, à plat : ce que `hasFlag(...)` connaît d'avance. */
 export type UiFlag = ValidityFlag | ActivityFlag | MarkerFlag;
@@ -61,4 +63,37 @@ export const MARKER_FLAGS: readonly MarkerFlag[] = [
     "touched",
     "focused",
     "mounted",
+    "submitting",
 ];
+
+/**
+ * Ce qu'un Behavior a le droit d'émettre : la disponibilité, et **les flags de
+ * l'application**.
+ *
+ * Le reste appartient à un autre émetteur — la validité au Validator, l'activité
+ * au couple `loading()`/`idle()`, l'interaction et la présence au Controller.
+ */
+export type BehaviorFlag = "locked" | "readonly" | "invisible" | (string & {});
+
+/**
+ * Les mots que le moteur se réserve.
+ *
+ * Sans cette garde, `mark("error")` publierait `pristine` **et** `error` — l'état
+ * impossible que le découpage en groupes exclusifs existe pour écarter — et
+ * `mark("loading")` allumerait une activité que rien ne pourrait éteindre, puisque
+ * l'union ne se soustrait pas (invariant 33).
+ */
+export const RESERVED_FLAGS: readonly UiFlag[] = [
+    ...VALIDITY_FLAGS,
+    ...ACTIVITY_FLAGS,
+    "required",
+    "touched",
+    "focused",
+    "mounted",
+    "submitting",
+];
+
+/** Vrai si ce mot appartient au moteur et n'est pas à prendre. */
+export function isReservedFlag(flag: AnyUiFlag): boolean {
+    return RESERVED_FLAGS.some((reserved) => reserved === flag);
+}

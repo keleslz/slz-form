@@ -1,4 +1,4 @@
-import type { ActivityFlag, AnyUiFlag } from "./UiFlag";
+import { isReservedFlag, type ActivityFlag, type AnyUiFlag, type BehaviorFlag } from "./UiFlag";
 
 /**
  * The slice of UI state a **single** Behavior owns.
@@ -33,19 +33,24 @@ export class BehaviorState {
 
     // ── cumulative markers (added / removed independently) ────────────────
     /**
-     * Pose un flag — un des flags du moteur, ou **un des tiens**.
+     * Pose un flag de disponibilité, ou **un des tiens**.
      *
-     * C'est ce qui rend l'inconnu exprimable : un behavior peut publier
-     * `mark("skeleton")` et la vue le lire par `hasFlag("skeleton")`, sans que
-     * le moteur ait à connaître le mot.
+     * C'est ce qui rend l'inconnu exprimable : un behavior publie
+     * `mark("skeleton")`, la vue lit `hasFlag("skeleton")`, et le moteur n'a
+     * jamais eu à connaître le mot.
+     *
+     * Les mots du moteur sont refusés (`RESERVED_FLAGS`). Poser `error` à côté
+     * de `pristine` publierait un état qui n'existe pas, et poser `loading` ici
+     * allumerait une activité que rien ne pourrait éteindre — l'union des flags
+     * cumulés ne se soustrait pas (invariant 33).
      */
-    mark(flag: AnyUiFlag): BehaviorState {
-        return this.with(flag);
+    mark(flag: BehaviorFlag): BehaviorState {
+        return this.with(refuseReserved(flag, "mark"));
     }
 
     /** Cesse d'émettre un flag — l'absence vaut défaut. */
-    unmark(flag: AnyUiFlag): BehaviorState {
-        return this.without(flag);
+    unmark(flag: BehaviorFlag): BehaviorState {
+        return this.without(refuseReserved(flag, "unmark"));
     }
 
     lock(): BehaviorState {
@@ -101,4 +106,19 @@ export class BehaviorState {
         }
         return new BehaviorState(this.activity, this.markers.filter((f) => f !== flag));
     }
+}
+
+/**
+ * Un mot du moteur passé à `mark`/`unmark` est une erreur de conception du
+ * behavior, pas une valeur à ignorer : la laisser passer publierait un état
+ * impossible, la taire rendrait le behavior silencieusement inopérant.
+ */
+function refuseReserved(flag: BehaviorFlag, method: string): BehaviorFlag {
+    if (isReservedFlag(flag)) {
+        throw new Error(
+            `[slz] \`${method}("${String(flag)}")\` : "${String(flag)}" appartient au moteur. `
+            + "Un behavior émet la disponibilité (`lock`, `readOnly`, `hide`) et ses propres flags.",
+        );
+    }
+    return flag;
 }

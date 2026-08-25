@@ -24,8 +24,9 @@ un formulaire prérempli jugé invalide, un champ invisible obligatoire rendant 
 soumission impossible, et un champ figé condamnant toutes les soumissions
 suivantes.
 
-Les validators, behaviors et appels de la vue existants compilent et se
-comportent à l'identique — la démo passe ses 43 assertions sans être touchée.
+Les validators et les behaviors existants compilent et se comportent à
+l'identique. **La surface de lecture, elle, change** — voir le changeset
+`read-surface-flags`.
 
 La surface bas niveau bouge malgré tout, pour qui l'utilisait directement.
 `ValidatorState` porte désormais `issues` à côté de `errors`, et
