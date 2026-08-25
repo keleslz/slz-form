@@ -230,6 +230,29 @@ cd examples/react && npx vite preview --port 4173 &
 BASE_URL=http://localhost:4173 npm run test:e2e -w examples/react
 ```
 
+### Rendre l'attente d'un behavior
+
+Six tours de revue d'affilée y ont trouvé un bloquant, toujours le même
+symptôme : un champ obligatoire reste masqué après un échec, sort du payload, et
+le formulaire part vide en se croyant valide.
+
+La règle tient en une phrase : **on rend ce que la passe a ajouté, et rien
+d'autre** — l'intersection entre la tranche courante et l'état d'entrée de la
+passe. Ce qu'elle a retiré reste retiré ; ce qui était là avant elle survit.
+
+Ce qui a échoué, et pourquoi, pour ne pas y revenir :
+
+| Tentative | Ce qu'elle casse |
+|---|---|
+| remettre `BehaviorState.neutral` | efface un fait posé au montage, que `onMount` ne rejouera pas |
+| restaurer l'état d'entrée tel quel | ressuscite un flag que le behavior venait de retirer |
+| indexer la référence sur le passage à `loading` | rate tout behavior qui pousse un état sans `loading` |
+| une référence partagée par behavior | deux auteurs et deux comptabilités qui se contredisent |
+
+La référence appartient donc à la **passe** (`Pass { before, generation }`),
+ouverte avant l'appel du hook, fermée quand elle retombe. Toute modification de
+`dispatch`, `release` ou `recover` commence par un test dans `flags.test.ts`.
+
 ## Pièges déjà rencontrés
 
 - **`watch` est un champ de classe**, pas un accesseur. `override get watch()`

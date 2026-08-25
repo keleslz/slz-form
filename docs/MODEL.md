@@ -2,7 +2,7 @@
 
 > Document de référence à valider. Il fixe l'objectif, les entités, les
 > arbitrages tranchés et la façon dont chaque invariant est tenu.
-> Statut : implémenté, couvert par `packages/form/test` (209 tests) et `packages/react-form/test` (19 tests) ; le parcours
+> Statut : implémenté, couvert par `packages/form/test` (216 tests) et `packages/react-form/test` (19 tests) ; le parcours
 > navigateur (`examples/react`, 43 assertions) couvre le socle, pas encore les
 > listes répétables ni `readonly`.
 
@@ -372,8 +372,8 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 29 | Verdict d'un champ | `errors` non vide, pas un flag | deux mots voisins — `error` affiché, `blocking` vrai — se confondaient à l'usage ; le verdict est déjà porté par une donnée que la vue lit de toute façon |
 | 30 | Verdict d'une liste | comme le formulaire : `valid` / `error`, jamais `pristine` | une liste est un agrégat, pas un champ qu'on touche ; sa validité est ce qui est vrai |
 | 31 | Travail en vol du formulaire | les champs **montés**, visibles ou non | la convergence attend un champ masqué ; un champ démonté, personne ne l'attend, et son activité ne redescendrait jamais |
-| 32 | Rendre une attente | l'**intersection** avec la tranche d'avant **le hook** — pas avant le passage à `loading` | `neutral` effaçait un fait posé au montage, que rien ne remettrait ; restaurer la tranche d'avant ressuscitait un flag que le behavior venait de retirer. Et s'indexer sur `loading` ratait tout behavior qui pousse un état sans lui : son masquage restait collé après un échec |
-| 33 | Passe supplantée | une génération **par behavior** ; une passe plus ancienne n'écrit plus rien — ni tranche, ni valeur, ni options | sans ça, une promesse retombée après coup rasait la tranche qu'on venait de rendre. Par behavior et non par champ : `recover()` passe sur tous les champs montés dès que la convergence expire, et un compteur de champ rendait muet, définitivement, un voisin qui n'avait rien en vol |
+| 32 | Rendre une attente | l'**intersection** avec l'état d'entrée de **la passe** qu'on rend | `neutral` effaçait un fait posé au montage, que rien ne remettrait ; restaurer l'état d'entrée tel quel ressuscitait un flag que le behavior venait de retirer. Ce qu'une passe a ajouté part, ce qu'elle a retiré reste retiré |
+| 33 | Passe supplantée | une génération **par behavior**, capturée par la passe ; une passe plus ancienne n'écrit plus rien — ni tranche, ni valeur, ni options | sans ça, une promesse retombée après coup rasait la tranche qu'on venait de rendre. Par behavior et non par champ : `recover()` passe sur tous les champs montés dès que la convergence expire, et un compteur de champ rendait muet, définitivement, un voisin qui n'avait rien en vol |
 
 ---
 
@@ -415,7 +415,8 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 32 | Aucun booléen d'état dans la surface de lecture | `FieldSnapshot`, `FormSnapshot`, `useField()` et `useForm()` n'exposent que `hasFlag` / `hasAny`, les données et les actions |
 | 33 | Un groupe exclusif a un vocabulaire fermé | `ValidityFlag` et `ActivityFlag` sont des unions closes ; seuls les flags cumulés acceptent ceux de l'application, et `RESERVED_FLAGS` s'en dérive au lieu de les recopier |
 | 34 | Le démontage n'abandonne rien en vol | `unmount()` neutralise les tranches **et** appelle `validator.abandon()` ; sans quoi un champ démonté restait `loading` pour toujours |
-| 35 | Aucun hook ne peut faire dérailler le moteur | les sept hooks passent par `invoke` ; `onUnmount`, qui peut être écrit `async`, voit aussi son rejet rattrapé |
+| 35 | Aucun hook ne peut faire dérailler le moteur | les sept hooks passent par `invoke`, la souscription à leur promesse aussi, et `isPromise` ne lève jamais — lire ou appeler `.then` d'un objet piégé ne sort ni de `mount()`, ni de `change()`, ni de `unmount()` |
+| 36 | La référence d'une restitution appartient à la passe | `Pass { before, generation }`, ouverte avant l'appel du hook et fermée quand elle retombe ; aucun état partagé entre passes, donc aucune à départager |
 
 ---
 

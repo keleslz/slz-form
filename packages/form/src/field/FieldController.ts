@@ -28,6 +28,19 @@ import type { AnyFieldView, FieldView } from "./FieldView";
 type Listener = () => void;
 
 /**
+ * Une passe d'un behavior : un appel de hook, et ce que valait sa tranche
+ * **juste avant** cet appel.
+ *
+ * La référence appartient à la passe. C'est ce qui rend la restitution
+ * univoque : `release` rend la passe qu'on lui donne, sans avoir à deviner
+ * laquelle d'un état partagé était la bonne.
+ */
+interface Pass {
+    readonly before: BehaviorState;
+    readonly generation: number;
+}
+
+/**
  * Quel champ possède quel validator. Une `WeakMap` : elle ne retient rien et ne
  * pèse pas sur la durée de vie des instances.
  */
@@ -91,15 +104,17 @@ export class FieldController<T = string, M = never> {
      * sans lui — à commencer par le skeleton de `parity.test.ts`, dont le
      * masquage restait alors collé après un échec.
      */
-    private readonly slicesBeforeHook = new Map<IBehavior<T, M>, BehaviorState>();
     /**
-     * Combien de passes de ce behavior sont **en vol**.
+     * Les passes **ouvertes** de chaque behavior, dans l'ordre où elles se sont
+     * ouvertes. Chacune porte son propre état d'entrée.
      *
-     * Un compteur, pas un booléen : deux passes se chevauchent dès qu'une
-     * frappe en devance une autre, et la plus rapide à retomber effaçait la
-     * référence de celle qui attendait encore.
+     * La référence appartient à la passe, pas au behavior. Une map partagée
+     * avait deux auteurs — le hook et l'écriture d'un `loading` — arbitrés par
+     * un « premier arrivé, premier servi », et deux comptabilités qui pouvaient
+     * se contredire : c'est de ces contradictions que sortaient les trois
+     * dernières régressions.
      */
-    private readonly waits = new Map<IBehavior<T, M>, number>();
+    private readonly openPasses = new Map<IBehavior<T, M>, Pass[]>();
     /**
      * Génération de passe, **par behavior**. `reset()` les supplante tous ;
      * `recover()` ne supplante que ceux dont il libère une attente. Ce qu'écrit
@@ -297,8 +312,7 @@ export class FieldController<T = string, M = never> {
         for (const behavior of this.behaviors) {
             this.statesByBehavior.set(behavior, BehaviorState.neutral);
         }
-        this.slicesBeforeHook.clear();
-        this.waits.clear();
+        this.openPasses.clear();
         // Le validator contribue lui aussi à l'activité, et rien ne l'aurait
         // arrêté : un champ démonté pendant qu'une règle asynchrone tournait
         // gardait `loading` pour toujours.
@@ -371,7 +385,12 @@ export class FieldController<T = string, M = never> {
                 // supplanter le champ entier rendait muet, définitivement, un
                 // voisin qui n'avait rien en vol.
                 this.supersede(behavior);
-                this.release(behavior);
+                const passes = this.openPasses.get(behavior) ?? [];
+                // La plus ancienne : c'est l'état d'avant que quoi que ce soit
+                // ne commence. Tout est abandonné d'un coup, donc tout se ferme.
+                const oldest = passes[0] ?? { before: state, generation: 0 };
+                this.openPasses.delete(behavior);
+                this.release(behavior, oldest);
             }
         }
         this.commit();
@@ -439,8 +458,7 @@ export class FieldController<T = string, M = never> {
         for (const behavior of this.behaviors) {
             this.statesByBehavior.set(behavior, BehaviorState.neutral);
         }
-        this.slicesBeforeHook.clear();
-        this.waits.clear();
+        this.openPasses.clear();
         for (const behavior of this.behaviors) {
             this.supersede(behavior);
         }
@@ -637,73 +655,67 @@ export class FieldController<T = string, M = never> {
     }
 
     /**
-     * Appelle un hook en retenant la tranche d'entrée du behavior — la seule
-     * référence correcte pour rendre son attente s'il échoue.
+     * Appelle un hook, la passe ouverte **avant** de l'appeler.
      *
-     * Deux conditions, et les deux comptent :
-     *
-     * - **seulement si le hook attend.** Un hook synchrone ne peut rien échouer
-     *   plus tard ; le retenir écrasait la référence d'une attente en cours.
-     *   C'est ce que faisait `onSubmit`, appelé par la soumission juste avant
-     *   que la convergence n'expire : la référence devenait l'état *masqué*, et
-     *   `recover()` rendait alors un champ toujours invisible ;
-     * - **seulement si rien n'est déjà en vol.** Tant qu'une attente n'a pas
-     *   été rendue, c'est son entrée qui fait foi.
+     * Avant, parce que le préfixe synchrone d'un hook `async` s'exécute dans
+     * `invoke`. Ouvrir après le laissait poser la référence lui-même, avec ses
+     * propres écritures déjà appliquées — la passe rendait alors le masquage
+     * qu'elle venait de poser.
      */
     private dispatch(
         behavior: IBehavior<T, M>,
         signal: AbortSignal,
         call: () => BehaviorResult,
     ): void {
-        const before = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
+        const pass: Pass = {
+            before: this.statesByBehavior.get(behavior) ?? BehaviorState.neutral,
+            generation: this.generationOf(behavior),
+        };
+        this.passesOf(behavior).push(pass);
+
         const result = this.invoke(call);
-        if (isPromise(result)) {
-            this.remember(behavior, before);
-            this.waits.set(behavior, (this.waits.get(behavior) ?? 0) + 1);
-        }
-        this.apply(behavior, result, signal);
-        if (!isPromise(result)) {
-            this.forgetIfSettled(behavior);
+        this.apply(behavior, result, signal, pass);
+
+        if (!isPromise(result) && this.statesByBehavior.get(behavior)?.activity !== "loading") {
+            // Hook synchrone qui ne laisse aucune attente derrière lui : rien
+            // ne viendra la fermer, autant la refermer tout de suite. S'il a
+            // laissé `loading` — le motif « travail détaché » —, la passe reste
+            // ouverte, et c'est `recover()` qui la rendra.
+            this.close(behavior, pass);
         }
     }
 
-    /** Première passe en vol : c'est son état d'entrée qui fait référence. */
-    private remember(behavior: IBehavior<T, M>, before: BehaviorState): void {
-        if (!this.slicesBeforeHook.has(behavior)) {
-            this.slicesBeforeHook.set(behavior, before);
+    private passesOf(behavior: IBehavior<T, M>): Pass[] {
+        const existing = this.openPasses.get(behavior);
+        if (existing) {
+            return existing;
         }
+        const created: Pass[] = [];
+        this.openPasses.set(behavior, created);
+        return created;
     }
 
-    /**
-     * Oublie la référence — mais seulement quand il n'y a plus rien à rendre :
-     * aucune passe en vol, et la tranche n'est plus en attente.
-     *
-     * Les deux conditions comptent. Une passe qui résout `undefined` — l'idiome
-     * dominant, `async onMount` sans `return` — laissait sinon sa référence
-     * derrière elle, et la passe suivante rendait son attente en la comparant à
-     * un état périmé.
-     */
-    private forgetIfSettled(behavior: IBehavior<T, M>): void {
-        if ((this.waits.get(behavior) ?? 0) > 0) {
+    /** Ferme une passe. Idempotent : une passe déjà fermée est simplement absente. */
+    private close(behavior: IBehavior<T, M>, pass: Pass): void {
+        const passes = this.openPasses.get(behavior);
+        if (!passes) {
             return;
         }
-        if (this.statesByBehavior.get(behavior)?.activity === "loading") {
-            return;
+        const at = passes.indexOf(pass);
+        if (at >= 0) {
+            passes.splice(at, 1);
         }
-        this.slicesBeforeHook.delete(behavior);
-    }
-
-    private endWait(behavior: IBehavior<T, M>): void {
-        const left = (this.waits.get(behavior) ?? 1) - 1;
-        if (left > 0) {
-            this.waits.set(behavior, left);
-        } else {
-            this.waits.delete(behavior);
+        if (passes.length === 0) {
+            this.openPasses.delete(behavior);
         }
     }
 
-    private apply(behavior: IBehavior<T, M>, result: BehaviorResult, signal: AbortSignal): void {
-        const generation = this.generationOf(behavior);
+    private apply(
+        behavior: IBehavior<T, M>,
+        result: BehaviorResult,
+        signal: AbortSignal,
+        pass: Pass,
+    ): void {
         if (result instanceof BehaviorState) {
             this.setSlice(behavior, result);
             return;
@@ -712,60 +724,50 @@ export class FieldController<T = string, M = never> {
             // Returning nothing means "no opinion": the previous slice is kept.
             return;
         }
-        void result
-            .then((state) => {
-                // Décompter d'abord, et quoi qu'il arrive ensuite : une passe
-                // qui ne rend rien est une passe terminée comme une autre.
-                this.endWait(behavior);
-                if (signal.aborted || generation !== this.generationOf(behavior)) {
-                    this.forgetIfSettled(behavior);
-                    return;
-                }
-                if (!(state instanceof BehaviorState)) {
-                    this.forgetIfSettled(behavior);
-                    return;
-                }
-                this.setSlice(behavior, state);
-                this.commit();
-            })
-            .catch((error: unknown) => {
-                this.endWait(behavior);
-                if (signal.aborted || generation !== this.generationOf(behavior)) {
-                    this.forgetIfSettled(behavior);
-                    return;
-                }
-                // Un behavior rejeté ne doit rien laisser derrière lui de ce que
-                // son attente avait posé : ni `loading`, ni le verrou, ni le
-                // masquage, ni la lecture seule, ni un `skeleton`. Un champ resté
-                // `invisible` sort du payload — donc une valeur obligatoire
-                // disparaît en silence et le formulaire se déclare valide.
-                this.release(behavior);
-                // Et il est signalé : le chemin synchrone passe par `invoke`, qui
-                // rapporte. Se taire ici rendait un behavior asynchrone
-                // définitivement muet, sans une ligne de journal.
-                reportEngineError(this.name, error);
-                this.commit();
-            });
+        // La souscription elle-même passe par `invoke` : appeler `then` peut
+        // lever, et l'exception sortait alors de `mount()` ou de `change()`,
+        // laissant les champs suivants non montés.
+        this.invoke(() => {
+            void result.then(
+                (state) => {
+                    this.close(behavior, pass);
+                    if (signal.aborted || pass.generation !== this.generationOf(behavior)) {
+                        return;
+                    }
+                    if (!(state instanceof BehaviorState)) {
+                        return;
+                    }
+                    this.setSlice(behavior, state);
+                    this.commit();
+                },
+                // En **second argument**, pas en `.catch` chaîné : sans quoi un
+                // gestionnaire de succès qui lève — `commit()` notifie des
+                // abonnés sans filet — envoyait une passe réussie dans le
+                // chemin d'échec, et la fermait deux fois.
+                (error: unknown) => {
+                    this.close(behavior, pass);
+                    if (signal.aborted || pass.generation !== this.generationOf(behavior)) {
+                        return;
+                    }
+                    // Un behavior rejeté ne doit rien laisser derrière lui de ce
+                    // que **sa** passe avait posé : ni `loading`, ni le verrou, ni
+                    // le masquage, ni un `skeleton`. Un champ resté `invisible`
+                    // sort du payload — donc une valeur obligatoire disparaît en
+                    // silence et le formulaire se déclare valide.
+                    this.release(behavior, pass);
+                    // Et il est signalé : le chemin synchrone passe par `invoke`,
+                    // qui rapporte. Se taire ici rendait un behavior asynchrone
+                    // définitivement muet, sans une ligne de journal.
+                    reportEngineError(this.name, error);
+                    this.commit();
+                },
+            );
+            return undefined;
+        });
     }
 
-    /**
-     * Range la tranche, et tient la référence à jour.
-     *
-     * Une attente ne s'ouvre pas qu'en rendant une promesse : un hook synchrone
-     * qui retourne `loading()`, ou un `ctx.push` qui l'allume, en ouvrent une
-     * aussi — et `recover()` devra la rendre. Ne compter que les promesses
-     * laissait ces passes-là sans référence, donc rendues contre `neutral`,
-     * c'est-à-dire rasées.
-     */
     private setSlice(behavior: IBehavior<T, M>, next: BehaviorState): void {
-        const previous = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
-        if (next.activity === "loading" && previous.activity !== "loading") {
-            this.remember(behavior, previous);
-        }
         this.statesByBehavior.set(behavior, next);
-        if (next.activity !== "loading") {
-            this.forgetIfSettled(behavior);
-        }
     }
 
     private generationOf(behavior: IBehavior<T, M>): number {
@@ -778,33 +780,22 @@ export class FieldController<T = string, M = never> {
     }
 
     /**
-     * Rend l'attente — **ce qu'elle a ajouté, et rien d'autre**.
+     * Rend une passe — **ce qu'elle a ajouté, et rien d'autre**.
      *
      * Ni la tranche entière (un fait posé au montage disparaîtrait, et
-     * `onMount` n'est pas rejoué), ni la tranche d'avant l'attente telle quelle
-     * (un flag que le behavior venait de **retirer** reviendrait : un champ
-     * masqué qui se montre puis échoue redevenait invisible, donc sortait du
-     * payload — et le formulaire se déclarait valide sans sa valeur
-     * obligatoire).
+     * `onMount` n'est pas rejoué), ni son état d'entrée tel quel (un flag que
+     * le behavior venait de **retirer** reviendrait : un champ masqué qui se
+     * montre puis échoue redevenait invisible, donc sortait du payload — et le
+     * formulaire se déclarait valide sans sa valeur obligatoire).
      *
-     * La règle exacte est donc l'**intersection** : on garde ce qui était déjà
-     * là avant et qui y est encore. Ce que l'attente a ajouté part, ce qu'elle a
-     * retiré reste retiré.
+     * La règle exacte est l'**intersection** : on garde ce qui était là à
+     * l'entrée de la passe et qui y est encore. Ce qu'elle a ajouté part, ce
+     * qu'elle a retiré reste retiré.
      */
-    private release(behavior: IBehavior<T, M>): void {
+    private release(behavior: IBehavior<T, M>, pass: Pass): void {
         const current = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
-        const before = this.slicesBeforeHook.get(behavior);
-        // Défensif, et **inatteignable par construction** : les deux seuls
-        // appelants sont le rejet d'une passe — qui a enregistré sa référence
-        // dans `dispatch` — et `recover()`, qui ne libère qu'une tranche
-        // `loading`, laquelle en a enregistré une dans `setSlice`. Aucun test ne
-        // peut donc l'atteindre ; le repli est conservateur exprès, parce que
-        // `neutral` raserait des faits qu'aucun `onMount` ne remettrait.
-        const kept = before === undefined
-            ? current.markers
-            : current.markers.filter((flag) => before.has(flag));
+        const kept = current.markers.filter((flag) => pass.before.has(flag));
         this.statesByBehavior.set(behavior, new BehaviorState("idle", kept));
-        this.forgetIfSettled(behavior);
     }
 
     private buildContext(behavior: IBehavior<T, M>, signal: AbortSignal): BehaviorContext<T, M> {
