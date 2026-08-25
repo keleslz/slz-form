@@ -29,7 +29,14 @@ export interface BehaviorContext<T = string, M = never> {
     /** Global read access to the form — no subscription (invariants 9, 10). */
     readonly form: FormView;
 
-    /** Aborted on unmount: guard after every `await`. */
+    /**
+     * Aborted on unmount: guard after every `await`.
+     *
+     * Une passe supplantée — `recover()` après l'expiration de la convergence,
+     * ou `reset()` — cesse aussi d'écrire : `setValue`, `setOptions` et `push`
+     * y deviennent muets, sans que le signal soit avorté. Dans `onUnmount`, ils
+     * le sont d'office : le hook sert à nettoyer, pas à publier.
+     */
     readonly signal: AbortSignal;
 
     getValue(): T | undefined;

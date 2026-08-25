@@ -987,3 +987,183 @@ describe("un rejet sans attente ne rase rien", () => {
         expect(form.getSnapshot().hasFlag("valid")).toBe(true);
     });
 });
+
+describe("rendre l'attente, référence prise avant le hook", () => {
+    it("un skeleton poussé sans loading est rendu quand l'appel échoue", async () => {
+        const form = new FormController<{ a: string }>({ name: "f43" });
+        const profile: IBehavior<string> = {
+            // Le motif de `parity.test.ts` : on marque, on n'allume pas
+            // `loading`. S'indexer sur le passage à `loading` ratait ce cas.
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.mark("skeleton"));
+                await wait(15);
+                throw new Error("profil indisponible");
+            },
+        };
+        const field = form.field("a", { behaviors: [profile] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("skeleton"));
+        await until(() => !field.snapshot.hasFlag("skeleton"), { timeout: 1000 });
+    });
+
+    it("un masquage pris pendant un appel sans loading est rendu, et le champ repèse", async () => {
+        const form = new FormController<{ pays: string; tva: string }>({ name: "f44" });
+        const check: IBehavior<string> = {
+            watch: ["pays"],
+            onDependencyChanged: async (ctx) => {
+                ctx.push(ctx.state.hide().lock());
+                await wait(15);
+                throw new Error("service TVA HS");
+            },
+        };
+        const pays = form.field("pays", {});
+        const tva = form.field("tva", { required: true, behaviors: [check] });
+        pays.mount();
+        tva.mount();
+        form.mount();
+        await wait(20);
+
+        pays.change("FR");
+        await until(() => tva.snapshot.hasFlag("invisible"));
+        await until(() => !tva.snapshot.hasFlag("invisible"), { timeout: 1000 });
+
+        // Sans ça, le champ obligatoire sortait du payload et le formulaire
+        // partait sans sa valeur.
+        expect(tva.snapshot.hasFlag("locked")).toBe(false);
+        expect(form.getSnapshot().hasFlag("valid")).toBe(false);
+        expect(await form.submit()).toBe(false);
+    });
+
+    it("un hook synchrone n'écrase pas la référence d'une attente en cours", async () => {
+        const form = new FormController<{ a: string }>({ name: "f45", settleTimeout: 40 });
+        const hiding: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.loading().hide());
+                await wait(10_000);
+                return ctx.state.idle();
+            },
+            // Appelé par la soumission, juste avant que la convergence n'expire.
+            onSubmit: (ctx) => ctx.state,
+        };
+        const field = form.field("a", { initialValue: "gardée", behaviors: [hiding] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("invisible"));
+
+        expect(await form.submit()).toBe(false);
+        // La référence doit rester celle de l'attente, pas l'état masqué que
+        // `onSubmit` a traversé.
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
+        expect(form.getSnapshot().values).toEqual({ a: "gardée" });
+    });
+});
+
+describe("supplanter une passe ne rend pas muet le voisin", () => {
+    it("un behavior sans rien en vol écrit encore après un recover()", async () => {
+        const form = new FormController<{ slow: string; ville: string }>({
+            name: "f46",
+            settleTimeout: 40,
+        });
+        const stuck: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(10_000);
+                return ctx.state.idle();
+            },
+        };
+        const quiet: IBehavior<string> = {
+            // Il n'allume jamais `loading` : la convergence ne l'attend pas, et
+            // `recover()` n'a rien à lui reprendre.
+            onMount: async (ctx) => {
+                await wait(120);
+                ctx.setValue("Paris");
+            },
+        };
+        const slow = form.field("slow", { behaviors: [stuck] });
+        const ville = form.field("ville", { behaviors: [quiet] });
+        slow.mount();
+        ville.mount();
+        form.mount();
+
+        // La convergence expire : `recover()` passe sur **tous** les champs
+        // montés. Un compteur de champ rendait le voisin muet pour toujours.
+        expect(await form.submit()).toBe(false);
+        await until(() => ville.snapshot.value === "Paris", { timeout: 1000 });
+    });
+});
+
+describe("les trois cas limites de la restitution", () => {
+    it("une attente ouverte sans promesse est rendue aussi", async () => {
+        const form = new FormController<{ a: string }>({ name: "f47", settleTimeout: 40 });
+        const stuck: IBehavior<string> = {
+            // Synchrone : il *retourne* `loading`, il n'attend rien. Aucune
+            // entrée n'est enregistrée, et `recover()` doit malgré tout rendre
+            // ce qu'il a pris — sinon le champ reste masqué et occupé à vie.
+            onMount: (ctx) => ctx.state.loading().hide(),
+        };
+        const field = form.field("a", { initialValue: "gardée", behaviors: [stuck] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("invisible"));
+
+        expect(await form.submit()).toBe(false);
+        expect(field.snapshot.hasAny("invisible", "loading")).toBe(false);
+    });
+
+    it("une seconde passe n'écrase pas la référence de la première", async () => {
+        const form = new FormController<{ a: string }>({ name: "f48" });
+        let call = 0;
+        const twice: IBehavior<string> = {
+            onChange: async (ctx) => {
+                call += 1;
+                if (call === 1) {
+                    ctx.push(ctx.state.mark("busy"));
+                    await wait(20);
+                    throw new Error("première passe HS");
+                }
+                await wait(60);
+                return ctx.state;
+            },
+        };
+        const field = form.field("a", { behaviors: [twice] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("busy"));
+        // La seconde part pendant que la première est encore en vol.
+        field.change("y");
+
+        await wait(150);
+        // Si la seconde avait écrasé la référence, `busy` — posé par la
+        // première — aurait été considéré comme acquis, et serait resté.
+        expect(field.snapshot.hasFlag("busy")).toBe(false);
+    });
+
+    it("recover() ne supplante que le behavior qu'il sauve, pas ses voisins", async () => {
+        const form = new FormController<{ a: string }>({ name: "f49", settleTimeout: 40 });
+        const stuck: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(10_000);
+                return ctx.state.idle();
+            },
+        };
+        const quiet: IBehavior<string> = {
+            // Même champ, autre behavior : il n'allume jamais `loading`, donc
+            // `recover()` n'a rien à lui reprendre.
+            onMount: async (ctx) => {
+                await wait(120);
+                ctx.setValue("écrit après recover");
+            },
+        };
+        const field = form.field("a", { behaviors: [stuck, quiet] });
+        field.mount();
+        form.mount();
+
+        expect(await form.submit()).toBe(false);
+        await until(() => field.snapshot.value === "écrit après recover", { timeout: 1000 });
+    });
+});

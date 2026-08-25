@@ -78,21 +78,30 @@ export class FieldController<T = string, M = never> {
     private readonly validator: IValidator<T>;
     private readonly statesByBehavior = new Map<IBehavior<T, M>, BehaviorState>();
     /**
-     * La tranche de chaque behavior **avant** qu'il entre en attente.
+     * La tranche de chaque behavior **avant l'appel de son hook**.
      *
-     * C'est ce qu'il faut lui rendre s'il échoue ou s'il est abandonné : pas
+     * C'est la référence dont `release` se sert quand la passe échoue : pas
      * `neutral`, qui effacerait aussi ce qu'il avait posé hors de l'attente — un
      * fait permanent émis au montage, que personne ne remettrait puisque
-     * `onMount` n'est pas rejoué. Même mécanique que `IValidator.beforeLoading`.
+     * `onMount` n'est pas rejoué.
+     *
+     * **Avant le hook**, et non avant le passage à `loading` : une passe entre
+     * en attente dès que son hook rend une promesse, qu'elle publie `loading`
+     * ou non. S'indexer sur `loading` ratait tout behavior qui pousse un état
+     * sans lui — à commencer par le skeleton de `parity.test.ts`, dont le
+     * masquage restait alors collé après un échec.
      */
-    private readonly slicesBeforeLoading = new Map<IBehavior<T, M>, BehaviorState>();
+    private readonly slicesBeforeHook = new Map<IBehavior<T, M>, BehaviorState>();
     /**
-     * Génération d'attente. `recover()` et `reset()` tranchent pour tout le
-     * champ : un rejet qui retombe **après** appartient à une passe supplantée,
-     * et le laisser appeler `release` raserait la tranche qu'on vient de rendre.
-     * Même rôle que le jeton de run d'`IValidator`.
+     * Génération de passe, **par behavior**. `recover()` et `reset()` tranchent
+     * pour ce qui était en vol : ce qu'écrit une passe supplantée n'a plus à
+     * être publié, sinon elle rallume une attente que plus rien n'éteindra.
+     *
+     * Par behavior et non par champ : `recover()` passe sur **tous** les champs
+     * montés dès que la convergence expire, et un compteur de champ rendait
+     * muet, définitivement, un behavior voisin qui n'avait rien en vol.
      */
-    private waitGeneration = 0;
+    private readonly generations = new Map<IBehavior<T, M>, number>();
     private readonly listeners = new Set<Listener>();
 
     private host: FieldHost | null = null;
@@ -260,23 +269,29 @@ export class FieldController<T = string, M = never> {
             // écrit `async`, dont le rejet serait sinon une promesse non
             // rattrapée — c'est-à-dire la fin du process sous Node.
             const result = this.invoke(() => behavior.onUnmount?.(ctx));
-            if (isPromise(result)) {
-                // `Promise.resolve` et non `result.catch` : `isPromise` ne
-                // vérifie que `then`. Un thenable sans `catch` faisait lever
-                // `unmount()` lui-même, donc sautait la neutralisation des
-                // tranches, l'abandon du validator et le `commit` final —
-                // exactement la panne que le passage par `invoke` corrigeait.
-                void Promise.resolve(result).catch(
-                    (error: unknown) => reportEngineError(this.name, error),
-                );
-            }
+            // La lecture de `.then` elle-même peut lever — un accesseur piégé
+            // suffisait à faire sortir l'exception de `unmount()`, donc à sauter
+            // tout ce qui suit. Elle passe par `invoke` comme le hook.
+            this.invoke(() => {
+                if (isPromise(result)) {
+                    // `Promise.resolve` et non `result.catch` : `isPromise` ne
+                    // vérifie que `then`. Un thenable sans `catch` faisait lever
+                    // `unmount()` lui-même, donc sautait la neutralisation des
+                    // tranches, l'abandon du validator et le `commit` final —
+                    // exactement la panne que le passage par `invoke` corrigeait.
+                    void Promise.resolve(result).catch(
+                        (error: unknown) => reportEngineError(this.name, error),
+                    );
+                }
+                return undefined;
+            });
         }
         // Un démontage en vol laissait la tranche sur `loading` + `locked` :
         // le signal est avorté, donc plus rien ne viendrait la libérer.
         for (const behavior of this.behaviors) {
             this.statesByBehavior.set(behavior, BehaviorState.neutral);
         }
-        this.slicesBeforeLoading.clear();
+        this.slicesBeforeHook.clear();
         // Le validator contribue lui aussi à l'activité, et rien ne l'aurait
         // arrêté : un champ démonté pendant qu'une règle asynchrone tournait
         // gardait `loading` pour toujours.
@@ -336,7 +351,6 @@ export class FieldController<T = string, M = never> {
         // Le validator contribue aussi à l'axe activité : le laisser en vol
         // suffisait à garder `isBusy` vrai, donc à condamner le formulaire.
         this.validator.abandon();
-        this.waitGeneration += 1;
         for (const [behavior, state] of this.statesByBehavior) {
             if (state.activity === "loading") {
                 // Même règle qu'après un rejet : on rend l'attente, et elle
@@ -344,6 +358,12 @@ export class FieldController<T = string, M = never> {
                 // quoi la vue resterait en squelette pour toujours, le signal
                 // étant avorté — mais un fait posé au montage survit, puisque
                 // `onMount` n'est pas rejoué.
+                //
+                // Et seul **ce** behavior est supplanté : `recover()` passe sur
+                // tous les champs montés dès que la convergence expire, et
+                // supplanter le champ entier rendait muet, définitivement, un
+                // voisin qui n'avait rien en vol.
+                this.supersede(behavior);
                 this.release(behavior);
             }
         }
@@ -412,8 +432,10 @@ export class FieldController<T = string, M = never> {
         for (const behavior of this.behaviors) {
             this.statesByBehavior.set(behavior, BehaviorState.neutral);
         }
-        this.slicesBeforeLoading.clear();
-        this.waitGeneration += 1;
+        this.slicesBeforeHook.clear();
+        for (const behavior of this.behaviors) {
+            this.supersede(behavior);
+        }
         // Effacer les tranches ne suffit pas : la condition qui les avait
         // produites tient toujours. Sans rejouer le montage, un champ
         // conditionnel masqué réapparaissait et bloquait la soumission.
@@ -491,7 +513,7 @@ export class FieldController<T = string, M = never> {
                 continue;
             }
             const ctx = this.buildContext(behavior, signal);
-            this.apply(behavior, this.invoke(() => behavior.onDependencyChanged?.(ctx, dependency)), signal);
+            this.dispatch(behavior, signal, () => behavior.onDependencyChanged?.(ctx, dependency));
         }
 
         // Le validator observe lui aussi : une règle croisée doit être rejouée
@@ -576,7 +598,7 @@ export class FieldController<T = string, M = never> {
         const signal = this.abort.signal;
         for (const behavior of this.behaviors) {
             const ctx = this.buildContext(behavior, signal);
-            this.apply(behavior, this.invoke(() => behavior[hook]?.(ctx)), signal);
+            this.dispatch(behavior, signal, () => behavior[hook]?.(ctx));
         }
         this.commit();
     }
@@ -601,13 +623,40 @@ export class FieldController<T = string, M = never> {
         const signal = this.abort.signal;
         for (const behavior of this.behaviors) {
             const ctx = this.buildContext(behavior, signal);
-            this.apply(behavior, this.invoke(() => behavior.onChange?.(ctx, value)), signal);
+            this.dispatch(behavior, signal, () => behavior.onChange?.(ctx, value));
         }
         this.commit();
     }
 
+    /**
+     * Appelle un hook en retenant la tranche d'entrée du behavior — la seule
+     * référence correcte pour rendre son attente s'il échoue.
+     *
+     * Deux conditions, et les deux comptent :
+     *
+     * - **seulement si le hook attend.** Un hook synchrone ne peut rien échouer
+     *   plus tard ; le retenir écrasait la référence d'une attente en cours.
+     *   C'est ce que faisait `onSubmit`, appelé par la soumission juste avant
+     *   que la convergence n'expire : la référence devenait l'état *masqué*, et
+     *   `recover()` rendait alors un champ toujours invisible ;
+     * - **seulement si rien n'est déjà en vol.** Tant qu'une attente n'a pas
+     *   été rendue, c'est son entrée qui fait foi.
+     */
+    private dispatch(
+        behavior: IBehavior<T, M>,
+        signal: AbortSignal,
+        call: () => BehaviorResult,
+    ): void {
+        const before = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
+        const result = this.invoke(call);
+        if (isPromise(result) && !this.slicesBeforeHook.has(behavior)) {
+            this.slicesBeforeHook.set(behavior, before);
+        }
+        this.apply(behavior, result, signal);
+    }
+
     private apply(behavior: IBehavior<T, M>, result: BehaviorResult, signal: AbortSignal): void {
-        const generation = this.waitGeneration;
+        const generation = this.generationOf(behavior);
         if (result instanceof BehaviorState) {
             this.setSlice(behavior, result);
             return;
@@ -618,17 +667,20 @@ export class FieldController<T = string, M = never> {
         }
         void result
             .then((state) => {
-                if (signal.aborted || generation !== this.waitGeneration) {
+                if (signal.aborted || generation !== this.generationOf(behavior)) {
                     return;
                 }
                 if (!(state instanceof BehaviorState)) {
                     return;
                 }
+                // L'attente est finie : son entrée n'a plus à faire foi pour la
+                // suivante.
+                this.slicesBeforeHook.delete(behavior);
                 this.setSlice(behavior, state);
                 this.commit();
             })
             .catch((error: unknown) => {
-                if (signal.aborted || generation !== this.waitGeneration) {
+                if (signal.aborted || generation !== this.generationOf(behavior)) {
                     return;
                 }
                 // Un behavior rejeté ne doit rien laisser derrière lui de ce que
@@ -645,20 +697,17 @@ export class FieldController<T = string, M = never> {
             });
     }
 
-    /**
-     * Range la tranche d'un behavior, en retenant ce qu'elle valait **avant**
-     * son entrée en attente — c'est la référence dont `release` se sert.
-     */
     private setSlice(behavior: IBehavior<T, M>, next: BehaviorState): void {
-        const previous = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
-        if (next.activity === "loading") {
-            if (previous.activity !== "loading") {
-                this.slicesBeforeLoading.set(behavior, previous);
-            }
-        } else {
-            this.slicesBeforeLoading.delete(behavior);
-        }
         this.statesByBehavior.set(behavior, next);
+    }
+
+    private generationOf(behavior: IBehavior<T, M>): number {
+        return this.generations.get(behavior) ?? 0;
+    }
+
+    /** Ouvre une passe neuve : ce que la précédente écrirait encore est ignoré. */
+    private supersede(behavior: IBehavior<T, M>): void {
+        this.generations.set(behavior, this.generationOf(behavior) + 1);
     }
 
     /**
@@ -677,15 +726,9 @@ export class FieldController<T = string, M = never> {
      */
     private release(behavior: IBehavior<T, M>): void {
         const current = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
-        const before = this.slicesBeforeLoading.get(behavior);
-        this.slicesBeforeLoading.delete(behavior);
-        // Sans entrée, la passe n'est jamais entrée en attente : il n'y a rien
-        // à rendre, et raser la tranche effacerait ce que `onMount` avait posé.
-        // C'est le chemin le plus courant — un hook `async` qui n'appelle jamais
-        // `ctx.push`.
-        const kept = before === undefined
-            ? current.markers
-            : current.markers.filter((flag) => before.has(flag));
+        const before = this.slicesBeforeHook.get(behavior) ?? BehaviorState.neutral;
+        this.slicesBeforeHook.delete(behavior);
+        const kept = current.markers.filter((flag) => before.has(flag));
         this.statesByBehavior.set(behavior, new BehaviorState("idle", kept));
     }
 
@@ -697,8 +740,8 @@ export class FieldController<T = string, M = never> {
         // couvrait que la **sortie** de la passe — `ctx.push` pouvait donc
         // encore allumer `loading`, et plus rien ne venait l'éteindre, puisque
         // `release` était justement écarté par le jeton.
-        const generation = this.waitGeneration;
-        const superseded = (): boolean => signal.aborted || generation !== this.waitGeneration;
+        const generation = this.generationOf(behavior);
+        const superseded = (): boolean => signal.aborted || generation !== this.generationOf(behavior);
         // Captured explicitly: `state`, `ui` and `form` are getters, so they must
         // read the controller live — a behavior that resumes after an `await`
         // needs the current values, not those captured when the hook was called.
