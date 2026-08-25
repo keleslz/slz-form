@@ -1986,3 +1986,145 @@ describe("une attente devenue orpheline est réadoptée", () => {
         expect(field.snapshot.hasFlag("loading")).toBe(false);
     });
 });
+
+describe("l'écrivain se déclare, il ne se devine pas", () => {
+    it("une passe sœur ouverte après celle qui écrit n'est pas titulaire", async () => {
+        const form = new FormController<{ a: string }>({ name: "f77" });
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                await wait(20);
+                // Le `push` tombe **après** l'ouverture de la passe du `blur` :
+                // « la dernière passe ouverte » désigne alors le voisin.
+                ctx.push(ctx.state.loading());
+                await wait(20);
+                throw new Error("HS");
+            },
+            onBlur: async () => { await wait(120); },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("x");
+        field.blur();
+        await until(() => !field.snapshot.hasFlag("loading"), { timeout: 1000 });
+        expect(field.isBusy).toBe(false);
+
+        await wait(150);
+        // Le titulaire mal désigné faisait republier `loading` par `release`, et
+        // rien ne l'éteignait plus : champ occupé à vie.
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        expect(field.isBusy).toBe(false);
+        expect(await form.submit()).toBe(true);
+    });
+
+    it("le vrai travailleur reste titulaire, et la soumission l'attend", async () => {
+        const form = new FormController<{ a: string }>({ name: "f78" });
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                await wait(10);
+                ctx.push(ctx.state.loading());
+                await wait(60);
+                ctx.setValue("NORMALISÉ");
+                return ctx.state.idle();
+            },
+            onFocus: async () => { await wait(20); throw new Error("télémétrie HS"); },
+            onBlur: async () => { await wait(15); },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("saisie");
+        field.focus();
+        field.blur();
+        await wait(30);
+
+        // Le rejet du voisin ne doit pas déclarer terminé le travail en cours,
+        // sinon la soumission part avec la valeur d'avant normalisation.
+        expect(field.isBusy).toBe(true);
+        expect(await form.submit()).toBe(true);
+        expect(form.getSnapshot().values).toEqual({ a: "NORMALISÉ" });
+    });
+
+    it("un fait posé avant l'allumage survit au recover", async () => {
+        const form = new FormController<{ a: string }>({ name: "f79", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.mark("verified").lock());
+                await wait(5);
+                // L'attente s'allume **après** le fait durable : c'est de là
+                // qu'il faut rendre, pas de l'entrée du hook.
+                ctx.push(ctx.state.loading());
+                await wait(10_000);
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("loading"));
+        expect(field.snapshot.hasFlag("verified", "locked")).toBe(true);
+
+        expect(await form.submit()).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        expect(field.snapshot.hasFlag("verified", "locked")).toBe(true);
+    });
+});
+
+describe("rejet et abandon ne rendent pas la même chose", () => {
+    it("un rejet défait toute la passe, y compris ce qu'elle avait posé avant d'attendre", async () => {
+        const form = new FormController<{ a: string }>({ name: "f80" });
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.mark("tentative"));
+                await wait(10);
+                ctx.push(ctx.state.loading());
+                await wait(10);
+                throw new Error("HS");
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("tentative"));
+        // Un délai franc, et non l'extinction de `loading` : celle du validator
+        // retombe avant que le behavior n'allume la sienne.
+        await wait(60);
+
+        // La passe a échoué : ce qu'elle avait posé n'a plus lieu d'être.
+        expect(field.snapshot.hasFlag("tentative")).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+    });
+
+    it("un abandon ne coupe que l'attente, même après réadoption", async () => {
+        const form = new FormController<{ a: string }>({ name: "f81", settleTimeout: 40 });
+        const external: { start?: () => void } = {};
+        const behavior: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.mark("verified").lock());
+                await wait(5);
+                external.start = () => ctx.push(ctx.state.loading());
+                external.start();
+                // Elle retombe sans avis : l'attente reste allumée et devient
+                // orpheline, donc réadoptée.
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("loading"));
+        await wait(20);
+        expect(field.snapshot.hasFlag("verified", "locked")).toBe(true);
+
+        expect(await form.submit()).toBe(false);
+        // L'adoption doit reprendre la référence de **l'attente**, pas l'entrée
+        // du hook — sinon `recover()` emporte des faits durables.
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        expect(field.snapshot.hasFlag("verified", "locked")).toBe(true);
+    });
+});

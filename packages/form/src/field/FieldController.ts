@@ -57,6 +57,24 @@ interface Pass {
      * toute soumission partait pour `settleTimeout`.
      */
     owned: boolean;
+    /**
+     * L'état juste **avant l'allumage** de l'attente que cette passe détient.
+     *
+     * Distinct de `before`, qui est l'état d'entrée du hook : entre les deux, la
+     * passe a pu poser des faits durables. Rendre contre `before` les effaçait —
+     * un `locked` posé au montage disparaissait au `recover()`.
+     */
+    waitFrom?: BehaviorState;
+    /**
+     * La passe a repris **après un `await`**.
+     *
+     * C'est ce qui sépare deux situations que rien d'autre ne distingue : ce
+     * qu'une passe pose dans son préfixe synchrone fait partie de son travail —
+     * masquer un champ le temps d'un appel —, et se rend avec elle. Ce qu'elle
+     * pose puis laisse en place à travers une attente est un fait durable, et
+     * un abandon ne doit pas l'emporter.
+     */
+    resumed: boolean;
 }
 
 /**
@@ -307,7 +325,7 @@ export class FieldController<T = string, M = never> {
             // les champs suivants montés, ce champ-ci en zombie — démonté mais
             // publiant encore `mounted` — et les abonnements du validator en
             // fuite.
-            const ctx = this.buildContext(behavior, this.abort.signal);
+            const ctx = this.buildContext(behavior, this.abort.signal, null);
             // `invoke` couvre le throw synchrone ; le `catch` couvre le hook
             // écrit `async`, dont le rejet serait sinon une promesse non
             // rattrapée — c'est-à-dire la fin du process sous Node.
@@ -408,9 +426,9 @@ export class FieldController<T = string, M = never> {
                 // La plus ancienne : c'est l'état d'avant que quoi que ce soit
                 // ne commence. Tout est abandonné d'un coup, donc tout se ferme.
                 const oldest = passes[0]
-                    ?? { before: state, generation: 0, detached: true, owned: true };
+                    ?? { before: state, generation: 0, detached: true, owned: true, resumed: true };
                 this.openPasses.delete(behavior);
-                this.release(behavior, oldest);
+                this.release(behavior, oldest.waitFrom ?? oldest.before);
             }
         }
         this.commit();
@@ -558,8 +576,7 @@ export class FieldController<T = string, M = never> {
             if (!woken) {
                 continue;
             }
-            const ctx = this.buildContext(behavior, signal);
-            this.dispatch(behavior, signal, () => behavior.onDependencyChanged?.(ctx, dependency));
+            this.dispatch(behavior, signal, (ctx) => behavior.onDependencyChanged?.(ctx, dependency));
         }
 
         // Le validator observe lui aussi : une règle croisée doit être rejouée
@@ -643,8 +660,7 @@ export class FieldController<T = string, M = never> {
     private run(hook: BehaviorHook): void {
         const signal = this.abort.signal;
         for (const behavior of this.behaviors) {
-            const ctx = this.buildContext(behavior, signal);
-            this.dispatch(behavior, signal, () => behavior[hook]?.(ctx));
+            this.dispatch(behavior, signal, (ctx) => behavior[hook]?.(ctx));
         }
         this.commit();
     }
@@ -668,8 +684,7 @@ export class FieldController<T = string, M = never> {
     private runChange(value: T | undefined): void {
         const signal = this.abort.signal;
         for (const behavior of this.behaviors) {
-            const ctx = this.buildContext(behavior, signal);
-            this.dispatch(behavior, signal, () => behavior.onChange?.(ctx, value));
+            this.dispatch(behavior, signal, (ctx) => behavior.onChange?.(ctx, value));
         }
         this.commit();
     }
@@ -685,18 +700,25 @@ export class FieldController<T = string, M = never> {
     private dispatch(
         behavior: IBehavior<T, M>,
         signal: AbortSignal,
-        call: () => BehaviorResult,
+        call: (ctx: BehaviorContext<T, M>) => BehaviorResult,
     ): void {
         const pass: Pass = {
             before: this.statesByBehavior.get(behavior) ?? BehaviorState.neutral,
             generation: this.generationOf(behavior),
             detached: false,
             owned: false,
+            resumed: false,
         };
         this.passesOf(behavior).push(pass);
 
-        const result = this.invoke(call);
+        // Le contexte est construit **ici**, avec sa passe : c'est ce qui permet
+        // à `ctx.push` de dire qui écrit au lieu de le laisser deviner.
+        const ctx = this.buildContext(behavior, signal, pass);
+        const result = this.invoke(() => call(ctx));
         this.apply(behavior, result, signal, pass);
+        // Le préfixe synchrone est passé — l'état qu'il retourne compris. Tout
+        // ce qui viendra ensuite vient d'après un `await`.
+        pass.resumed = true;
 
         // La passe ne reste ouverte que si **elle** a ouvert l'attente. Regarder
         // l'activité du behavior au lieu de sa contribution laissait ouverte
@@ -746,15 +768,22 @@ export class FieldController<T = string, M = never> {
         if ((this.openPasses.get(behavior)?.length ?? 0) > 0) {
             return;
         }
+        const from = pass.waitFrom ?? pass.before;
         this.passesOf(behavior).push({
-            before: pass.before,
+            before: from,
             generation: this.generationOf(behavior),
             detached: true,
             owned: true,
+            resumed: true,
+            waitFrom: from,
         });
     }
 
     /** Ferme une passe. Idempotent : une passe déjà fermée est simplement absente. */
+    private isOpen(behavior: IBehavior<T, M>, pass: Pass): boolean {
+        return (this.openPasses.get(behavior) ?? []).includes(pass);
+    }
+
     private close(behavior: IBehavior<T, M>, pass: Pass): void {
         const passes = this.openPasses.get(behavior);
         if (!passes) {
@@ -776,7 +805,7 @@ export class FieldController<T = string, M = never> {
         pass: Pass,
     ): void {
         if (result instanceof BehaviorState) {
-            this.setSlice(behavior, result);
+            this.setSlice(behavior, result, pass);
             return;
         }
         if (!isPromise(result)) {
@@ -800,7 +829,7 @@ export class FieldController<T = string, M = never> {
                         this.adopt(behavior, pass);
                         return;
                     }
-                    this.setSlice(behavior, state);
+                    this.setSlice(behavior, state, pass);
                     this.adopt(behavior, pass);
                     this.commit();
                 },
@@ -819,7 +848,7 @@ export class FieldController<T = string, M = never> {
                     // le masquage, ni un `skeleton`. Un champ resté `invisible`
                     // sort du payload — donc une valeur obligatoire disparaît en
                     // silence et le formulaire se déclare valide.
-                    this.release(behavior, pass);
+                    this.release(behavior, pass.before);
                     this.adopt(behavior, pass);
                     // Et il est signalé : le chemin synchrone passe par `invoke`,
                     // qui rapporte. Se taire ici rendait un behavior asynchrone
@@ -840,28 +869,33 @@ export class FieldController<T = string, M = never> {
      * aucune passe, et sans référence `recover()` n'avait plus rien à quoi la
      * comparer — il ne rendait donc rien.
      */
-    private setSlice(behavior: IBehavior<T, M>, next: BehaviorState): void {
+    private setSlice(behavior: IBehavior<T, M>, next: BehaviorState, writer: Pass | null): void {
         const previous = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
         this.statesByBehavior.set(behavior, next);
 
         if (next.activity === "loading") {
-            const passes = this.openPasses.get(behavior);
-            // La dernière ouverte est celle qui écrit — c'est elle qui tient
-            // l'attente. À chaque écriture, et pas seulement à l'allumage : une
-            // seconde passe qui rejoint une attente déjà en cours en est
-            // titulaire elle aussi, sans quoi le rejet de la première déclarait
-            // le champ au repos pendant que la seconde travaillait.
-            const owner = passes?.[passes.length - 1];
-            if (owner) {
-                owner.owned = true;
-            } else {
-                // Aucune passe ouverte : l'écriture vient d'un abonnement
-                // externe, et elle ouvre sa propre passe détachée.
+            // L'écrivain se **déclare**, il ne se devine pas. Neuf tours de
+            // revue ont raffiné le même proxy — « la dernière passe ouverte » —
+            // qui se trompe dès qu'une passe sœur s'ouvre après celle qui écrit :
+            // le voisin était déclaré titulaire, et le vrai travailleur ne
+            // l'était pas.
+            if (writer && this.isOpen(behavior, writer)) {
+                writer.owned = true;
+                if (writer.resumed) {
+                    writer.waitFrom ??= previous;
+                }
+                return;
+            }
+            // Personne d'ouvert pour la tenir — écriture d'un abonnement
+            // externe, ou passe déjà retombée : l'attente s'ouvre un titulaire.
+            if (!(this.openPasses.get(behavior) ?? []).some((open) => open.owned)) {
                 this.passesOf(behavior).push({
                     before: previous,
                     generation: this.generationOf(behavior),
                     detached: true,
                     owned: true,
+                    resumed: true,
+                    waitFrom: previous,
                 });
             }
             return;
@@ -870,6 +904,7 @@ export class FieldController<T = string, M = never> {
         // promesse ne refermera est refermé ici.
         for (const pass of [...(this.openPasses.get(behavior) ?? [])]) {
             pass.owned = false;
+            pass.waitFrom = undefined;
             if (pass.detached) {
                 this.close(behavior, pass);
             }
@@ -898,9 +933,17 @@ export class FieldController<T = string, M = never> {
      * l'entrée de la passe et qui y est encore. Ce qu'elle a ajouté part, ce
      * qu'elle a retiré reste retiré.
      */
-    private release(behavior: IBehavior<T, M>, pass: Pass): void {
+    /**
+     * @param from  l'état auquel on revient. Deux sens, et la distinction est
+     *              volontaire : un **rejet** défait toute la passe, donc son
+     *              état d'entrée ; un **abandon** ne coupe que l'attente, donc
+     *              l'état d'avant son allumage. Sans ça, `recover()` emportait
+     *              un `locked` posé par la passe avant qu'elle n'attende — et
+     *              que rien ne remettrait, `onMount` n'étant pas rejoué.
+     */
+    private release(behavior: IBehavior<T, M>, from: BehaviorState): void {
         const current = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
-        const kept = current.markers.filter((flag) => pass.before.has(flag));
+        const kept = current.markers.filter((flag) => from.has(flag));
         // `idle` seulement si plus rien n'est en vol : une passe sœur encore en
         // cours rendait sinon le formulaire soumettable pendant que le behavior
         // travaillait toujours.
@@ -908,10 +951,16 @@ export class FieldController<T = string, M = never> {
         // n'est pas une passe en vol, et le `loading` publié ici n'aurait alors
         // eu personne pour l'éteindre.
         const stillWaiting = (this.openPasses.get(behavior) ?? []).some((open) => open.owned);
-        this.setSlice(behavior, new BehaviorState(stillWaiting ? "loading" : "idle", kept));
+        // Aucun écrivain : si `loading` est republié, c'est qu'une sœur le tient
+        // déjà — cette passe-ci ne prétend rien.
+        this.setSlice(behavior, new BehaviorState(stillWaiting ? "loading" : "idle", kept), null);
     }
 
-    private buildContext(behavior: IBehavior<T, M>, signal: AbortSignal): BehaviorContext<T, M> {
+    private buildContext(
+        behavior: IBehavior<T, M>,
+        signal: AbortSignal,
+        pass: Pass | null,
+    ): BehaviorContext<T, M> {
         const watch = (behavior.watch ?? []).map(watchedName);
         // La génération de la passe qui reçoit ce contexte : ce qu'écrit une
         // passe supplantée n'a plus à être publié. Sans cette capture, la garde
@@ -964,7 +1013,7 @@ export class FieldController<T = string, M = never> {
                 if (superseded()) {
                     return;
                 }
-                this.setSlice(behavior, state);
+                this.setSlice(behavior, state, pass);
                 this.commit();
             },
         };
