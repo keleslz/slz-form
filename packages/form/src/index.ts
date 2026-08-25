@@ -13,12 +13,20 @@ export { UiState } from "./state/UiState";
 export type {
     ActivityFlag,
     AnyUiFlag,
+    AvailabilityFlag,
     BehaviorFlag,
     MarkerFlag,
     UiFlag,
     ValidityFlag,
 } from "./state/UiFlag";
-export { ACTIVITY_FLAGS, MARKER_FLAGS, RESERVED_FLAGS, VALIDITY_FLAGS } from "./state/UiFlag";
+export {
+    ACTIVITY_FLAGS,
+    BEHAVIOR_FLAGS,
+    isReservedFlag,
+    MARKER_FLAGS,
+    RESERVED_FLAGS,
+    VALIDITY_FLAGS,
+} from "./state/UiFlag";
 
 // ── validation ────────────────────────────────────────────────────────────
 export {

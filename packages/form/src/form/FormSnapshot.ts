@@ -139,20 +139,29 @@ export class FormSnapshot {
 
     /** Les champs qui pèsent sur la validité et sur le payload. */
     private get contributing(): readonly FieldSummary[] {
-        return this.fields.filter((field) => field.ui.hasFlag("mounted") && !field.ui.hasFlag("invisible"));
+        return this.mounted.filter((field) => !field.ui.hasFlag("invisible"));
+    }
+
+    /** Les champs qui font partie du formulaire, visibles ou non. */
+    private get mounted(): readonly FieldSummary[] {
+        return this.fields.filter((field) => field.ui.hasFlag("mounted"));
     }
 
     /**
-     * Tous les champs, pas seulement ceux qui comptent.
+     * Les champs **montés**, visibles ou non — exactement ceux que `submit()`
+     * attend.
      *
-     * « Masqué vaut absent » (invariant 29) vaut pour la **validité et le
-     * payload** : un champ conditionnel ne doit pas condamner la soumission.
-     * Son travail asynchrone, lui, est bien réel et `submit()` l'attend — d'où
-     * le même périmètre que `FormController.isBusy`. Filtrer ici déclarait le
-     * formulaire au repos pendant qu'il attendait jusqu'à `settleTimeout`.
+     * « Masqué vaut absent » (invariant 29) vaut pour la validité et le
+     * payload : un champ conditionnel ne doit pas condamner la soumission. Son
+     * travail asynchrone, lui, est bien réel et la convergence l'attend, donc
+     * filtrer sur `contributing` déclarait le formulaire au repos pendant qu'il
+     * patientait jusqu'à `settleTimeout`.
+     *
+     * Élargir à *tous* les champs serait l'excès inverse : un champ démonté en
+     * vol n'est plus attendu par personne, et le flag ne redescendrait jamais.
      */
     private get isLoading(): boolean {
-        return this.fields.some((field) => field.ui.hasFlag("loading"))
+        return this.mounted.some((field) => field.ui.hasFlag("loading"))
             || this.arrays.some((rows) => rows.ui.hasFlag("loading"));
     }
 

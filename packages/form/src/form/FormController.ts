@@ -379,7 +379,10 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             // garde du moteur — laissait le formulaire verrouillé sur
             // « submitting », sans aucun chemin de sortie : `reset()` lui-même
             // ne remettait pas `submitting` à zéro.
-            for (const field of mounted) {
+            // Tous les champs, pas la liste figée à l'entrée : un champ monté
+            // pendant la soumission a pris le verrou au montage, et ne serait
+            // jamais relâché s'il fallait avoir été présent au départ.
+            for (const field of this.fields.values()) {
                 field.setSubmitting(false);
             }
             this.leaveSubmitting();

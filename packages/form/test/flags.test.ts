@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+    ACTIVITY_FLAGS,
+    BEHAVIOR_FLAGS,
     BehaviorState,
     FormController,
+    FormSnapshot,
+    isReservedFlag,
+    MARKER_FLAGS,
+    UiState,
+    VALIDITY_FLAGS,
     IValidator,
     prefill,
     type FieldArray,
@@ -466,5 +473,205 @@ describe("le focus ne survit pas au démontage", () => {
         field.unmount();
         await wait(10);
         expect(field.snapshot.hasAny("focused", "mounted")).toBe(false);
+    });
+});
+
+describe("la garde ne casse pas ce qu'elle protège", () => {
+    it("un onUnmount qui lève ne fait pas dérailler le démontage du formulaire", async () => {
+        const form = new FormController<{ a: string; b: string }>({ name: "f26" });
+        const tidy: IBehavior<string> = {
+            // Un no-op hier, une exception aujourd'hui : c'est précisément ce
+            // que la garde a rendu atteignable.
+            onUnmount: (ctx) => { ctx.state.unmark("touched"); },
+        };
+        const a = form.field("a", { behaviors: [tidy] });
+        const b = form.field("b", {});
+        a.mount();
+        b.mount();
+        form.mount();
+        await wait(10);
+
+        expect(() => form.unmount()).not.toThrow();
+        // Le champ suivant est démonté lui aussi, et celui qui a levé publie
+        // bien son démontage au lieu de rester en zombie.
+        expect(b.isUnmounted).toBe(true);
+        expect(a.snapshot.hasFlag("mounted")).toBe(false);
+    });
+
+    it("le constructeur refuse ce que mark refuse", () => {
+        // Sinon la garde ne protégerait que la porte : un behavior *retourne*
+        // une tranche, rien ne l'oblige à passer par les mutateurs.
+        expect(() => new BehaviorState("idle", ["error"])).toThrow(/appartient au moteur/);
+        expect(() => new BehaviorState("idle", ["loading"])).toThrow(/appartient au moteur/);
+        expect(() => new BehaviorState("idle", ["submitting"])).toThrow(/appartient au moteur/);
+        expect(() => new BehaviorState("idle", ["locked", "skeleton"])).not.toThrow();
+    });
+
+    it("la liste réservée se dérive du vocabulaire, elle ne le recopie pas", () => {
+        // Un marqueur ajouté demain est réservé d'office. Sans ça, la garde
+        // vieillit en silence.
+        for (const flag of MARKER_FLAGS) {
+            const allowed = BEHAVIOR_FLAGS.some((behaviorFlag) => behaviorFlag === flag);
+            expect(isReservedFlag(flag), flag).toBe(!allowed);
+        }
+        for (const flag of [...VALIDITY_FLAGS, ...ACTIVITY_FLAGS]) {
+            expect(isReservedFlag(flag), flag).toBe(true);
+        }
+        expect(isReservedFlag("skeleton")).toBe(false);
+    });
+
+    it("un mot refusé dans un behavior asynchrone est signalé, pas tu", async () => {
+        const reported: string[] = [];
+        const original = console.error;
+        console.error = (...args: unknown[]) => { reported.push(args.map(String).join(" ")); };
+        try {
+            const form = new FormController<{ asyncGuard: string }>({ name: "f27" });
+            const late: IBehavior<string> = {
+                onMount: async (ctx) => {
+                    ctx.push(ctx.state.mark("skeleton"));
+                    await wait(10);
+                    return ctx.state.mark("touched");
+                },
+            };
+            const field = form.field("asyncGuard", { behaviors: [late] });
+            field.mount();
+            form.mount();
+            await until(
+                () => reported.some((line) => line.includes("asyncGuard")),
+                { timeout: 1000 },
+            );
+        } finally {
+            console.error = original;
+        }
+        // Le chemin synchrone rapportait déjà ; se taire ici rendait un behavior
+        // asynchrone définitivement muet. On vérifie **ce** message, pas qu'il
+        // se soit passé quelque chose dans la console.
+        expect(reported.find((line) => line.includes("asyncGuard"))).toMatch(/appartient au moteur/);
+    });
+});
+
+describe("ce qu'on rend, c'est l'attente — et elle seule", () => {
+    it("un fait posé hors de l'attente survit au rejet", async () => {
+        const form = new FormController<{ a: string }>({ name: "f28" });
+        const composite: IBehavior<string> = {
+            onMount: (ctx) => ctx.state.mark("premium"),
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().mark("skeleton"));
+                await wait(10);
+                throw new Error("réseau");
+            },
+        };
+        const field = form.field("a", { behaviors: [composite] });
+        field.mount();
+        form.mount();
+        await wait(10);
+        expect(field.snapshot.hasFlag("premium")).toBe(true);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("skeleton"));
+        await until(() => !field.snapshot.hasFlag("skeleton"), { timeout: 1000 });
+
+        // `neutral` effaçait aussi `premium`, que personne ne remettrait :
+        // `onMount` n'est pas rejoué.
+        expect(field.snapshot.hasFlag("premium")).toBe(true);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+    });
+
+    it("recover() suit la même règle", async () => {
+        const form = new FormController<{ a: string }>({ name: "f29" });
+        const composite: IBehavior<string> = {
+            onMount: (ctx) => ctx.state.mark("premium"),
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().mark("skeleton"));
+                await wait(10_000);
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("a", { behaviors: [composite] });
+        field.mount();
+        form.mount();
+        await wait(10);
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("skeleton"));
+
+        field.recover();
+        expect(field.snapshot.hasFlag("skeleton")).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        expect(field.snapshot.hasFlag("premium")).toBe(true);
+    });
+});
+
+describe("le loading du formulaire dit ce que la soumission attend", () => {
+    it("un champ démonté en vol ne le laisse pas allumé", async () => {
+        const form = new FormController<{ a: string }>({ name: "f30" });
+        class SlowCheck extends IValidator<string> {
+            protected async validate(value: string, report: ValidationReport): Promise<void> {
+                await wait(10_000);
+                report.errorIf(value === "", "jamais atteint");
+            }
+        }
+        const field = form.field("a", { initialValue: "x", validator: new SlowCheck() });
+        field.mount();
+        form.mount();
+        await until(() => form.getSnapshot().hasFlag("loading"));
+
+        field.unmount();
+        // Le démontage abandonne le validator : sans ça le champ restait en vol
+        // pour toujours, plus rien ne pouvant l'arrêter.
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        // Et plus personne ne l'attend : `submit()` ne regarde que les champs
+        // montés.
+        expect(form.getSnapshot().hasFlag("loading")).toBe(false);
+        expect(await form.submit()).toBe(true);
+        expect(form.getSnapshot().hasFlag("loading")).toBe(false);
+    });
+});
+
+describe("un champ monté pendant la soumission", () => {
+    it("dit `submitting` comme les autres", async () => {
+        const form = new FormController<{ a: string; b: string }>({ name: "f31" });
+        const slow: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(40);
+                return ctx.state.idle();
+            },
+        };
+        const a = form.field("a", { behaviors: [slow] });
+        a.mount();
+        form.mount();
+
+        const pending = form.submit();
+        await until(() => a.snapshot.hasFlag("submitting"));
+
+        const b = form.field("b", {});
+        b.mount();
+        // Il n'était pas dans la liste figée à l'entrée de `submit()`, et niait
+        // un fait que le formulaire affirmait.
+        expect(b.snapshot.hasFlag("submitting", "locked")).toBe(true);
+
+        await pending;
+        expect(b.snapshot.hasAny("submitting", "locked")).toBe(false);
+    });
+});
+
+describe("le périmètre du loading, sur l'agrégat seul", () => {
+    const summary = (name: string, ui: UiState) => ({ name, value: undefined, ui, errors: [] });
+
+    it("un champ démonté en vol ne compte pas", () => {
+        const snapshot = new FormSnapshot("p", "idle", [
+            summary("a", new UiState("pristine", "loading", [])),
+        ]);
+        // Personne ne l'attend, et rien ne viendrait éteindre son activité.
+        expect(snapshot.hasFlag("loading")).toBe(false);
+    });
+
+    it("un champ monté mais masqué compte", () => {
+        const snapshot = new FormSnapshot("p", "idle", [
+            summary("a", new UiState("pristine", "loading", ["mounted", "invisible"])),
+        ]);
+        // « Masqué vaut absent » vaut pour la validité et le payload, pas pour
+        // le travail en vol : la convergence l'attend.
+        expect(snapshot.hasFlag("loading")).toBe(true);
     });
 });

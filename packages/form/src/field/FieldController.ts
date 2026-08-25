@@ -77,6 +77,15 @@ export class FieldController<T = string, M = never> {
     private readonly behaviors: readonly IBehavior<T, M>[];
     private readonly validator: IValidator<T>;
     private readonly statesByBehavior = new Map<IBehavior<T, M>, BehaviorState>();
+    /**
+     * La tranche de chaque behavior **avant** qu'il entre en attente.
+     *
+     * C'est ce qu'il faut lui rendre s'il échoue ou s'il est abandonné : pas
+     * `neutral`, qui effacerait aussi ce qu'il avait posé hors de l'attente — un
+     * fait permanent émis au montage, que personne ne remettrait puisque
+     * `onMount` n'est pas rejoué. Même mécanique que `IValidator.beforeLoading`.
+     */
+    private readonly slicesBeforeLoading = new Map<IBehavior<T, M>, BehaviorState>();
     private readonly listeners = new Set<Listener>();
 
     private host: FieldHost | null = null;
@@ -187,6 +196,10 @@ export class FieldController<T = string, M = never> {
             stopListening();
             stopStale();
         };
+        // Le formulaire peut déjà être en train de partir : un champ monté
+        // entre-temps n'était pas dans la liste figée à l'entrée de `submit()`,
+        // et niait un fait que le formulaire affirmait.
+        this.submitting = this.host?.formView().status === "submitting";
         this.run("onMount");
         // Le verdict doit exister dès le montage : sans ça un champ obligatoire
         // et vide n'a aucun constat, et le formulaire se croit soumettable.
@@ -230,13 +243,24 @@ export class FieldController<T = string, M = never> {
         this.unsubscribeValidator = null;
 
         for (const behavior of this.behaviors) {
-            behavior.onUnmount?.(this.buildContext(behavior, this.abort.signal));
+            // `invoke` et non un appel nu : c'était le seul hook hors du chemin
+            // protégé. Une exception ici sortait de `form.unmount()`, laissait
+            // les champs suivants montés, ce champ-ci en zombie — démonté mais
+            // publiant encore `mounted` — et les abonnements du validator en
+            // fuite.
+            const ctx = this.buildContext(behavior, this.abort.signal);
+            this.invoke(() => behavior.onUnmount?.(ctx));
         }
         // Un démontage en vol laissait la tranche sur `loading` + `locked` :
         // le signal est avorté, donc plus rien ne viendrait la libérer.
         for (const behavior of this.behaviors) {
             this.statesByBehavior.set(behavior, BehaviorState.neutral);
         }
+        this.slicesBeforeLoading.clear();
+        // Le validator contribue lui aussi à l'activité, et rien ne l'aurait
+        // arrêté : un champ démonté pendant qu'une règle asynchrone tournait
+        // gardait `loading` pour toujours.
+        this.validator.abandon();
         // Un membre de composite peut être partagé entre plusieurs champs :
         // garder l'abonnement d'un champ détruit ferait grossir sa liste
         // d'auditeurs sans fin. Le prochain tour de validation le rétablit.
@@ -294,12 +318,12 @@ export class FieldController<T = string, M = never> {
         this.validator.abandon();
         for (const [behavior, state] of this.statesByBehavior) {
             if (state.activity === "loading") {
-                // Même règle qu'après un rejet : la tranche entière est rendue.
-                // Pas seulement les mots du moteur — un behavior abandonné dont
-                // le `skeleton` survivrait laisserait la vue en squelette pour
-                // toujours, puisque son signal est avorté et que plus personne
-                // ne le retirera.
-                this.statesByBehavior.set(behavior, BehaviorState.neutral);
+                // Même règle qu'après un rejet : on rend l'attente, et elle
+                // seule. Un `skeleton` posé pendant l'appel disparaît — sans
+                // quoi la vue resterait en squelette pour toujours, le signal
+                // étant avorté — mais un fait posé au montage survit, puisque
+                // `onMount` n'est pas rejoué.
+                this.release(behavior);
             }
         }
         this.commit();
@@ -367,6 +391,7 @@ export class FieldController<T = string, M = never> {
         for (const behavior of this.behaviors) {
             this.statesByBehavior.set(behavior, BehaviorState.neutral);
         }
+        this.slicesBeforeLoading.clear();
         // Effacer les tranches ne suffit pas : la condition qui les avait
         // produites tient toujours. Sans rejouer le montage, un champ
         // conditionnel masqué réapparaissait et bloquait la soumission.
@@ -561,7 +586,7 @@ export class FieldController<T = string, M = never> {
 
     private apply(behavior: IBehavior<T, M>, result: BehaviorResult, signal: AbortSignal): void {
         if (result instanceof BehaviorState) {
-            this.statesByBehavior.set(behavior, result);
+            this.setSlice(behavior, result);
             return;
         }
         if (!isPromise(result)) {
@@ -573,22 +598,48 @@ export class FieldController<T = string, M = never> {
                 if (signal.aborted || !(state instanceof BehaviorState)) {
                     return;
                 }
-                this.statesByBehavior.set(behavior, state);
+                this.setSlice(behavior, state);
                 this.commit();
             })
-            .catch(() => {
+            .catch((error: unknown) => {
                 if (signal.aborted) {
                     return;
                 }
-                // Un behavior rejeté ne doit rien laisser derrière lui : ni
-                // `loading`, ni le verrou, ni le masquage, ni la lecture seule,
-                // ni ses propres flags. Un champ resté `invisible` sort du
-                // payload — donc une valeur obligatoire disparaît en silence et
-                // le formulaire se déclare valide ; un `skeleton` oublié fige la
-                // vue tout aussi durablement.
-                this.statesByBehavior.set(behavior, BehaviorState.neutral);
+                // Un behavior rejeté ne doit rien laisser derrière lui de ce que
+                // son attente avait posé : ni `loading`, ni le verrou, ni le
+                // masquage, ni la lecture seule, ni un `skeleton`. Un champ resté
+                // `invisible` sort du payload — donc une valeur obligatoire
+                // disparaît en silence et le formulaire se déclare valide.
+                this.release(behavior);
+                // Et il est signalé : le chemin synchrone passe par `invoke`, qui
+                // rapporte. Se taire ici rendait un behavior asynchrone
+                // définitivement muet, sans une ligne de journal.
+                reportEngineError(this.name, error);
                 this.commit();
             });
+    }
+
+    /**
+     * Range la tranche d'un behavior, en retenant ce qu'elle valait **avant**
+     * son entrée en attente — c'est ce qu'on lui rendra s'il échoue.
+     */
+    private setSlice(behavior: IBehavior<T, M>, next: BehaviorState): void {
+        const previous = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
+        if (next.activity === "loading") {
+            if (previous.activity !== "loading") {
+                this.slicesBeforeLoading.set(behavior, previous);
+            }
+        } else {
+            this.slicesBeforeLoading.delete(behavior);
+        }
+        this.statesByBehavior.set(behavior, next);
+    }
+
+    /** Rend l'attente : la tranche redevient ce qu'elle était juste avant. */
+    private release(behavior: IBehavior<T, M>): void {
+        const restored = this.slicesBeforeLoading.get(behavior) ?? BehaviorState.neutral;
+        this.slicesBeforeLoading.delete(behavior);
+        this.statesByBehavior.set(behavior, restored.idle());
     }
 
     private buildContext(behavior: IBehavior<T, M>, signal: AbortSignal): BehaviorContext<T, M> {
@@ -629,7 +680,7 @@ export class FieldController<T = string, M = never> {
                 if (signal.aborted) {
                     return;
                 }
-                this.statesByBehavior.set(behavior, state);
+                this.setSlice(behavior, state);
                 this.commit();
             },
         };

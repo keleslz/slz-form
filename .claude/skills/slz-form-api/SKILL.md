@@ -122,7 +122,7 @@ Le code les référence par numéro (`FieldController.ts:35` — « invariants 2
 | `pristine` · `valid` · `error` | **s'excluent** | le Validator, **seul** |
 | `idle` · `loading` | **s'excluent** | Behaviors + Validator |
 | `locked` · `readonly` · `invisible` | s'additionnent | Behaviors + Controller + vue |
-| `required` · `touched` · `focused` · `mounted` | s'additionnent | le Controller |
+| `required` · `touched` · `focused` · `mounted` · `submitting` | s'additionnent | le Controller |
 | *ceux de l'application* | s'additionnent | Behaviors — `mark` / `unmark` |
 
 Au formulaire, les mêmes mots : `valid` · `error` (exclusifs — c'est le verdict),

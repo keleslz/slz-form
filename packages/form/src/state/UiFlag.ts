@@ -73,7 +73,12 @@ export const MARKER_FLAGS: readonly MarkerFlag[] = [
  * Le reste appartient à un autre émetteur — la validité au Validator, l'activité
  * au couple `loading()`/`idle()`, l'interaction et la présence au Controller.
  */
-export type BehaviorFlag = "locked" | "readonly" | "invisible" | (string & {});
+export type BehaviorFlag = AvailabilityFlag | (string & {});
+
+/** Les seuls flags du moteur qu'un Behavior émet lui-même. */
+export type AvailabilityFlag = "locked" | "readonly" | "invisible";
+
+export const BEHAVIOR_FLAGS: readonly AvailabilityFlag[] = ["locked", "readonly", "invisible"];
 
 /**
  * Les mots que le moteur se réserve.
@@ -81,16 +86,15 @@ export type BehaviorFlag = "locked" | "readonly" | "invisible" | (string & {});
  * Sans cette garde, `mark("error")` publierait `pristine` **et** `error` — l'état
  * impossible que le découpage en groupes exclusifs existe pour écarter — et
  * `mark("loading")` allumerait une activité que rien ne pourrait éteindre, puisque
- * l'union ne se soustrait pas (invariant 33).
+ * l'union des flags cumulés ne se soustrait pas.
+ *
+ * Dérivée, jamais recopiée : un `MarkerFlag` ajouté demain est réservé d'office,
+ * sauf s'il rejoint explicitement `BEHAVIOR_FLAGS`.
  */
 export const RESERVED_FLAGS: readonly UiFlag[] = [
     ...VALIDITY_FLAGS,
     ...ACTIVITY_FLAGS,
-    "required",
-    "touched",
-    "focused",
-    "mounted",
-    "submitting",
+    ...MARKER_FLAGS.filter((flag) => !BEHAVIOR_FLAGS.some((allowed) => allowed === flag)),
 ];
 
 /** Vrai si ce mot appartient au moteur et n'est pas à prendre. */

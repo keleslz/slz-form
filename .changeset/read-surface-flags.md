@@ -37,5 +37,10 @@ Côté bas niveau : `AvailabilityFlag` est remplacé par `MarkerFlag`,
 en perdant `valid`, et `FieldArrayController.isValid` disparaît au profit de
 `ui` et `errors`.
 
-Aucun état publié ne change de valeur : la démo passe ses 43 assertions sans
-être touchée.
+La **façon de lire** change ; ce que la vue rend, non — la démo passe ses 43
+assertions sans être touchée. Quelques états publiés bougent malgré tout, et
+c'est voulu : `submitting` apparaît comme flag de champ, `focused` cesse de
+survivre au démontage, une liste publie `mounted` dès son montage même vide, le
+`loading` du formulaire couvre désormais les champs montés-mais-masqués (que la
+soumission attend) et non plus les champs démontés (que plus personne
+n'attend), et la validité d'une liste se calcule depuis ses constats.

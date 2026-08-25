@@ -17,9 +17,18 @@ export class BehaviorState {
     readonly activity: ActivityFlag;
     readonly markers: readonly AnyUiFlag[];
 
+    /**
+     * Le constructeur garde la même règle que `mark` — sinon la garde ne
+     * protégerait que la porte : un behavior retourne une `BehaviorState`, et
+     * rien ne l'oblige à passer par les mutateurs. `new BehaviorState("idle",
+     * ["error"])` publiait `pristine` **et** `error`, et un `loading` marqueur
+     * que la lecture confondait avec l'activité.
+     */
     constructor(activity: ActivityFlag, markers: readonly AnyUiFlag[]) {
         this.activity = activity;
-        this.markers = Object.freeze([...new Set(markers)].sort());
+        this.markers = Object.freeze(
+            [...new Set(markers.map((flag) => refuseReserved(flag, "new BehaviorState")))].sort(),
+        );
     }
 
     // ── exclusive group (setting one replaces the other) ──────────────────
@@ -42,7 +51,8 @@ export class BehaviorState {
      * Les mots du moteur sont refusés (`RESERVED_FLAGS`). Poser `error` à côté
      * de `pristine` publierait un état qui n'existe pas, et poser `loading` ici
      * allumerait une activité que rien ne pourrait éteindre — l'union des flags
-     * cumulés ne se soustrait pas (invariant 33).
+     * cumulés ne se soustrait pas. Les groupes exclusifs restent clos
+     * (invariant 33).
      */
     mark(flag: BehaviorFlag): BehaviorState {
         return this.with(refuseReserved(flag, "mark"));
