@@ -1,0 +1,39 @@
+/**
+ * Le thème du site.
+ *
+ * Sobre à dessein : le contenu est dense — des tableaux d'invariants, du code
+ * long — et tout ce qui décore lui prend de la place.
+ */
+:root {
+    --ifm-color-primary: #2a5db0;
+    --ifm-color-primary-dark: #26549e;
+    --ifm-color-primary-darker: #244f95;
+    --ifm-color-primary-darkest: #1d417b;
+    --ifm-color-primary-light: #2e66c2;
+    --ifm-color-primary-lighter: #316bcb;
+    --ifm-color-primary-lightest: #4a7ed4;
+    --ifm-code-font-size: 92%;
+    --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] {
+    --ifm-color-primary: #7ba7e8;
+    --ifm-color-primary-dark: #5e93e2;
+    --ifm-color-primary-darker: #4f89df;
+    --ifm-color-primary-darkest: #2a6bd3;
+    --ifm-color-primary-light: #98bbee;
+    --ifm-color-primary-lighter: #a7c5f1;
+    --ifm-color-primary-lightest: #d3e1f8;
+    --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.1);
+}
+
+/* Les tableaux d'arbitrages ont des cellules longues : sans ça, ils débordent
+   au lieu de se replier. */
+.markdown table {
+    display: table;
+    width: 100%;
+}
+
+.markdown table td {
+    vertical-align: top;
+}

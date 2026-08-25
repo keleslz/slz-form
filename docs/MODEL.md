@@ -1,8 +1,15 @@
+---
+id: MODEL
+title: Modélisation du core
+sidebar_label: Modèle, arbitrages, invariants
+description: Le registre des décisions — objectif, entités, arbitrages tranchés, et où chaque invariant est tenu.
+---
+
 # slz-form — modélisation du core
 
 > Document de référence à valider. Il fixe l'objectif, les entités, les
 > arbitrages tranchés et la façon dont chaque invariant est tenu.
-> Statut : implémenté, couvert par `packages/form/test` (249 tests) et `packages/react-form/test` (19 tests) ; le parcours
+> Statut : implémenté, couvert par `packages/form/test` (260 tests) et `packages/react-form/test` (19 tests) ; le parcours
 > navigateur (`examples/react`, 43 assertions) couvre le socle, pas encore les
 > listes répétables ni `readonly`.
 
