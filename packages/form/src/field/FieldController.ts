@@ -63,7 +63,6 @@ interface Pass {
     wantsLoading: boolean;
 }
 
-
 /**
  * Quel champ possède quel validator. Une `WeakMap` : elle ne retient rien et ne
  * pèse pas sur la durée de vie des instances.
@@ -841,14 +840,6 @@ export class FieldController<T = string, M = never> {
     }
 
     /**
-     * Range la tranche, et tient les passes **détachées**.
-     *
-     * `ctx.push` s'utilise après coup : un behavior abonné à une source externe
-     * allume `loading` hors de tout hook. Cette attente-là n'appartient à
-     * aucune passe, et sans référence `recover()` n'avait plus rien à quoi la
-     * comparer — il ne rendait donc rien.
-     */
-    /**
      * Range la tranche, en attribuant l'écriture à son auteur.
      *
      * L'activité publiée est **dérivée** : `loading` si et seulement si une
@@ -856,6 +847,11 @@ export class FieldController<T = string, M = never> {
      * sœur retournant `ctx.state.idle()` — la tranche *fusionnée* du behavior —
      * éteignait l'attente d'une autre, et le formulaire partait avant
      * convergence.
+     *
+     * `ctx.push` s'utilise aussi **après coup** : un behavior abonné à une
+     * source externe écrit hors de tout hook. Cette écriture-là a quand même un
+     * auteur — la passe dont elle prolonge le travail —, et c'est ce qui donne
+     * une référence à l'attente qu'elle ouvre.
      */
     private setSlice(behavior: IBehavior<T, M>, next: BehaviorState, writer: Pass | null): void {
         const previous = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
