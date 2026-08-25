@@ -53,7 +53,8 @@ Le comportement d'un behavior asynchrone se resserre, et c'est visible :
   ajouté part, ce qu'elle a retiré reste retiré, et ce qu'il avait posé avant
   survit. S'il n'était jamais entré en attente, sa tranche est intacte. Si une
   autre de ses passes travaille encore, le champ reste `loading` — l'échec de
-  l'une ne déclare pas l'autre terminée ;
+  l'une ne déclare pas l'autre terminée. Un abandon — `recover()`, quand la
+  convergence expire — rend la passe de la même façon qu'un rejet ;
 - **un `DebouncedValidator` reste joignable après un remontage.** Son
   abonnement au validator décoré était coupé définitivement au démontage : sous
   `StrictMode`, tout champ devenait sourd aux constats d'un `ExternalValidator`

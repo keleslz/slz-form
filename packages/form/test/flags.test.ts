@@ -2049,31 +2049,40 @@ describe("l'écrivain se déclare, il ne se devine pas", () => {
         expect(form.getSnapshot().values).toEqual({ a: "NORMALISÉ" });
     });
 
-    it("un fait posé avant l'allumage survit au recover", async () => {
+    it("un abandon rend toute la passe, pas seulement son attente", async () => {
         const form = new FormController<{ a: string }>({ name: "f79", settleTimeout: 40 });
         const behavior: IBehavior<string> = {
             onMount: async (ctx) => {
-                ctx.push(ctx.state.mark("verified").lock());
+                ctx.push(ctx.state.mark("skeleton").hide());
                 await wait(5);
-                // L'attente s'allume **après** le fait durable : c'est de là
-                // qu'il faut rendre, pas de l'entrée du hook.
                 ctx.push(ctx.state.loading());
                 await wait(10_000);
             },
         };
-        const field = form.field("a", { behaviors: [behavior] });
+        const field = form.field("a", {
+            required: true,
+            initialValue: "gardée",
+            behaviors: [behavior],
+        });
         field.mount();
         form.mount();
         await until(() => field.snapshot.hasFlag("loading"));
-        expect(field.snapshot.hasFlag("verified", "locked")).toBe(true);
+        expect(field.snapshot.hasFlag("skeleton", "invisible")).toBe(true);
 
         expect(await form.submit()).toBe(false);
+        // Distinguer « ce que l'attente a posé » de « ce que la passe a posé
+        // avant d'attendre » n'est pas observable par le moteur : deux passes au
+        // flux identique — `verified`+`locked` d'un côté, `skeleton`+`invisible`
+        // de l'autre — exigeraient des issues opposées. La règle est donc unique :
+        // on rend la passe. Un fait posé par une **autre** passe survit, puisqu'il
+        // est dans le `before` de celle-ci (cas couvert par f28).
         expect(field.snapshot.hasFlag("loading")).toBe(false);
-        expect(field.snapshot.hasFlag("verified", "locked")).toBe(true);
+        expect(field.snapshot.hasAny("skeleton", "invisible")).toBe(false);
+        expect(form.getSnapshot().values).toEqual({ a: "gardée" });
     });
 });
 
-describe("rejet et abandon ne rendent pas la même chose", () => {
+describe("rejet et abandon rendent la même chose", () => {
     it("un rejet défait toute la passe, y compris ce qu'elle avait posé avant d'attendre", async () => {
         const form = new FormController<{ a: string }>({ name: "f80" });
         const behavior: IBehavior<string> = {
@@ -2101,15 +2110,14 @@ describe("rejet et abandon ne rendent pas la même chose", () => {
         expect(field.snapshot.hasFlag("loading")).toBe(false);
     });
 
-    it("un abandon ne coupe que l'attente, même après réadoption", async () => {
+    it("un abandon après réadoption rend la passe adoptante", async () => {
         const form = new FormController<{ a: string }>({ name: "f81", settleTimeout: 40 });
-        const external: { start?: () => void } = {};
         const behavior: IBehavior<string> = {
-            onMount: async (ctx) => {
-                ctx.push(ctx.state.mark("verified").lock());
+            onMount: (ctx) => ctx.state.mark("premium"),
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.mark("skeleton"));
                 await wait(5);
-                external.start = () => ctx.push(ctx.state.loading());
-                external.start();
+                ctx.push(ctx.state.loading());
                 // Elle retombe sans avis : l'attente reste allumée et devient
                 // orpheline, donc réadoptée.
             },
@@ -2117,14 +2125,108 @@ describe("rejet et abandon ne rendent pas la même chose", () => {
         const field = form.field("a", { behaviors: [behavior] });
         field.mount();
         form.mount();
+        await wait(20);
+
+        field.change("x");
         await until(() => field.snapshot.hasFlag("loading"));
         await wait(20);
-        expect(field.snapshot.hasFlag("verified", "locked")).toBe(true);
+        expect(field.snapshot.hasFlag("skeleton", "premium")).toBe(true);
 
         expect(await form.submit()).toBe(false);
-        // L'adoption doit reprendre la référence de **l'attente**, pas l'entrée
-        // du hook — sinon `recover()` emporte des faits durables.
         expect(field.snapshot.hasFlag("loading")).toBe(false);
-        expect(field.snapshot.hasFlag("verified", "locked")).toBe(true);
+        // Ce que **cette** passe a posé part ; ce qu'une autre avait posé reste.
+        expect(field.snapshot.hasFlag("skeleton")).toBe(false);
+        expect(field.snapshot.hasFlag("premium")).toBe(true);
+    });
+});
+
+describe("plus rien ne devine qui tient l'attente", () => {
+    it("un hook synchrone titulaire n'est pas fermé parce que le champ chargeait déjà", async () => {
+        const form = new FormController<{ a: string }>({ name: "f82", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            // Abonnement externe : le champ est déjà `loading` à l'entrée du
+            // hook suivant, donc la transition d'activité ne dit rien.
+            onMount: (ctx) => { ctx.push(ctx.state.loading()); },
+            onFocus: (ctx) => {
+                ctx.push(ctx.state.idle());
+                ctx.push(ctx.state.hide().loading());
+            },
+        };
+        const field = form.field("a", {
+            required: true,
+            initialValue: "gardée",
+            behaviors: [behavior],
+        });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.focus();
+        expect(field.snapshot.hasFlag("invisible")).toBe(true);
+
+        expect(await form.submit()).toBe(false);
+        // Fermer la passe titulaire laissait l'attente orpheline : `recover()`
+        // rendait contre l'état courant, donc ne rendait rien, et le formulaire
+        // partait sans sa valeur obligatoire.
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
+        expect(await form.submit()).toBe(true);
+        expect(form.getSnapshot().values).toEqual({ a: "gardée" });
+    });
+
+    it("une sœur non titulaire n'empêche pas la réadoption", async () => {
+        const form = new FormController<{ a: string }>({ name: "f83", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().hide());
+                await wait(10);
+                // Elle retombe sans avis : l'attente devient orpheline.
+            },
+            // Une sœur ouverte, qui ne tient rien.
+            onBlur: async () => { await wait(200); },
+        };
+        const field = form.field("a", {
+            required: true,
+            initialValue: "gardée",
+            behaviors: [behavior],
+        });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("gardée2");
+        field.blur();
+        await until(() => field.snapshot.hasFlag("invisible"));
+        await wait(30);
+
+        expect(await form.submit()).toBe(false);
+        // Abandonner l'adoption dès qu'une passe est ouverte — même sans
+        // attente — laissait `recover()` rendre contre la sœur, dont l'entrée
+        // portait déjà le masquage.
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
+        expect(form.getSnapshot().values).toEqual({ a: "gardée2" });
+    });
+
+    it("un préfixe synchrone à masquer est rendu, comme le reste de la passe", async () => {
+        const form = new FormController<{ a: string }>({ name: "f84", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.mark("skeleton").hide());
+                await wait(5);
+                ctx.push(ctx.state.loading());
+                await wait(10_000);
+            },
+        };
+        const field = form.field("a", { required: true, behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("valeur");
+        await until(() => field.snapshot.hasFlag("loading"));
+        expect(await form.submit()).toBe(false);
+
+        expect(field.snapshot.hasAny("skeleton", "invisible", "loading")).toBe(false);
+        expect(form.getSnapshot().values).toEqual({ a: "valeur" });
+        expect(await form.submit()).toBe(true);
     });
 });

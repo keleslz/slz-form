@@ -252,6 +252,8 @@ Ce qui a échoué, et pourquoi, pour ne pas y revenir :
 | n'ouvrir de passe que depuis un hook | un `ctx.push` d'abonnement allume `loading` hors de tout hook : sans référence, `recover()` ne rend rien |
 | déduire « une sœur travaille » du **nombre** de passes ouvertes | une passe ouverte n'est pas une passe en vol : `release` publiait un `loading` que personne n'éteindrait, et le champ restait occupé à vie |
 | deviner l'écrivain (« la dernière passe ouverte ») | faux dès qu'une passe sœur s'ouvre après celle qui écrit — un `blur` suffit : le voisin devient titulaire, et le vrai travailleur ne l'est pas |
+| distinguer « fait durable » et « décoration » par la position d'un `await` | indécidable : deux passes au flux identique, `verified`+`locked` d'un côté, `skeleton`+`invisible` de l'autre, exigeraient des issues opposées |
+| lire une transition d'activité, ou un nombre de passes, pour savoir qui tient l'attente | `owned` est la réponse, et il est déjà là — chaque relecture par un proxy a coûté un tour de revue |
 | laisser une passe retomber sans reprendre son attente | l'attente devient orpheline, et `recover()` n'a plus rien à quoi la comparer |
 
 La référence appartient donc à la **passe** (`Pass { before, generation, … }`),
@@ -264,8 +266,9 @@ retour à `idle`.
 La règle qui ferme la classe, et qu'il faut vérifier à chaque modification :
 **toute écriture qui allume `loading` a un titulaire, et toute restitution une
 référence.** Le titulaire ne se déduit pas : `setSlice` reçoit la passe qui
-écrit. Neuf tours de revue ont raffiné un proxy pour cette question ; il n'y en a
-pas de bon. Une passe qui retombe en laissant l'attente allumée la fait
+écrit, et tout le reste — `dispatch`, `adopt`, `recover`, `release` — lit
+`owned`. Dix tours de revue ont raffiné un proxy pour cette question ; il n'y en
+a pas de bon, et il n'y en a pas non plus pour « ce fait est-il durable ? ». Une passe qui retombe en laissant l'attente allumée la fait
 réadopter ; c'est ce qui rend inatteignable le repli de `recover()`, lequel
 rendrait contre l'état courant — c'est-à-dire ne rendrait rien.
 

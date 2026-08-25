@@ -57,24 +57,6 @@ interface Pass {
      * toute soumission partait pour `settleTimeout`.
      */
     owned: boolean;
-    /**
-     * L'état juste **avant l'allumage** de l'attente que cette passe détient.
-     *
-     * Distinct de `before`, qui est l'état d'entrée du hook : entre les deux, la
-     * passe a pu poser des faits durables. Rendre contre `before` les effaçait —
-     * un `locked` posé au montage disparaissait au `recover()`.
-     */
-    waitFrom?: BehaviorState;
-    /**
-     * La passe a repris **après un `await`**.
-     *
-     * C'est ce qui sépare deux situations que rien d'autre ne distingue : ce
-     * qu'une passe pose dans son préfixe synchrone fait partie de son travail —
-     * masquer un champ le temps d'un appel —, et se rend avec elle. Ce qu'elle
-     * pose puis laisse en place à travers une attente est un fait durable, et
-     * un abandon ne doit pas l'emporter.
-     */
-    resumed: boolean;
 }
 
 /**
@@ -425,10 +407,15 @@ export class FieldController<T = string, M = never> {
                 const passes = this.openPasses.get(behavior) ?? [];
                 // La plus ancienne : c'est l'état d'avant que quoi que ce soit
                 // ne commence. Tout est abandonné d'un coup, donc tout se ferme.
-                const oldest = passes[0]
-                    ?? { before: state, generation: 0, detached: true, owned: true, resumed: true };
+                // La plus ancienne **qui tient l'attente** : c'est elle qu'on
+                // rend. Prendre la plus ancienne tout court désignait une sœur
+                // ouverte après l'allumage, dont l'état d'entrée portait déjà le
+                // masquage — donc ne rendait rien.
+                const oldest = passes.find((open) => open.owned)
+                    ?? passes[0]
+                    ?? { before: state, generation: 0, detached: true, owned: true };
                 this.openPasses.delete(behavior);
-                this.release(behavior, oldest.waitFrom ?? oldest.before);
+                this.release(behavior, oldest.before);
             }
         }
         this.commit();
@@ -707,7 +694,6 @@ export class FieldController<T = string, M = never> {
             generation: this.generationOf(behavior),
             detached: false,
             owned: false,
-            resumed: false,
         };
         this.passesOf(behavior).push(pass);
 
@@ -716,23 +702,16 @@ export class FieldController<T = string, M = never> {
         const ctx = this.buildContext(behavior, signal, pass);
         const result = this.invoke(() => call(ctx));
         this.apply(behavior, result, signal, pass);
-        // Le préfixe synchrone est passé — l'état qu'il retourne compris. Tout
-        // ce qui viendra ensuite vient d'après un `await`.
-        pass.resumed = true;
 
-        // La passe ne reste ouverte que si **elle** a ouvert l'attente. Regarder
-        // l'activité du behavior au lieu de sa contribution laissait ouverte
-        // toute passe traversant un `loading` posé par une autre — or `run` en
-        // dispatche une par behavior, même quand il n'implémente pas le hook.
-        // Chaque `focus`, `blur` ou `submit` pendant un appel en laissait donc
-        // une derrière lui, et `recover()`, qui prend la plus ancienne, rendait
-        // contre l'une d'elles.
-        const opened = pass.before.activity !== "loading"
-            && this.statesByBehavior.get(behavior)?.activity === "loading";
         if (isPromise(result)) {
             return;
         }
-        if (opened) {
+        // `pass.owned`, et non une transition d'activité devinée : c'est
+        // `setSlice` qui sait qui a allumé l'attente, et il vient de le dire.
+        // Deviner fermait une passe **titulaire** quand le champ était déjà
+        // `loading` à l'entrée du hook — l'attente devenait orpheline, et
+        // `recover()` ne rendait plus rien.
+        if (pass.owned) {
             // Elle a ouvert une attente sans rien qui retombera : c'est la
             // définition d'une détachée, et c'est le retour à `idle` qui la
             // refermera. La laisser telle quelle en faisait un fantôme
@@ -765,17 +744,17 @@ export class FieldController<T = string, M = never> {
         if (this.statesByBehavior.get(behavior)?.activity !== "loading") {
             return;
         }
-        if ((this.openPasses.get(behavior)?.length ?? 0) > 0) {
+        // Une passe ouverte **qui tient l'attente**, pas une passe ouverte : une
+        // sœur non titulaire — un `blur` asynchrone suffit — empêchait sinon
+        // toute réadoption, et `recover()` rendait contre elle.
+        if ((this.openPasses.get(behavior) ?? []).some((open) => open.owned)) {
             return;
         }
-        const from = pass.waitFrom ?? pass.before;
         this.passesOf(behavior).push({
-            before: from,
+            before: pass.before,
             generation: this.generationOf(behavior),
             detached: true,
             owned: true,
-            resumed: true,
-            waitFrom: from,
         });
     }
 
@@ -881,9 +860,6 @@ export class FieldController<T = string, M = never> {
             // l'était pas.
             if (writer && this.isOpen(behavior, writer)) {
                 writer.owned = true;
-                if (writer.resumed) {
-                    writer.waitFrom ??= previous;
-                }
                 return;
             }
             // Personne d'ouvert pour la tenir — écriture d'un abonnement
@@ -894,8 +870,6 @@ export class FieldController<T = string, M = never> {
                     generation: this.generationOf(behavior),
                     detached: true,
                     owned: true,
-                    resumed: true,
-                    waitFrom: previous,
                 });
             }
             return;
@@ -904,7 +878,6 @@ export class FieldController<T = string, M = never> {
         // promesse ne refermera est refermé ici.
         for (const pass of [...(this.openPasses.get(behavior) ?? [])]) {
             pass.owned = false;
-            pass.waitFrom = undefined;
             if (pass.detached) {
                 this.close(behavior, pass);
             }
@@ -934,12 +907,15 @@ export class FieldController<T = string, M = never> {
      * qu'elle a retiré reste retiré.
      */
     /**
-     * @param from  l'état auquel on revient. Deux sens, et la distinction est
-     *              volontaire : un **rejet** défait toute la passe, donc son
-     *              état d'entrée ; un **abandon** ne coupe que l'attente, donc
-     *              l'état d'avant son allumage. Sans ça, `recover()` emportait
-     *              un `locked` posé par la passe avant qu'elle n'attende — et
-     *              que rien ne remettrait, `onMount` n'étant pas rejoué.
+     * @param from  l'état d'entrée de la passe qu'on rend — le **même** pour un
+     *              rejet et pour un abandon.
+     *
+     * Distinguer les deux avait l'air fin et ne l'était pas : la question
+     * « ce fait est-il durable ou décoratif ? » n'est pas observable par le
+     * moteur. Deux passes au flux identique — l'une posant `verified`+`locked`,
+     * l'autre `skeleton`+`invisible`, puis attendant — exigeraient des issues
+     * opposées. Un fait posé par **une autre** passe survit de toute façon,
+     * puisqu'il est dans le `before` de celle-ci.
      */
     private release(behavior: IBehavior<T, M>, from: BehaviorState): void {
         const current = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
