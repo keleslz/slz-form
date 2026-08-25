@@ -286,7 +286,7 @@ le README du core montre [le même prefill dans ses trois
 formes](packages/form/README.md#trois-façons-de-préremplir-un-champ) : classe de
 behavior, avec validator, puis utilitaire.
 
-📄 La modélisation complète, les arbitrages et les 33 invariants d'architecture
+📄 La modélisation complète, les arbitrages et les 35 invariants d'architecture
 sont dans **[`docs/MODEL.md`](docs/MODEL.md)**.
 
 ---

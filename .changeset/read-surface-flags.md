@@ -30,12 +30,21 @@ Nouveau : un behavior publie **ses propres flags** par `ctx.state.mark(flag)` /
 métier en cours. Le moteur transporte le mot sans le connaître. Les mots du
 moteur sont refusés sur ce chemin.
 
-Côté bas niveau : `AvailabilityFlag` est remplacé par `MarkerFlag`,
-`UiState.availability` et `BehaviorState.availability` par `markers`,
+Côté bas niveau : `MarkerFlag` rejoint `AvailabilityFlag` — le premier est le
+vocabulaire cumulé entier, le second reste ce qu'un behavior a le droit
+d'émettre. `UiState.availability` et `BehaviorState.availability` deviennent
+`markers`,
 `FieldView` expose `hasFlag`/`hasAny` au lieu de `validity`/`blocking`/`visible`,
 `FieldSummary` porte l'`UiState` du champ, `ArraySummary` gagne `ui` et `errors`
 en perdant `valid`, et `FieldArrayController.isValid` disparaît au profit de
-`ui` et `errors`.
+`ui` et `errors`. Nouveaux exports : `BehaviorFlag`, `AnyUiFlag`, `MarkerFlag`,
+`BEHAVIOR_FLAGS`, `MARKER_FLAGS`, `RESERVED_FLAGS`, `isReservedFlag`.
+
+Deux gardes s'ajoutent au passage, toutes deux visibles d'un consommateur.
+`BehaviorState` refuse les mots du moteur — dans `mark`/`unmark` **et** dans son
+constructeur, sinon un behavior qui retourne une tranche construite à la main
+contournerait la règle. Et `FormController.isBusy` ne compte plus que les champs
+montés, comme le flag `loading` du formulaire.
 
 La **façon de lire** change ; ce que la vue rend, non — la démo passe ses 43
 assertions sans être touchée. Quelques états publiés bougent malgré tout, et

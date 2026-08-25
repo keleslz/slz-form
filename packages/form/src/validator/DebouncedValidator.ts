@@ -46,13 +46,30 @@ export class DebouncedValidator<T = string> extends IValidator<T> {
         this.watch = inner.watch;
         this.validateWhenEmpty = inner.validateWhenEmpty;
 
-        // Le décorateur ne change rien aux règles qu'il diffère : une demande de
-        // revalidation venue du validator décoré doit remonter jusqu'au champ,
-        // sinon des constats injectés resteraient muets.
-        this.unsubscribeInner = inner.onStale(() => this.requestRevalidation());
+        this.listenInner();
+    }
+
+    /**
+     * Le décorateur ne change rien aux règles qu'il diffère : une demande de
+     * revalidation venue du validator décoré doit remonter jusqu'au champ,
+     * sinon des constats injectés resteraient muets.
+     *
+     * Repris à chaque passe, et pas seulement à la construction : `detach()`
+     * coupe l'abonnement quand le champ se démonte, et rien ne le rétablissait.
+     * Un champ conditionnel masqué une fois — ou n'importe quel champ sous
+     * `StrictMode`, qui monte, démonte et remonte — cessait définitivement de
+     * recevoir les erreurs serveur d'un `ExternalValidator` différé. Le
+     * composite se réabonne de la même façon, pour la même raison.
+     */
+    private listenInner(): void {
+        if (this.unsubscribeInner) {
+            return;
+        }
+        this.unsubscribeInner = this.inner.onStale(() => this.requestRevalidation());
     }
 
     protected async validate(value: T, report: ValidationReport, ctx: ValidationContext): Promise<void> {
+        this.listenInner();
         if (!(await this.debouncer.wait(this.delay))) {
             // Remplacée par une frappe plus récente : ne rien signaler. Le jeton
             // de run de la base empêche de toute façon la publication.

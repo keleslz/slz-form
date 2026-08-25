@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
     ACTIVITY_FLAGS,
+    DebouncedValidator,
+    ExternalValidator,
     BEHAVIOR_FLAGS,
     BehaviorState,
     FormController,
@@ -673,5 +675,198 @@ describe("le périmètre du loading, sur l'agrégat seul", () => {
         // « Masqué vaut absent » vaut pour la validité et le payload, pas pour
         // le travail en vol : la convergence l'attend.
         expect(snapshot.hasFlag("loading")).toBe(true);
+    });
+});
+
+describe("rendre l'attente, c'est rendre ce qu'elle a ajouté", () => {
+    it("un flag retiré juste avant l'attente reste retiré après l'échec", async () => {
+        const form = new FormController<{ country: string; region: string }>({ name: "f32" });
+        const conditional: IBehavior<string> = {
+            watch: ["country"],
+            onMount: (ctx) => ctx.state.hide(),
+            onDependencyChanged: async (ctx) => {
+                // Il cesse d'être invisible **avant** d'attendre : c'est une
+                // décision, pas un effet de l'attente.
+                ctx.push(ctx.state.show().loading().lock());
+                await wait(10);
+                throw new Error("réseau tombé");
+            },
+        };
+        const country = form.field("country", {});
+        const region = form.field("region", { required: true, behaviors: [conditional] });
+        country.mount();
+        region.mount();
+        form.mount();
+        await wait(20);
+
+        country.change("FR");
+        await until(() => region.snapshot.hasFlag("loading"));
+        await until(() => !region.snapshot.hasFlag("loading"), { timeout: 1000 });
+
+        // Restaurer la tranche d'avant le remettait `invisible` : le champ
+        // sortait du payload, et le formulaire se déclarait valide sans lui.
+        expect(region.snapshot.hasFlag("invisible")).toBe(false);
+        expect(region.snapshot.hasFlag("locked")).toBe(false);
+        expect(Object.keys(form.getSnapshot().values)).toContain("region");
+        expect(form.getSnapshot().hasFlag("valid")).toBe(false);
+        expect(await form.submit()).toBe(false);
+    });
+
+    it("ce que l'attente a ajouté part, ce qui était là reste", async () => {
+        const form = new FormController<{ a: string }>({ name: "f33" });
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => ctx.state.mark("premium"),
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().mark("skeleton"));
+                await wait(10);
+                throw new Error("boom");
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("skeleton"));
+        await until(() => !field.snapshot.hasFlag("skeleton"), { timeout: 1000 });
+
+        expect(field.snapshot.hasFlag("premium")).toBe(true);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+    });
+
+    it("un rejet tardif ne défait pas ce que recover() vient de rendre", async () => {
+        const form = new FormController<{ a: string }>({ name: "f34" });
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => ctx.state.mark("premium"),
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().mark("skeleton"));
+                await wait(40);
+                throw new Error("trop tard");
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("skeleton"));
+
+        field.recover();
+        expect(field.snapshot.hasFlag("premium")).toBe(true);
+
+        // La promesse retombe après coup : elle appartient à une passe
+        // supplantée et ne doit plus rien trancher.
+        await wait(80);
+        expect(field.snapshot.hasFlag("premium")).toBe(true);
+        expect(field.snapshot.hasFlag("skeleton")).toBe(false);
+    });
+
+    it("un rejet tardif ne défait pas non plus un reset()", async () => {
+        const form = new FormController<{ a: string }>({ name: "f35" });
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => ctx.state.mark("premium"),
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(40);
+                throw new Error("trop tard");
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("loading"));
+
+        field.reset();
+        await wait(20);
+        expect(field.snapshot.hasFlag("premium")).toBe(true);
+
+        await wait(80);
+        expect(field.snapshot.hasFlag("premium")).toBe(true);
+    });
+});
+
+describe("ce qui doit survivre à un démontage", () => {
+    it("un onUnmount asynchrone qui rejette est rattrapé", async () => {
+        const form = new FormController<{ a: string }>({ name: "f36" });
+        const messy: IBehavior<string> = {
+            onUnmount: async () => {
+                await wait(5);
+                throw new Error("nettoyage raté");
+            },
+        };
+        const field = form.field("a", { behaviors: [messy] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        const original = console.error;
+        const reported: string[] = [];
+        console.error = (...args: unknown[]) => { reported.push(args.map(String).join(" ")); };
+        try {
+            field.unmount();
+            // `invoke` ne couvre que le throw synchrone : sans `catch` sur le
+            // retour, ce rejet était une promesse non rattrapée, donc la fin du
+            // process sous Node.
+            await until(() => reported.some((line) => line.includes("nettoyage raté")), { timeout: 1000 });
+        } finally {
+            console.error = original;
+        }
+        expect(field.isUnmounted).toBe(true);
+    });
+
+    it("un champ retiré pendant la soumission est libéré lui aussi", async () => {
+        const form = new FormController<{ a: string; b: string }>({ name: "f37" });
+        const slow: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(40);
+                return ctx.state.idle();
+            },
+        };
+        const a = form.field("a", { behaviors: [slow] });
+        const b = form.field("b", {});
+        a.mount();
+        b.mount();
+        form.mount();
+
+        const pending = form.submit();
+        await until(() => b.snapshot.hasFlag("submitting"));
+        form.remove("b");
+
+        await pending;
+        // Il n'est plus dans la map : n'itérer que celle-ci le laissait
+        // verrouillé pour toujours.
+        expect(b.snapshot.hasAny("submitting", "locked")).toBe(false);
+    });
+});
+
+describe("un validator différé reste joignable après un remontage", () => {
+    it("un constat serveur arrive encore après démontage/remontage", async () => {
+        const form = new FormController<{ a: string }>({ name: "f38" });
+        const server = new ExternalValidator<string>();
+        const field = form.field("a", {
+            initialValue: "x",
+            validator: new DebouncedValidator(server, 5),
+        });
+        field.mount();
+        form.mount();
+        field.change("x1");
+        server.set([{ message: "déjà pris", severity: "error" }]);
+        await until(() => field.snapshot.errors.includes("déjà pris"), { timeout: 1000 });
+
+        field.unmount();
+        field.mount();
+        await wait(20);
+        field.change("x2");
+        await wait(30);
+        server.set([{ message: "encore pris", severity: "error" }]);
+
+        // `detach()` coupait l'abonnement sans jamais le rétablir : sous
+        // StrictMode, tout champ monté deux fois devenait sourd aux erreurs
+        // serveur.
+        await until(() => field.snapshot.errors.includes("encore pris"), { timeout: 2000 });
     });
 });

@@ -148,8 +148,8 @@ export class FormSnapshot {
     }
 
     /**
-     * Les champs **montés**, visibles ou non — exactement ceux que `submit()`
-     * attend.
+     * Les champs **montés**, visibles ou non — le même périmètre que
+     * `FormController.isBusy`.
      *
      * « Masqué vaut absent » (invariant 29) vaut pour la validité et le
      * payload : un champ conditionnel ne doit pas condamner la soumission. Son
@@ -159,6 +159,11 @@ export class FormSnapshot {
      *
      * Élargir à *tous* les champs serait l'excès inverse : un champ démonté en
      * vol n'est plus attendu par personne, et le flag ne redescendrait jamais.
+     *
+     * Ce n'est pas exactement ce que `submit()` attend : la convergence
+     * travaille sur la liste figée à son entrée, donc un champ monté **pendant**
+     * la soumission peut la voir aboutir alors qu'il travaille encore. Le flag,
+     * lui, dit la vérité de l'instant.
      */
     private get isLoading(): boolean {
         return this.mounted.some((field) => field.ui.hasFlag("loading"))

@@ -317,7 +317,10 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
 
     /** Un travail asynchrone est en cours, dans un champ ou dans une ligne. */
     get isBusy(): boolean {
-        return [...this.fields.values()].some((field) => field.isBusy)
+        // Les champs **montés** — le même périmètre que le flag `loading` du
+        // formulaire. Un champ jamais monté, ou démonté, ne fait pas partie du
+        // formulaire qu'on remplit, et plus personne n'attend son travail.
+        return [...this.fields.values()].some((field) => field.isMounted && field.isBusy)
             || [...this.arrays.values()].some((rows) => rows.isBusy);
     }
 
@@ -379,10 +382,12 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             // garde du moteur — laissait le formulaire verrouillé sur
             // « submitting », sans aucun chemin de sortie : `reset()` lui-même
             // ne remettait pas `submitting` à zéro.
-            // Tous les champs, pas la liste figée à l'entrée : un champ monté
-            // pendant la soumission a pris le verrou au montage, et ne serait
-            // jamais relâché s'il fallait avoir été présent au départ.
-            for (const field of this.fields.values()) {
+            // L'**union** des deux listes, et non l'une ou l'autre : un champ
+            // monté pendant la soumission a pris le verrou au montage et ne
+            // serait jamais relâché s'il fallait avoir été présent au départ ;
+            // un champ retiré entre-temps n'est plus dans la map et resterait
+            // verrouillé pour toujours.
+            for (const field of new Set([...mounted, ...this.fields.values()])) {
                 field.setSubmitting(false);
             }
             this.leaveSubmitting();

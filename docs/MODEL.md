@@ -2,7 +2,7 @@
 
 > Document de référence à valider. Il fixe l'objectif, les entités, les
 > arbitrages tranchés et la façon dont chaque invariant est tenu.
-> Statut : implémenté, couvert par `packages/form/test` (186 tests) et `packages/react-form/test` (19 tests) ; le parcours
+> Statut : implémenté, couvert par `packages/form/test` (193 tests) et `packages/react-form/test` (19 tests) ; le parcours
 > navigateur (`examples/react`, 43 assertions) couvre le socle, pas encore les
 > listes répétables ni `readonly`.
 
@@ -117,8 +117,11 @@ field.hasFlag("skeleton")      //  la vue en décide, le moteur transporte
 pouvoir se contredire, donc ouvrir est sans risque. Les groupes exclusifs, eux,
 restent fermés : c'est là qu'on publierait un état qui n'existe pas.
 
-La garde est dans le code, pas seulement dans la doc : `mark` / `unmark`
-**refusent** les mots du moteur (`RESERVED_FLAGS`). `mark("error")` publierait
+La garde est dans le code, pas seulement dans la doc : `mark`, `unmark` **et le
+constructeur de `BehaviorState`** refusent les mots du moteur
+(`RESERVED_FLAGS`). Les trois, parce qu'un behavior *retourne* une tranche :
+garder la porte sans garder le mur laissait `new BehaviorState("idle",
+["error"])` republier l'état impossible. `mark("error")` publierait
 `pristine` *et* `error` ; `mark("loading")` allumerait une activité que rien ne
 pourrait éteindre, puisque l'union des flags cumulés ne se soustrait pas. Un
 behavior émet la disponibilité — `lock()`, `readOnly()`, `hide()` — et ses
@@ -365,9 +368,12 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 25 | Champs répétables | une ligne **est** un formulaire, identifiée et non indexée | réutilise graphe, validation et soumission ; retirer ou déplacer une ligne ne renomme rien, donc aucun `watch` ne pointe dans le vide |
 | 26 | Règle qui casse | constat `unverified` bloquant, plutôt que « valide » ou que l'ancien verdict | déclarer valide laisse passer ce que la règle aurait refusé ; garder l'ancien verdict le recolle à une autre valeur |
 | 27 | Surface de lecture | deux fonctions et des flags ; aucun booléen d'état | un booléen dérivé rend le flag facultatif, donc mort — c'est ce qu'avait fait `189b8de` en livrant l'API par flags et son contournement dans le même diff |
-| 28 | Flags de l'application | `mark` / `unmark`, refusés sur les mots du moteur | un vocabulaire fermé bloque les besoins qu'on n'a pas prévus ; l'union de flags cumulés ne peut pas se contredire, l'ouvrir est donc sans risque — mais poser `error` ou `loading` par ce chemin publierait un état impossible, d'où `RESERVED_FLAGS` |
+| 28 | Flags de l'application | `mark`, `unmark` et le constructeur refusent les mots du moteur | un vocabulaire fermé bloque les besoins qu'on n'a pas prévus ; l'union de flags cumulés ne peut pas se contredire, l'ouvrir est donc sans risque — mais poser `error` ou `loading` par ce chemin publierait un état impossible, d'où `RESERVED_FLAGS` |
 | 29 | Verdict d'un champ | `errors` non vide, pas un flag | deux mots voisins — `error` affiché, `blocking` vrai — se confondaient à l'usage ; le verdict est déjà porté par une donnée que la vue lit de toute façon |
 | 30 | Verdict d'une liste | comme le formulaire : `valid` / `error`, jamais `pristine` | une liste est un agrégat, pas un champ qu'on touche ; sa validité est ce qui est vrai |
+| 31 | Travail en vol du formulaire | les champs **montés**, visibles ou non | la convergence attend un champ masqué ; un champ démonté, personne ne l'attend, et son activité ne redescendrait jamais |
+| 32 | Rendre une attente | l'**intersection** avec ce qui précédait, jamais la tranche entière | `neutral` effaçait un fait posé au montage, que rien ne remettrait ; restaurer la tranche d'avant ressuscitait un flag que le behavior venait de retirer, au point de faire disparaître un champ obligatoire du payload |
+| 33 | Passe supplantée | `recover()` et `reset()` ouvrent une génération ; un rejet plus ancien ne tranche plus | sans ça, une promesse retombée après coup rasait la tranche qu'on venait de rendre — même rôle que le jeton de run d'`IValidator` |
 
 ---
 
@@ -407,7 +413,9 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 30 | Une ligne est un formulaire | `FieldArrayController` compose des `FormController` ; aucun nommage par chemins |
 | 31 | Une passe interrompue n'est pas un verdict | une règle qui casse ne rend rien : la valeur est publiée **non vérifiée** et bloque, jamais valide, jamais jugée par le verdict d'une autre saisie |
 | 32 | Aucun booléen d'état dans la surface de lecture | `FieldSnapshot`, `FormSnapshot`, `useField()` et `useForm()` n'exposent que `hasFlag` / `hasAny`, les données et les actions |
-| 33 | Un groupe exclusif a un vocabulaire fermé | `ValidityFlag` et `ActivityFlag` sont des unions closes ; seuls les flags cumulés acceptent ceux de l'application |
+| 33 | Un groupe exclusif a un vocabulaire fermé | `ValidityFlag` et `ActivityFlag` sont des unions closes ; seuls les flags cumulés acceptent ceux de l'application, et `RESERVED_FLAGS` s'en dérive au lieu de les recopier |
+| 34 | Le démontage n'abandonne rien en vol | `unmount()` neutralise les tranches **et** appelle `validator.abandon()` ; sans quoi un champ démonté restait `loading` pour toujours |
+| 35 | Aucun hook ne peut faire dérailler le moteur | les sept hooks passent par `invoke` ; `onUnmount`, qui peut être écrit `async`, voit aussi son rejet rattrapé |
 
 ---
 

@@ -86,6 +86,13 @@ export class FieldController<T = string, M = never> {
      * `onMount` n'est pas rejoué. Même mécanique que `IValidator.beforeLoading`.
      */
     private readonly slicesBeforeLoading = new Map<IBehavior<T, M>, BehaviorState>();
+    /**
+     * Génération d'attente. `recover()` et `reset()` tranchent pour tout le
+     * champ : un rejet qui retombe **après** appartient à une passe supplantée,
+     * et le laisser appeler `release` raserait la tranche qu'on vient de rendre.
+     * Même rôle que le jeton de run d'`IValidator`.
+     */
+    private waitGeneration = 0;
     private readonly listeners = new Set<Listener>();
 
     private host: FieldHost | null = null;
@@ -249,7 +256,13 @@ export class FieldController<T = string, M = never> {
             // publiant encore `mounted` — et les abonnements du validator en
             // fuite.
             const ctx = this.buildContext(behavior, this.abort.signal);
-            this.invoke(() => behavior.onUnmount?.(ctx));
+            // `invoke` couvre le throw synchrone ; le `catch` couvre le hook
+            // écrit `async`, dont le rejet serait sinon une promesse non
+            // rattrapée — c'est-à-dire la fin du process sous Node.
+            const result = this.invoke(() => behavior.onUnmount?.(ctx));
+            if (isPromise(result)) {
+                void result.catch((error: unknown) => reportEngineError(this.name, error));
+            }
         }
         // Un démontage en vol laissait la tranche sur `loading` + `locked` :
         // le signal est avorté, donc plus rien ne viendrait la libérer.
@@ -316,6 +329,7 @@ export class FieldController<T = string, M = never> {
         // Le validator contribue aussi à l'axe activité : le laisser en vol
         // suffisait à garder `isBusy` vrai, donc à condamner le formulaire.
         this.validator.abandon();
+        this.waitGeneration += 1;
         for (const [behavior, state] of this.statesByBehavior) {
             if (state.activity === "loading") {
                 // Même règle qu'après un rejet : on rend l'attente, et elle
@@ -392,6 +406,7 @@ export class FieldController<T = string, M = never> {
             this.statesByBehavior.set(behavior, BehaviorState.neutral);
         }
         this.slicesBeforeLoading.clear();
+        this.waitGeneration += 1;
         // Effacer les tranches ne suffit pas : la condition qui les avait
         // produites tient toujours. Sans rejouer le montage, un champ
         // conditionnel masqué réapparaissait et bloquait la soumission.
@@ -585,6 +600,7 @@ export class FieldController<T = string, M = never> {
     }
 
     private apply(behavior: IBehavior<T, M>, result: BehaviorResult, signal: AbortSignal): void {
+        const generation = this.waitGeneration;
         if (result instanceof BehaviorState) {
             this.setSlice(behavior, result);
             return;
@@ -595,14 +611,17 @@ export class FieldController<T = string, M = never> {
         }
         void result
             .then((state) => {
-                if (signal.aborted || !(state instanceof BehaviorState)) {
+                if (signal.aborted || generation !== this.waitGeneration) {
+                    return;
+                }
+                if (!(state instanceof BehaviorState)) {
                     return;
                 }
                 this.setSlice(behavior, state);
                 this.commit();
             })
             .catch((error: unknown) => {
-                if (signal.aborted) {
+                if (signal.aborted || generation !== this.waitGeneration) {
                     return;
                 }
                 // Un behavior rejeté ne doit rien laisser derrière lui de ce que
@@ -621,7 +640,7 @@ export class FieldController<T = string, M = never> {
 
     /**
      * Range la tranche d'un behavior, en retenant ce qu'elle valait **avant**
-     * son entrée en attente — c'est ce qu'on lui rendra s'il échoue.
+     * son entrée en attente — c'est la référence dont `release` se sert.
      */
     private setSlice(behavior: IBehavior<T, M>, next: BehaviorState): void {
         const previous = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
@@ -635,11 +654,28 @@ export class FieldController<T = string, M = never> {
         this.statesByBehavior.set(behavior, next);
     }
 
-    /** Rend l'attente : la tranche redevient ce qu'elle était juste avant. */
+    /**
+     * Rend l'attente — **ce qu'elle a ajouté, et rien d'autre**.
+     *
+     * Ni la tranche entière (un fait posé au montage disparaîtrait, et
+     * `onMount` n'est pas rejoué), ni la tranche d'avant l'attente telle quelle
+     * (un flag que le behavior venait de **retirer** reviendrait : un champ
+     * masqué qui se montre puis échoue redevenait invisible, donc sortait du
+     * payload — et le formulaire se déclarait valide sans sa valeur
+     * obligatoire).
+     *
+     * La règle exacte est donc l'**intersection** : on garde ce qui était déjà
+     * là avant et qui y est encore. Ce que l'attente a ajouté part, ce qu'elle a
+     * retiré reste retiré.
+     */
     private release(behavior: IBehavior<T, M>): void {
-        const restored = this.slicesBeforeLoading.get(behavior) ?? BehaviorState.neutral;
+        const current = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
+        const before = this.slicesBeforeLoading.get(behavior);
         this.slicesBeforeLoading.delete(behavior);
-        this.statesByBehavior.set(behavior, restored.idle());
+        const kept = before === undefined
+            ? []
+            : current.markers.filter((flag) => before.has(flag));
+        this.statesByBehavior.set(behavior, new BehaviorState("idle", kept));
     }
 
     private buildContext(behavior: IBehavior<T, M>, signal: AbortSignal): BehaviorContext<T, M> {
