@@ -36,7 +36,7 @@ Le composant ne décide de rien : il lit et se rend.
 | comprendre le modèle avant de coder | [Les flags, et les deux fonctions](modele/flags.md) |
 | brancher un besoin précis | [Guides](guides/preremplir.md) |
 | la signature exacte d'une fonction | [Référence API](reference/slz-form/index.md) |
-| savoir **pourquoi** c'est fait comme ça | [Le dossier de conception](pathname:///slz-form-event/conception/MODEL) |
+| savoir **pourquoi** c'est fait comme ça | [Le dossier de conception](/conception/MODEL) |
 
 ## Ce que ce n'est pas
 

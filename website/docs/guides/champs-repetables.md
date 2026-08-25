@@ -13,9 +13,13 @@ type InvoiceFields = { customer: string; lines: FieldArray<{ label: string; qty:
 const lines = form.array("lines");
 const id = lines.append();
 
-const qty = lines.row(id).field("qty");
-qty.mount();                 // comme pour un champ de formulaire
-qty.change(3);
+// `row` rend `null` si la ligne a été retirée entre-temps.
+const row = lines.row(id);
+if (row) {
+    const qty = row.field("qty");
+    qty.mount();             // comme pour un champ de formulaire
+    qty.change(3);
+}
 
 lines.remove(id);
 ```
@@ -47,6 +51,10 @@ Une liste répond aux mêmes deux fonctions que le reste, et publie `valid` ·
 `error` — jamais `pristine` : c'est un agrégat, pas un champ qu'on touche.
 
 ```ts
-lines.snapshot.hasFlag("error");   // au moins une ligne refuse
-lines.snapshot.errors;             // les constats, à plat
+lines.ui.hasFlag("error");   // au moins une ligne refuse
+lines.errors;                // les constats, à plat
+lines.isBusy;                // une ligne a du travail en vol
 ```
+
+Côté React, le même état agrégé se lit par `useForm().snapshot.arrays` — et
+non par `useFieldArray`, qui ne s'abonne qu'à la composition de la liste.

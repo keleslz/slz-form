@@ -17,8 +17,9 @@ type InvoiceFields = { customer: string; lines: FieldArray<{ label: string; qty:
 const lines = form.array("lines");
 const id = lines.append();
 
-const qty = lines.row(id).field("qty");
-qty.mount();                 // comme pour un champ de formulaire
+const row = lines.row(id);          // `null` si la ligne a été retirée
+const qty = row!.field("qty");
+qty.mount();                        // comme pour un champ de formulaire
 qty.change(3);
 
 lines.remove(id);

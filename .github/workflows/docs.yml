@@ -56,6 +56,12 @@ jobs:
         working-directory: website
         run: npm ci
 
+      # Le build compile aussi le TSX, mais moins strictement : la page
+      # d'accueil est du vrai code, elle passe par le compilateur entier.
+      - name: Typecheck du site
+        working-directory: website
+        run: npm run typecheck
+
       - name: Construire
         working-directory: website
         run: npm run build

@@ -82,8 +82,15 @@ lookup({
 });
 ```
 
-`loadOptions`, `lookup`, `suggest`, `prefill`, `lockWhile`, `hideWhen`,
-`dependsOn`, `createBehavior` — et `lockUntilValid({ watch })`, typé sur la map.
+Deux listes, et la distinction compte :
+
+| Depuis `behaviorsFor(form)` — typés sur la map | Exports nus — le nom du champ est à votre charge |
+|---|---|
+| `lookup`, `loadOptions`, `suggest`, `prefill`, `lockWhile`, `lockUntilValid`, `hideWhen` | `lookup`, `loadOptions`, `prefill`, `lockWhile`, `hideWhen`, `dependsOn`, `createBehavior`, `lockedWhilePending`, `openWhilePending` |
+
+`suggest` et `lockUntilValid` n'existent que par `behaviorsFor` : ils lisent
+d'autres champs, donc ils n'ont de sens qu'une fois liés à une map qui les
+déclare.
 
 Le même besoin s'écrit toujours à la main quand il sort de l'ordinaire :
 [les trois formes du même prefill](../guides/preremplir.md) montrent le passage
