@@ -1510,3 +1510,256 @@ describe("fermer une passe, c'est fermer la bonne", () => {
         expect(field.snapshot.hasFlag("B")).toBe(false);
     });
 });
+
+describe("une passe ne reste ouverte que si elle a ouvert l'attente", () => {
+    it("un focus pendant un appel ne laisse pas de passe fantôme", async () => {
+        const form = new FormController<{ siret: string }>({ name: "f62", settleTimeout: 40 });
+        const annuaire: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.loading().hide());
+                await wait(10_000);
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("siret", {
+            required: true,
+            initialValue: "42",
+            behaviors: [annuaire],
+        });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("invisible"));
+
+        // Chaque interaction dispatche une passe pour **chaque** behavior, même
+        // quand il n'implémente pas le hook. Les laisser ouvertes donnait à
+        // `recover()` un fantôme comme référence.
+        field.focus();
+        field.blur();
+        await wait(10);
+
+        expect(await form.submit()).toBe(false);
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
+        expect(form.getSnapshot().values).toEqual({ siret: "42" });
+    });
+
+    it("mille interactions pendant un appel ne retiennent rien", async () => {
+        const form = new FormController<{ a: string }>({ name: "f63", settleTimeout: 40 });
+        const stuck: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(10_000);
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("a", { behaviors: [stuck] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("loading"));
+
+        for (let i = 0; i < 1000; i += 1) {
+            field.focus();
+            field.blur();
+        }
+        await wait(10);
+
+        // Une passe fantôme par interaction, c'est une `BehaviorState` retenue
+        // par interaction sur un formulaire qui ne se démonte pas.
+        expect(await form.submit()).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+    });
+
+    it("un fait posé hors de la passe abandonnée survit au recover", async () => {
+        const form = new FormController<{ a: string }>({ name: "f64", settleTimeout: 40 });
+        const stuck: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(10_000);
+                return ctx.state.idle();
+            },
+        };
+        const marker: IBehavior<string> = {
+            onFocus: (ctx) => ctx.state.mark("verified"),
+        };
+        const field = form.field("a", { behaviors: [stuck, marker] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("loading"));
+        field.focus();
+        expect(field.snapshot.hasFlag("verified")).toBe(true);
+
+        expect(await form.submit()).toBe(false);
+        expect(field.snapshot.hasFlag("verified")).toBe(true);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+    });
+});
+
+describe("une attente allumée hors de toute passe est rendue aussi", () => {
+    it("un push venu d'une source externe garde une référence", async () => {
+        const form = new FormController<{ siret: string }>({ name: "f65", settleTimeout: 40 });
+        const external: { notify?: () => void } = {};
+        const subscribed: IBehavior<string> = {
+            // `ctx.push` s'utilise après coup : l'attente n'appartient alors à
+            // aucun hook.
+            onMount: (ctx) => {
+                external.notify = () => ctx.push(ctx.state.loading().hide());
+                return ctx.state.mark("abonné");
+            },
+        };
+        const field = form.field("siret", {
+            required: true,
+            initialValue: "42",
+            behaviors: [subscribed],
+        });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        external.notify?.();
+        await until(() => field.snapshot.hasFlag("invisible"));
+
+        expect(await form.submit()).toBe(false);
+        // Sans référence, `recover()` n'avait rien à quoi comparer : il ne
+        // rendait rien, et le formulaire partait vide.
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
+        expect(field.snapshot.hasFlag("abonné")).toBe(true);
+        expect(form.getSnapshot().values).toEqual({ siret: "42" });
+    });
+});
+
+describe("une passe qui échoue n'éteint pas celle qui travaille encore", () => {
+    it("le formulaire reste occupé tant qu'une passe sœur est en vol", async () => {
+        const form = new FormController<{ a: string }>({ name: "f66" });
+        let call = 0;
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                call += 1;
+                if (call === 1) {
+                    ctx.push(ctx.state.loading());
+                    await wait(20);
+                    throw new Error("première HS");
+                }
+                ctx.push(ctx.state.loading());
+                await wait(120);
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("x");
+        await wait(5);
+        field.change("y");
+        await wait(60);
+
+        // La première a rejeté ; la seconde travaille encore.
+        expect(field.isBusy).toBe(true);
+        expect(field.snapshot.hasFlag("loading")).toBe(true);
+        await until(() => !field.snapshot.hasFlag("loading"), { timeout: 1000 });
+    });
+});
+
+describe("deux passes ouvertes : laquelle fait référence", () => {
+    it("un fantôme ouvert pendant un premier appel ne sert pas de référence au second", async () => {
+        const form = new FormController<{ siret: string }>({ name: "f67", settleTimeout: 40 });
+        const annuaire: IBehavior<string> = {
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.loading().hide());
+                await wait(20);
+                return ctx.state.idle().show();
+            },
+            onFocus: (ctx) => ctx.state,
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().hide());
+                await wait(10_000);
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("siret", { required: true, behaviors: [annuaire] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("invisible"));
+
+        // Le fantôme s'ouvre pendant le **premier** appel, donc avec `invisible`
+        // déjà posé. Le premier appel se termine ; le second reste en vol.
+        field.focus();
+        await until(() => !field.snapshot.hasFlag("invisible"), { timeout: 1000 });
+
+        field.change("42");
+        await until(() => field.snapshot.hasFlag("invisible"));
+        expect(await form.submit()).toBe(false);
+
+        // Si le fantôme était resté ouvert, c'est lui — le plus ancien — qui
+        // aurait fait référence, et son `invisible` aurait été conservé.
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
+        expect(form.getSnapshot().values).toEqual({ siret: "42" });
+    });
+
+    it("une attente détachée terminée ne sert pas de référence à la suivante", async () => {
+        const form = new FormController<{ a: string }>({ name: "f68", settleTimeout: 40 });
+        const external: { start?: () => void; stop?: () => void } = {};
+        const subscribed: IBehavior<string> = {
+            onMount: (ctx) => {
+                external.start = () => ctx.push(ctx.state.loading().hide());
+                external.stop = () => ctx.push(ctx.state.idle().show());
+                return ctx.state;
+            },
+            onFocus: (ctx) => ctx.state.mark("verified"),
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().hide());
+                await wait(10_000);
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("a", { behaviors: [subscribed] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        external.start?.();
+        await until(() => field.snapshot.hasFlag("invisible"));
+        external.stop?.();
+        await until(() => !field.snapshot.hasFlag("invisible"), { timeout: 1000 });
+
+        field.focus();
+        expect(field.snapshot.hasFlag("verified")).toBe(true);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("invisible"));
+        expect(await form.submit()).toBe(false);
+
+        // La détachée date d'avant `verified` : la garder ouverte l'aurait fait
+        // servir de référence, et `verified` aurait disparu.
+        expect(field.snapshot.hasFlag("verified")).toBe(true);
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
+    });
+
+    it("recover rend contre la plus ancienne des passes encore ouvertes", async () => {
+        const form = new FormController<{ a: string }>({ name: "f69", settleTimeout: 40 });
+        let call = 0;
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                call += 1;
+                ctx.push(call === 1 ? ctx.state.loading().mark("P") : ctx.state.loading());
+                await wait(10_000);
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("P"));
+        field.change("y");
+        await wait(10);
+
+        expect(await form.submit()).toBe(false);
+        // `P` a été posé par la première passe : la rendre, c'est le retirer.
+        // Se référer à la seconde — pour qui `P` était déjà là — le garderait.
+        expect(field.snapshot.hasFlag("P")).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+    });
+});

@@ -38,6 +38,13 @@ type Listener = () => void;
 interface Pass {
     readonly before: BehaviorState;
     readonly generation: number;
+    /**
+     * Ouverte par une **écriture**, pas par un hook : un `ctx.push` qui allume
+     * `loading` alors qu'aucune passe ne court — un behavior abonné à une source
+     * externe, par exemple. Personne ne viendra la refermer en retombant, c'est
+     * le retour à `idle` qui s'en charge.
+     */
+    readonly detached?: boolean;
 }
 
 /**
@@ -676,11 +683,16 @@ export class FieldController<T = string, M = never> {
         const result = this.invoke(call);
         this.apply(behavior, result, signal, pass);
 
-        if (!isPromise(result) && this.statesByBehavior.get(behavior)?.activity !== "loading") {
-            // Hook synchrone qui ne laisse aucune attente derrière lui : rien
-            // ne viendra la fermer, autant la refermer tout de suite. S'il a
-            // laissé `loading` — le motif « travail détaché » —, la passe reste
-            // ouverte, et c'est `recover()` qui la rendra.
+        // La passe ne reste ouverte que si **elle** a ouvert l'attente. Regarder
+        // l'activité du behavior au lieu de sa contribution laissait ouverte
+        // toute passe traversant un `loading` posé par une autre — or `run` en
+        // dispatche une par behavior, même quand il n'implémente pas le hook.
+        // Chaque `focus`, `blur` ou `submit` pendant un appel en laissait donc
+        // une derrière lui, et `recover()`, qui prend la plus ancienne, rendait
+        // contre l'une d'elles.
+        const opened = pass.before.activity !== "loading"
+            && this.statesByBehavior.get(behavior)?.activity === "loading";
+        if (!isPromise(result) && !opened) {
             this.close(behavior, pass);
         }
     }
@@ -766,8 +778,34 @@ export class FieldController<T = string, M = never> {
         });
     }
 
+    /**
+     * Range la tranche, et tient les passes **détachées**.
+     *
+     * `ctx.push` s'utilise après coup : un behavior abonné à une source externe
+     * allume `loading` hors de tout hook. Cette attente-là n'appartient à
+     * aucune passe, et sans référence `recover()` n'avait plus rien à quoi la
+     * comparer — il ne rendait donc rien.
+     */
     private setSlice(behavior: IBehavior<T, M>, next: BehaviorState): void {
+        const previous = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
         this.statesByBehavior.set(behavior, next);
+
+        if (next.activity === "loading") {
+            if (previous.activity !== "loading" && (this.openPasses.get(behavior)?.length ?? 0) === 0) {
+                this.passesOf(behavior).push({
+                    before: previous,
+                    generation: this.generationOf(behavior),
+                    detached: true,
+                });
+            }
+            return;
+        }
+        // Retour au repos : ce qu'aucune promesse ne refermera est refermé ici.
+        for (const pass of [...(this.openPasses.get(behavior) ?? [])]) {
+            if (pass.detached) {
+                this.close(behavior, pass);
+            }
+        }
     }
 
     private generationOf(behavior: IBehavior<T, M>): number {
@@ -795,7 +833,11 @@ export class FieldController<T = string, M = never> {
     private release(behavior: IBehavior<T, M>, pass: Pass): void {
         const current = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
         const kept = current.markers.filter((flag) => pass.before.has(flag));
-        this.statesByBehavior.set(behavior, new BehaviorState("idle", kept));
+        // `idle` seulement si plus rien n'est en vol : une passe sœur encore en
+        // cours rendait sinon le formulaire soumettable pendant que le behavior
+        // travaillait toujours.
+        const stillWaiting = (this.openPasses.get(behavior)?.length ?? 0) > 0;
+        this.setSlice(behavior, new BehaviorState(stillWaiting ? "loading" : "idle", kept));
     }
 
     private buildContext(behavior: IBehavior<T, M>, signal: AbortSignal): BehaviorContext<T, M> {

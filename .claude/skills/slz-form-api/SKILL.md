@@ -248,10 +248,19 @@ Ce qui a échoué, et pourquoi, pour ne pas y revenir :
 | restaurer l'état d'entrée tel quel | ressuscite un flag que le behavior venait de retirer |
 | indexer la référence sur le passage à `loading` | rate tout behavior qui pousse un état sans `loading` |
 | une référence partagée par behavior | deux auteurs et deux comptabilités qui se contredisent |
+| fermer une passe en regardant l'activité du **behavior** | `run` en dispatche une par behavior : chaque `focus` ou `blur` pendant un appel en laisse une ouverte, et `recover()` rend contre elle |
+| n'ouvrir de passe que depuis un hook | un `ctx.push` d'abonnement allume `loading` hors de tout hook : sans référence, `recover()` ne rend rien |
 
 La référence appartient donc à la **passe** (`Pass { before, generation }`),
-ouverte avant l'appel du hook, fermée quand elle retombe. Toute modification de
-`dispatch`, `release` ou `recover` commence par un test dans `flags.test.ts`.
+ouverte avant l'appel du hook et fermée dès qu'elle retombe — ou tout de suite
+si elle n'a ouvert aucune attente. Deux corollaires, chacun payé d'un tour de
+revue : une passe ne reste ouverte que si **elle-même** a allumé `loading`, et
+une attente allumée hors de tout hook ouvre une passe **détachée**, refermée au
+retour à `idle`.
+
+Toute modification de `dispatch`, `setSlice`, `release` ou `recover` commence par
+un test dans `flags.test.ts`, et se vérifie avec **deux passes ouvertes en même
+temps** : c'est la configuration où toutes les tentatives précédentes ont cédé.
 
 ## Pièges déjà rencontrés
 
