@@ -42,11 +42,13 @@ en perdant `valid`, et `FieldArrayController.isValid` disparaît au profit de
 
 Le comportement d'un behavior asynchrone se resserre, et c'est visible :
 
-- **une passe supplantée n'écrit plus rien.** `recover()` — que la soumission
-  déclenche quand la convergence expire — et `reset()` ouvrent une nouvelle
-  génération : `ctx.push`, `ctx.setValue` et `ctx.setOptions` d'une passe plus
-  ancienne sont ignorés, et son résultat comme son rejet ne tranchent plus. Un
-  « Annuler » suivi de la valeur qui réapparaît toute seule, c'est fini ;
+- **une passe supplantée n'écrit plus rien.** `reset()` supplante tous les
+  behaviors du champ ; `recover()` — que la soumission déclenche quand la
+  convergence expire — ne supplante que ceux dont il libère une attente, pour
+  ne pas rendre muet un voisin qui n'avait rien en vol. Pour une passe
+  supplantée, `ctx.push`, `ctx.setValue` et `ctx.setOptions` sont ignorés, et
+  son résultat comme son rejet ne tranchent plus : un « Annuler » suivi de la
+  valeur qui réapparaît toute seule, c'est fini ;
 - **un behavior qui échoue rend son attente, et elle seule.** Ce que l'attente a
   ajouté part, ce qu'elle a retiré reste retiré, et ce qu'il avait posé avant
   survit. S'il n'était jamais entré en attente, sa tranche est intacte ;

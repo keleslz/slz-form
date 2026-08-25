@@ -32,10 +32,12 @@ export interface BehaviorContext<T = string, M = never> {
     /**
      * Aborted on unmount: guard after every `await`.
      *
-     * Une passe supplantée — `recover()` après l'expiration de la convergence,
-     * ou `reset()` — cesse aussi d'écrire : `setValue`, `setOptions` et `push`
-     * y deviennent muets, sans que le signal soit avorté. Dans `onUnmount`, ils
-     * le sont d'office : le hook sert à nettoyer, pas à publier.
+     * Une passe supplantée cesse aussi d'écrire : `setValue`, `setOptions` et
+     * `push` y deviennent muets, sans que le signal soit avorté. C'est le cas
+     * après un `reset()`, et après un `recover()` **pour le behavior dont il a
+     * libéré l'attente** — un voisin qui n'avait rien en vol continue, lui, de
+     * publier. Dans `onUnmount`, les trois sont muets d'office : le hook sert à
+     * nettoyer, pas à publier.
      */
     readonly signal: AbortSignal;
 

@@ -1167,3 +1167,137 @@ describe("les trois cas limites de la restitution", () => {
         await until(() => field.snapshot.value === "écrit après recover", { timeout: 1000 });
     });
 });
+
+describe("la comptabilité d'une attente suit chaque écriture", () => {
+    it("une passe qui ne rend rien libère quand même sa référence", async () => {
+        const form = new FormController<{ pays: string; siret: string }>({ name: "f50" });
+        const behavior: IBehavior<string> = {
+            watch: ["pays"],
+            // L'idiome dominant : `async` sans `return`. La passe résout
+            // `undefined`, et son entrée doit malgré tout être rendue.
+            onMount: async (ctx) => {
+                ctx.push(ctx.state.hide());
+                await wait(10);
+            },
+            onDependencyChanged: async (ctx) => {
+                // Rien de synchrone avant le premier `await` : un `push` ici
+                // nettoierait la référence périmée par un autre chemin, et
+                // masquerait le défaut.
+                await wait(5);
+                ctx.push(ctx.state.mark("checking"));
+                await wait(10);
+                throw new Error("annuaire HS");
+            },
+        };
+        const pays = form.field("pays", {});
+        const siret = form.field("siret", { required: true, behaviors: [behavior] });
+        pays.mount();
+        siret.mount();
+        form.mount();
+        await wait(30);
+        expect(siret.snapshot.hasFlag("invisible")).toBe(true);
+        expect(form.getSnapshot().hasFlag("valid")).toBe(true);
+
+        pays.change("FR");
+        await until(() => siret.snapshot.hasFlag("checking"));
+        await until(() => !siret.snapshot.hasFlag("checking"), { timeout: 1000 });
+
+        // Une référence périmée faisait ressusciter le champ masqué : il
+        // redevenait obligatoire et vide, et le formulaire était condamné.
+        expect(siret.snapshot.hasFlag("invisible")).toBe(true);
+        expect(form.getSnapshot().hasFlag("valid")).toBe(true);
+    });
+
+    it("un onSubmit asynchrone n'écrase pas la référence d'une attente ouverte sans promesse", async () => {
+        const form = new FormController<{ a: string }>({ name: "f51", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => ctx.state.loading().hide(),
+            onSubmit: async () => { await wait(1); },
+        };
+        const field = form.field("a", { required: true, initialValue: "gardée", behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await until(() => field.snapshot.hasFlag("invisible"));
+
+        expect(await form.submit()).toBe(false);
+        // Le champ doit revenir, et sa valeur rester dans le payload : sinon le
+        // formulaire part vide en se croyant valide.
+        expect(field.snapshot.hasFlag("invisible")).toBe(false);
+        expect(await form.submit()).toBe(true);
+        expect(form.getSnapshot().values).toEqual({ a: "gardée" });
+    });
+
+    it("une attente ouverte par un hook synchrone garde ses faits permanents", async () => {
+        const form = new FormController<{ a: string }>({ name: "f52", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => ctx.state.readOnly().mark("imported"),
+            onChange: (ctx) => {
+                // Travail détaché : il retourne `loading` sans rendre de
+                // promesse — le motif de `parity.test.ts`.
+                void wait(10_000);
+                return ctx.state.loading();
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+        expect(field.snapshot.hasFlag("readonly", "imported")).toBe(true);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("loading"));
+        expect(await form.submit()).toBe(false);
+
+        // `recover()` doit rendre l'attente sans emporter ce que le montage
+        // avait posé.
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        expect(field.snapshot.hasFlag("readonly", "imported")).toBe(true);
+    });
+
+    it("la passe la plus rapide n'emporte pas la référence de la plus lente", async () => {
+        const form = new FormController<{ a: string }>({ name: "f53" });
+        let call = 0;
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => ctx.state.readOnly().mark("imported"),
+            onChange: async (ctx) => {
+                call += 1;
+                if (call === 1) {
+                    await wait(5);
+                    ctx.push(ctx.state.mark("busy"));
+                    await wait(80);
+                    throw new Error("passe lente HS");
+                }
+                await wait(10);
+                return ctx.state;
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("x");
+        field.change("y");
+        await wait(200);
+
+        // La rapide retombe d'abord. Si elle effaçait la référence de la lente,
+        // le rejet de celle-ci n'aurait plus rien à quoi se comparer : `busy`
+        // resterait posé, et les faits du montage seraient rasés.
+        expect(field.snapshot.hasFlag("busy")).toBe(false);
+        expect(field.snapshot.hasFlag("readonly", "imported")).toBe(true);
+    });
+
+    it("un accesseur `then` piégé ne fait dérailler aucun hook", () => {
+        const form = new FormController<{ a: string; b: string }>({ name: "f54" });
+        const trapped: IBehavior<string> = {
+            onMount: () => ({ get then() { throw new Error("piégé"); } }) as never,
+        };
+        const a = form.field("a", { behaviors: [trapped] });
+        const b = form.field("b", {});
+        a.mount();
+        b.mount();
+
+        expect(() => form.mount()).not.toThrow();
+        expect(b.snapshot.hasFlag("mounted")).toBe(true);
+    });
+});
