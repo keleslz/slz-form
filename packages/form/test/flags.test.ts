@@ -2230,3 +2230,165 @@ describe("plus rien ne devine qui tient l'attente", () => {
         expect(await form.submit()).toBe(true);
     });
 });
+
+describe("recover rend toutes les passes qu'il abandonne", () => {
+    it("deux hooks en vol, l'un masque, l'autre attend", async () => {
+        const form = new FormController<{ a: string }>({ name: "f85", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            // Elle masque sans allumer l'attente, et ne répond jamais.
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.hide());
+                await wait(10_000);
+            },
+            // Elle allume l'attente.
+            onBlur: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(10_000);
+            },
+        };
+        const field = form.field("a", { required: true, behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("valeur-obligatoire");
+        field.blur();
+        await until(() => field.snapshot.hasFlag("invisible", "loading"));
+
+        expect(await form.submit()).toBe(false);
+        // `recover()` les abandonne toutes les deux : n'en rendre qu'une
+        // laissait le champ masqué à vie, donc hors payload, et le formulaire
+        // se déclarait valide en partant vide.
+        expect(field.snapshot.hasAny("invisible", "loading")).toBe(false);
+        expect(await form.submit()).toBe(true);
+        expect(form.getSnapshot().values).toEqual({ a: "valeur-obligatoire" });
+    });
+
+    it("une ligne de liste ne part pas vide pour la même raison", async () => {
+        type Fields = { rows: FieldArray<{ label: string }> };
+        const form = new FormController<Fields>({ name: "f86", settleTimeout: 40 });
+        const rows = form.array("rows");
+        form.mount();
+        const id = rows.append();
+        const row = rows.row(id);
+        const field = row?.form.field("label", { required: true });
+        field?.mount();
+        field?.change("écrit");
+        await wait(20);
+
+        expect(form.getSnapshot().values).toEqual({ rows: [{ label: "écrit" }] });
+    });
+});
+
+describe("un écho synchrone n'est pas un travailleur", () => {
+    it("un badge posé pendant un appel ne garde pas le champ occupé", async () => {
+        const form = new FormController<{ a: string }>({ name: "f87" });
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(20);
+                throw new Error("HTTP 500");
+            },
+            // Synchrone : `ctx.state` porte déjà `loading`, donc la tranche
+            // écrite le porte aussi — sans que ce hook travaille pour autant.
+            onBlur: (ctx) => { ctx.push(ctx.state.mark("badge")); },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("x");
+        field.blur();
+        await until(() => !field.snapshot.hasFlag("loading"), { timeout: 1000 });
+        await wait(30);
+
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        expect(field.isBusy).toBe(false);
+        expect(await form.submit()).toBe(true);
+    });
+
+    it("une passe discrète, qui n'affiche rien, ne garde pas le champ occupé", async () => {
+        const form = new FormController<{ a: string }>({ name: "f88" });
+        const behavior: IBehavior<string> = {
+            // Elle attend longtemps sans jamais allumer l'attente.
+            onMount: async (ctx) => {
+                await wait(200);
+                ctx.setOptions([{ value: "x", label: "x" }]);
+            },
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(10);
+                throw new Error("HS");
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("x");
+        await until(() => !field.snapshot.hasFlag("loading"), { timeout: 1000 });
+        expect(field.isBusy).toBe(false);
+    });
+
+    it("une sœur qui publie et travaille garde le champ occupé", async () => {
+        const form = new FormController<{ a: string }>({ name: "f89" });
+        let call = 0;
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                call += 1;
+                ctx.push(ctx.state.loading());
+                if (call === 1) {
+                    await wait(20);
+                    throw new Error("première HS");
+                }
+                await wait(120);
+                return ctx.state.idle();
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("x");
+        await wait(5);
+        field.change("y");
+        await wait(60);
+
+        expect(field.isBusy).toBe(true);
+        await until(() => !field.snapshot.hasFlag("loading"), { timeout: 1000 });
+    });
+});
+
+describe("l'écrivain doit être reconnu avant d'être fermé", () => {
+    it("une passe qui retombe en rendant une attente garde sa référence", async () => {
+        const form = new FormController<{ a: string }>({ name: "f90", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.mark("skeleton").hide());
+                await wait(5);
+                // Elle **retourne** une attente : son travail est fini, mais le
+                // champ reste en vol pour quelqu'un d'autre.
+                return ctx.state.loading();
+            },
+        };
+        const field = form.field("a", { required: true, behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("valeur");
+        await until(() => field.snapshot.hasFlag("loading"));
+        expect(field.snapshot.hasFlag("skeleton", "invisible")).toBe(true);
+
+        expect(await form.submit()).toBe(false);
+        // Fermer la passe avant de l'annoncer à `setSlice` la rendait
+        // méconnaissable : l'attente se voyait fabriquer une référence de
+        // secours portant déjà tout ce que la passe venait de poser.
+        expect(field.snapshot.hasAny("skeleton", "invisible", "loading")).toBe(false);
+        expect(form.getSnapshot().values).toEqual({ a: "valeur" });
+        expect(await form.submit()).toBe(true);
+    });
+});

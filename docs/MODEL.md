@@ -2,7 +2,7 @@
 
 > Document de référence à valider. Il fixe l'objectif, les entités, les
 > arbitrages tranchés et la façon dont chaque invariant est tenu.
-> Statut : implémenté, couvert par `packages/form/test` (239 tests) et `packages/react-form/test` (19 tests) ; le parcours
+> Statut : implémenté, couvert par `packages/form/test` (245 tests) et `packages/react-form/test` (19 tests) ; le parcours
 > navigateur (`examples/react`, 43 assertions) couvre le socle, pas encore les
 > listes répétables ni `readonly`.
 
@@ -372,7 +372,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 29 | Verdict d'un champ | `errors` non vide, pas un flag | deux mots voisins — `error` affiché, `blocking` vrai — se confondaient à l'usage ; le verdict est déjà porté par une donnée que la vue lit de toute façon |
 | 30 | Verdict d'une liste | comme le formulaire : `valid` / `error`, jamais `pristine` | une liste est un agrégat, pas un champ qu'on touche ; sa validité est ce qui est vrai |
 | 31 | Travail en vol du formulaire | les champs **montés**, visibles ou non | la convergence attend un champ masqué ; un champ démonté, personne ne l'attend, et son activité ne redescendrait jamais |
-| 32 | Rendre une passe | l'**intersection** avec son état d'entrée — la même règle pour un rejet et pour un abandon | ce qu'elle a ajouté part, ce qu'elle a retiré reste retiré, ce qu'une **autre** passe avait posé survit puisqu'il est dans son état d'entrée. Distinguer « fait durable » de « décoration transitoire » n'est pas observable : deux passes au flux identique — `verified`+`locked` d'un côté, `skeleton`+`invisible` de l'autre — exigeraient des issues opposées |
+| 32 | Rendre une ou N passes | l'**intersection** avec l'état d'entrée de **chacune** des passes rendues — un rejet en rend une, `recover()` les rend toutes | ce qu'elle a ajouté part, ce qu'elle a retiré reste retiré, ce qu'une **autre** passe avait posé avant son entrée survit — pas ce qu'une passe vivante pose après, limite connue. Distinguer « fait durable » de « décoration transitoire » n'est pas observable : deux passes au flux identique — `verified`+`locked` d'un côté, `skeleton`+`invisible` de l'autre — exigeraient des issues opposées |
 | 33 | Passe supplantée | une génération **par behavior**, capturée par la passe ; une passe plus ancienne n'écrit plus rien — ni tranche, ni valeur, ni options | sans ça, une promesse retombée après coup rasait la tranche qu'on venait de rendre. Par behavior et non par champ : `recover()` passe sur tous les champs montés dès que la convergence expire, et un compteur de champ rendait muet, définitivement, un voisin qui n'avait rien en vol |
 
 ---
@@ -416,7 +416,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 33 | Un groupe exclusif a un vocabulaire fermé | `ValidityFlag` et `ActivityFlag` sont des unions closes ; seuls les flags cumulés acceptent ceux de l'application, et `RESERVED_FLAGS` s'en dérive au lieu de les recopier |
 | 34 | Le démontage n'abandonne rien en vol | `unmount()` neutralise les tranches **et** appelle `validator.abandon()` ; sans quoi un champ démonté restait `loading` pour toujours |
 | 35 | Aucun hook ne peut faire dérailler le moteur | les sept hooks passent par `invoke`, la souscription à leur promesse aussi, et `isPromise` ne lève jamais — lire ou appeler `.then` d'un objet piégé ne sort ni de `mount()`, ni de `change()`, ni de `unmount()` |
-| 36 | Toute attente a un titulaire, et toute restitution une référence | `Pass { before, generation, detached, owned }`. L'écrivain **se déclare** : `setSlice` reçoit la passe qui écrit. Et rien d'autre ne se devine — `dispatch`, `adopt` et `recover` lisent `owned`, jamais une transition d'activité ni un nombre de passes ouvertes. Une attente qu'aucun titulaire ne tient plus est **réadoptée** |
+| 36 | Toute attente a une référence, et « quelqu'un travaille » se lit à part | `Pass { before, generation, detached, holds, publishes, inFlight }`. L'écrivain **se déclare** : `setSlice` reçoit la passe qui écrit. `holds` répond à « qui tient la référence ? » — une seule passe à la fois, celle qui a **allumé** l'attente ; `publishes && inFlight` répond à « quelqu'un travaille-t-il encore ? » — plusieurs passes possibles. Un booléen unique pour les deux ne pouvait pas trancher |
 
 ---
 

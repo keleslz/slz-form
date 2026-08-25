@@ -253,7 +253,9 @@ Ce qui a échoué, et pourquoi, pour ne pas y revenir :
 | déduire « une sœur travaille » du **nombre** de passes ouvertes | une passe ouverte n'est pas une passe en vol : `release` publiait un `loading` que personne n'éteindrait, et le champ restait occupé à vie |
 | deviner l'écrivain (« la dernière passe ouverte ») | faux dès qu'une passe sœur s'ouvre après celle qui écrit — un `blur` suffit : le voisin devient titulaire, et le vrai travailleur ne l'est pas |
 | distinguer « fait durable » et « décoration » par la position d'un `await` | indécidable : deux passes au flux identique, `verified`+`locked` d'un côté, `skeleton`+`invisible` de l'autre, exigeraient des issues opposées |
-| lire une transition d'activité, ou un nombre de passes, pour savoir qui tient l'attente | `owned` est la réponse, et il est déjà là — chaque relecture par un proxy a coûté un tour de revue |
+| lire une transition d'activité, ou un nombre de passes, pour savoir qui tient l'attente | la passe le dit — chaque relecture par un proxy a coûté un tour de revue |
+| un seul booléen pour « qui tient la référence » et « quelqu'un travaille » | les deux questions n'ont pas la même arité : une réponse pour la première, plusieurs pour la seconde. Un écho synchrone de `loading` passait pour un travailleur, une passe discrète gardait le champ occupé |
+| ne rendre qu'une passe quand `recover()` les abandonne toutes | ce qu'une autre avait posé restait — champ masqué à vie, hors payload, formulaire déclaré valide |
 | laisser une passe retomber sans reprendre son attente | l'attente devient orpheline, et `recover()` n'a plus rien à quoi la comparer |
 
 La référence appartient donc à la **passe** (`Pass { before, generation, … }`),
@@ -266,8 +268,9 @@ retour à `idle`.
 La règle qui ferme la classe, et qu'il faut vérifier à chaque modification :
 **toute écriture qui allume `loading` a un titulaire, et toute restitution une
 référence.** Le titulaire ne se déduit pas : `setSlice` reçoit la passe qui
-écrit, et tout le reste — `dispatch`, `adopt`, `recover`, `release` — lit
-`owned`. Dix tours de revue ont raffiné un proxy pour cette question ; il n'y en
+écrit. `holds` dit qui tient la référence, `publishes && inFlight` dit si
+quelqu'un travaille encore, et `recover()` rend **toutes** les passes qu'il
+abandonne. Dix tours de revue ont raffiné un proxy pour cette question ; il n'y en
 a pas de bon, et il n'y en a pas non plus pour « ce fait est-il durable ? ». Une passe qui retombe en laissant l'attente allumée la fait
 réadopter ; c'est ce qui rend inatteignable le repli de `recover()`, lequel
 rendrait contre l'état courant — c'est-à-dire ne rendrait rien.
