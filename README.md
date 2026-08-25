@@ -6,88 +6,19 @@
 Un moteur de formulaires **agnostique de tout framework**, où l'interface est
 pilotée par l'état plutôt que par des conditions éparpillées dans le JSX.
 
----
-
-## Le problème
-
-Chaque input d'une application réelle réclame la même dizaine de mécanismes.
-Pris un par un, aucun n'est difficile. Assemblés, ils produisent ceci — un
-simple select dont les options dépendent d'un autre champ :
-
-```tsx
-const [value, setValue] = useState("");
-const [touched, setTouched] = useState(false);
-const [error, setError] = useState<string>();
-const [options, setOptions] = useState<Option[]>([]);
-const [loadingOptions, setLoadingOptions] = useState(false);
-
-useEffect(() => {
-    setLoadingOptions(true);
-    fetchModels(brand)
-        .then((o) => { setOptions(o); setValue(""); })
-        .finally(() => setLoadingOptions(false));
-}, [brand]);
-
-useEffect(() => {
-    if (touched) setError(validate(value));
-}, [value, touched]);
-
-<select
-    value={value}
-    disabled={loadingOptions || isSubmitting || !brand}
-    onChange={(e) => setValue(e.target.value)}
-    onBlur={() => setTouched(true)}
->…</select>
-{loadingOptions && <Spinner />}
-{touched && error && <p className="error">{error}</p>}
-```
-
-Ce qui coûte cher n'est pas la longueur, c'est ce que ce code installe :
-
-- **L'état métier vit dans le composant.** Le parent devient propriétaire de la
-  valeur, du `touched`, des options. Il n'est plus déplaçable ni testable seul.
-- **Les règles d'affichage sont recalculées à la main.** `disabled={loading || submitting || !brand}`
-  est réécrit, légèrement différemment, dans chaque champ. Une règle qui change
-  se corrige à N endroits.
-- **Les dépendances entre champs sont implicites.** Rien ne dit que ce champ
-  dépend de `brand` sauf un tableau de `useEffect` qu'il faut lire pour le
-  découvrir.
-- **Les états impossibles sont représentables.** Rien n'empêche `touched=false`
-  avec un `error` affiché, ou un spinner pendant que le champ est déjà en erreur.
-- **Le rendu déborde.** Remonter la valeur au parent pour le bouton submit fait
-  re-rendre tous les autres champs à chaque frappe.
-- **La logique est prisonnière de React.** La même règle métier devra être
-  réécrite en Angular ou en Vue.
+📖 **[La documentation](https://keleslz.github.io/slz-form-event/)** — le
+problème qu'il résout, les guides, le modèle, et la référence d'API générée
+depuis les sources.
 
 ---
 
-## Ce que le système apporte
-
-Le même champ, avec le moteur :
-
-```ts
-// une fois, dans le module du formulaire
-const modelOptions = loadOptions({
-    field: "model",
-    watch: ["brand"],
-    fetch: ({ brand }) => fetchModels(brand),   // brand: string, sans cast
-});
-```
-
-```tsx
-<SelectField name="model" label="Modèle" required behaviors={[modelOptions]} />
-```
-
-Pas de `useState`, pas de `useEffect`, pas de spinner câblé à la main, pas de
-`disabled` composé de trois booléens. Ce n'est pas seulement plus court — c'est
-ce que ça rend impossible qui compte.
-
-### L'UI est pilotée par des flags, et se lit avec deux fonctions
+## En bref
 
 Le composant ne décide de rien : il lit et se rend.
 
 ```tsx
 if (field.hasFlag("invisible")) return null;
+
 <input disabled={field.hasFlag("locked")} />
 {field.hasFlag("loading") && <Spinner />}
 {field.hasFlag("error") && <p>{field.error}</p>}
@@ -101,193 +32,20 @@ dans chaque champ. Le bouton de soumission tient en un appel :
 <button disabled={!form.hasFlag("valid", "idle")}>Envoyer</button>
 ```
 
-Ce qu'un champ **est** se lit en flags ; ce qu'il **contient** — valeur,
-options, messages — se lit en données. Il n'y a aucun booléen d'état dans la
-surface de lecture : un besoin de `isX` signale un flag manquant.
+Ce que ça apporte, en quatre points :
 
-| Flag | Nature | Qui l'émet |
-|---|---|---|
-| `pristine` · `valid` · `error` | **s'excluent** | le Validator, seul |
-| `idle` · `loading` | **s'excluent** | Behaviors + Validator |
-| `locked` · `readonly` · `invisible` | s'additionnent | Behaviors + Controller + vue |
-| `required` · `touched` · `focused` · `mounted` · `submitting` | s'additionnent | le Controller |
-| *ceux de ton application* | s'additionnent | Behaviors — `ctx.state.mark("skeleton")` |
+- **les états impossibles ne sont pas représentables** — `pristine` et `error`
+  s'excluent, comme `idle` et `loading` ;
+- **la validité a une autorité unique** — seul le Validator la produit, donc
+  aucun arbitrage entre deux sources qui ne sont pas d'accord ;
+- **un champ qui change ne re-rend pas les autres** — abonnement par champ,
+  snapshot stable par référence ;
+- **rien de faux ne compile** — le formulaire déclare ce que vaut chaque champ,
+  behaviors et hooks en dérivent, et aucun `as` n'est nécessaire côté
+  consommateur.
 
-Les deux premiers groupes sont **exclusifs** : les mettre à plat dans un `Set`
-produirait des états impossibles, `pristine` **et** `error` à la fois. Les autres
-**s'additionnent**, et l'absence vaut défaut — un seul `lock()` verrouille, même
-si trois comportements parlent en même temps. Retirer un flag suffit à faire
-réagir l'UI, et aucun composant n'est modifié.
-
-C'est aussi ce qui rend le vocabulaire extensible sans toucher au moteur : un
-comportement publie `mark("skeleton")`, la vue lit `hasFlag("skeleton")`, et le
-moteur n'a jamais eu à connaître le mot. Les mots du moteur, eux, sont refusés
-sur ce chemin — sans quoi on republierait l'état impossible qu'on vient
-d'écarter.
-
-Le formulaire répond aux mêmes deux fonctions, avec les mêmes mots : `valid` ·
-`error` (le verdict), `idle` · `submitting` · `submitted`, `loading`, `touched`.
-
-### La validité a une autorité unique
-
-Seul le Validator produit la validité. Aucun comportement ne peut le
-contredire, donc il n'y a jamais d'arbitrage à faire entre deux sources qui ne
-sont pas d'accord.
-
-`IValidator<T>` est générique : le même contrat couvre texte, nombre, booléen,
-liste d'options, fichier, date, heure et datetime — chaque validateur valide son
-propre type, sans un seul cast.
-
-### Les dépendances entre champs sont déclarées, et vérifiées
-
-Un comportement liste les champs qu'il observe. Lire un champ non déclaré
-**lève une erreur**, et un cycle de dépendances est rejeté au câblage plutôt que
-découvert en boucle infinie.
-
-Un champ peut lire les autres ; il ne peut jamais en écrire un. Les
-verrouillages, masquages et rechargements croisés passent tous par cette
-lecture, sans mutation.
-
-### Un champ qui change ne re-rend pas les autres
-
-Chaque champ a son propre abonnement et un snapshot stable par référence.
-S'abonner au formulaire entier est un choix explicite, réservé à ce qui en a
-besoin — un bouton submit, un récapitulatif.
-
-### Rien n'est typé à la main, et rien de faux ne compile
-
-Le formulaire déclare ce que vaut chaque champ ; behaviors et hooks en dérivent :
-
-```ts
-// src/form/car-configuration-form.ts        (≈ une slice)
-export type CarFields = {
-    brand: string;
-    model: string;
-    mileage: number;
-    licence: File;
-};
-
-export const carForm = new FormController<CarFields>({ name: "car-configuration" });
-
-export const { lookup, loadOptions, suggest, prefill } = behaviorsFor(carForm);
-export const { useField, useFieldArray, useForm } = hooksFor(carForm);
-```
-
-Il n'y a plus de formulaire à nommer sur chaque champ, et `name` est vérifié —
-y compris contre le **type** du champ :
-
-```tsx
-<NumberField name="mileage" />   // ✓
-<NumberField name="brand" />     // ✗ ne compile pas : brand est un string
-<TextField   name="typo" />      // ✗ ne compile pas : champ inexistant
-```
-
-C'est le prix assumé du narrowing : ajouter un champ coûte une ligne dans la map
-en plus de celle dans la vue. En échange, aucun `as` dans le code consommateur.
-
-### La logique s'écrit une fois, pour tous les frameworks
-
-Le cœur ne connaît ni React, ni Angular, ni Vue. Chaque adapter se limite au
-pont framework ↔ core. La règle métier ne sera pas réécrite trois fois.
-
----
-
-## Ce qu'il n'est pas
-
-Dire ce qu'un outil ne fait pas évite d'en attendre ce qu'il ne donnera pas.
-
-- **Ce n'est pas une bibliothèque de composants.** Aucun style, aucun design
-  system, aucun markup imposé. Le moteur produit un état ; le rendu reste
-  entièrement à vous. Les composants de la démo sont des exemples, pas l'API.
-
-- **Ce n'est pas un validateur de schéma.** Il ne remplace ni Zod ni Yup. Il
-  n'invente pas de langage de règles : il orchestre les validateurs que vous
-  écrivez — et peut parfaitement en encapsuler un.
-
-- **Ce n'est pas un state manager généraliste.** Il ne gère pas l'état de votre
-  application, seulement celui de vos formulaires. Il ne cherche pas à remplacer
-  Redux ou Zustand, et ne se branche sur aucun d'eux.
-
-- **Ce n'est pas une couche HTTP.** Il ne fait aucun appel réseau. Il orchestre
-  les vôtres : quand les lancer, quoi verrouiller pendant, quoi faire du
-  résultat.
-
-- **Ce n'est pas un générateur de formulaires.** Pas de rendu depuis un JSON,
-  pas de schéma déclaratif produisant une page. Vous écrivez votre vue.
-
-- **Ce n'est pas un moteur de mise en forme de la saisie.** Masques de
-  téléphone, d'IBAN ou de montant : la valeur affichée et la valeur stockée sont
-  la même, et la position du curseur reste l'affaire de la vue.
-
-- **Il ne fait pas encore de rendu serveur.** L'adapter React lit son état via
-  `useSyncExternalStore` sans `getServerSnapshot` : le rendu côté serveur lève.
-
-- **Ce n'est pas une abstraction de React.** Le cœur ignore l'existence de
-  React. L'adapter React est mince et remplaçable, pas une couche de compatibilité.
-
-- **Ce n'est pas encore publié.** Les packages existent et se construisent, mais
-  aucun n'est sur npm à ce jour, et l'API peut encore bouger.
-
----
-
-## Tout se branche par behavior et validator
-
-C'est le parti pris central : **rien de ce qu'on sait faire avec `useState` et
-un `useEffect` ne doit être impossible ici**, et rien ne doit obliger à modifier
-le moteur.
-
-Le partage des rôles est net. Le **behavior** réagit — il écrit une valeur,
-publie des options, émet `loading`, `locked`, `readonly`, `invisible`. Le
-**validator** juge — il est la seule autorité sur la validité.
-
-Pour que ça tienne, le réacteur a une sonnette et le juge a des yeux :
-
-| Besoin | Comment |
-|---|---|
-| Confirmer un mot de passe, ordonner deux dates | le validator déclare `watch` et lit `ctx.watched(...)` |
-| `required` seulement dans certains cas | le validator décide, avec `validateWhenEmpty` |
-| Une erreur renvoyée par le serveur | `ExternalValidator`, composé avec les règles métier |
-| Un avertissement qui ne bloque pas | `report.warn(...)` |
-| Router un message vers une snackbar | `report.error(msg, { code })`, et la vue lit `code` |
-| Verrouiller tant qu'un autre champ n'est pas valide | `lockUntilValid({ watch })` |
-| Lignes de facture, listes dynamiques | `form.array("lines")` — une ligne est un formulaire |
-
-Ce critère est vérifié, pas affirmé : `packages/form/test/parity.test.ts`
-reprend chaque cas et l'écrit avec un behavior ou un validator, **sans jamais
-capturer le `FormController`**.
-
----
-
-## Le modèle en trente secondes
-
-```
-FormRegister              tous les formulaires de l'app          (≈ root reducer)
-  └── FormController      un formulaire, orchestre ses Fields    (≈ slice)
-        ├── DependencyGraph   réactivité inter-champs, cycles rejetés au câblage
-        └── FieldController   un input : valeur, interactions, flags, validité
-              ├── IBehavior[]     réactions → retournent une tranche d'état
-              ├── IValidator<T>   autorité de validité
-              └── FieldSnapshot   ce que le composant rend
-```
-
-Les comportements courants sont fournis prêts à l'emploi, dérivés du formulaire
-et donc entièrement typés : `loadOptions`, `suggest`, `lookup`, `prefill`,
-`lockWhile`, `hideWhen`.
-
-```ts
-const { lookup, suggest, prefill } = behaviorsFor(carForm);
-
-lookup({ field: "city", watch: ["postcode"], debounce: 400,
-         fetch: ({ postcode }) => fetchCity(postcode) });   // postcode: string
-```
-
-Le même besoin peut toujours s'écrire à la main quand il sort de l'ordinaire —
-le README du core montre [le même prefill dans ses trois
-formes](packages/form/README.md#trois-façons-de-préremplir-un-champ) : classe de
-behavior, avec validator, puis utilitaire.
-
-📄 La modélisation complète, les arbitrages et les 36 invariants d'architecture
-sont dans **[`docs/MODEL.md`](docs/MODEL.md)**.
+Le détail, avec le code avant et après :
+[le problème](https://keleslz.github.io/slz-form-event/docs/demarrer/le-probleme).
 
 ---
 
@@ -305,6 +63,7 @@ packages/
 examples/
   react/           démo React : le même formulaire avec le moteur et en useState
 
+website/           le site de documentation (Docusaurus + TypeDoc), hors workspaces
 docs/MODEL.md      modélisation, arbitrages, invariants
 ```
 
@@ -333,6 +92,8 @@ montre l'implémentation avec le moteur, l'autre la même chose écrite en
 ```bash
 npm run typecheck      # les 3 workspaces
 npm run lint
+npm test               # tests unitaires du moteur
+npm run test:e2e       # 43 assertions dans un vrai navigateur
 npm run build          # packages (tsup) puis démo (vite)
 ```
 
@@ -341,18 +102,30 @@ moteur recharge la démo à chaud, sans rebuild.
 
 **Prérequis :** Node.js ≥ 20.19, npm.
 
+### Le site de documentation
+
+Il vit dans `website/`, **hors** des workspaces : Docusaurus tire beaucoup de
+dépendances, et les jobs de CI du moteur n'ont pas à les payer.
+
+```bash
+npm install            # à la racine d'abord : TypeDoc lit les sources par ce chemin
+cd website && npm install && npm start
+```
+
+La référence d'API est générée par TypeDoc à chaque build et n'est pas commitée.
+
 ---
 
 ## Contribuer et publier
 
 La CI (`.github/workflows/ci.yml`) vérifie chaque PR : typecheck, lint, build des
 packages et de la démo, contenu réellement publié (`npm pack --dry-run`), et une
-passe end-to-end de la démo dans Chromium.
+passe end-to-end de la démo dans Chromium. `docs.yml` construit le site et
+échoue sur un lien mort.
 
-```bash
-npm test                # tests unitaires du moteur
-npm run test:e2e        # 43 assertions dans un vrai navigateur
-```
+**Les messages de commit sont en anglais** — titre, corps, et titres de PR.
+C'est la seule chose du dépôt qui l'est ; documentation et commentaires restent
+en français.
 
 Les versions sont gérées par [changesets](https://github.com/changesets/changesets) :
 
@@ -378,7 +151,7 @@ npm install slz-form slz-react-form
 `slz-form` et `react` sont des **peer dependencies** de l'adapter : ton
 application doit en résoudre une seule copie de chaque. Deux copies de React
 cassent les hooks ; deux copies de `slz-form` cassent le test
-`instanceof BehaviorState` du moteur, et les flags sont alors silencieusement
+`instanceof BehaviorState` du moteur, et les flags sont alors **silencieusement**
 ignorés. Le README de chaque package détaille le point.
 
 > Rien n'est encore publié sur npm. Les noms `slz-form`, `slz-react-form`,
