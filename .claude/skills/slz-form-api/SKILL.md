@@ -256,6 +256,7 @@ Ce qui a échoué, et pourquoi, pour ne pas y revenir :
 | lire une transition d'activité, ou un nombre de passes, pour savoir qui tient l'attente | la passe le dit — chaque relecture par un proxy a coûté un tour de revue |
 | un seul booléen pour « qui tient la référence » et « quelqu'un travaille » | les deux questions n'ont pas la même arité : une réponse pour la première, plusieurs pour la seconde. Un écho synchrone de `loading` passait pour un travailleur, une passe discrète gardait le champ occupé |
 | ne rendre qu'une passe quand `recover()` les abandonne toutes | ce qu'une autre avait posé restait — champ masqué à vie, hors payload, formulaire déclaré valide |
+| oublier `inFlight` sur **un** des trois créateurs d'attente détachée | le rejet d'une sœur éteint une attente que personne n'a rendue, et le verrou posé avec elle sort du champ d'action de `recover()`, qui ne visite que les tranches encore `loading` |
 | laisser une passe retomber sans reprendre son attente | l'attente devient orpheline, et `recover()` n'a plus rien à quoi la comparer |
 
 La référence appartient donc à la **passe** (`Pass { before, generation, … }`),
@@ -269,8 +270,8 @@ La règle qui ferme la classe, et qu'il faut vérifier à chaque modification :
 **toute écriture qui allume `loading` a un titulaire, et toute restitution une
 référence.** Le titulaire ne se déduit pas : `setSlice` reçoit la passe qui
 écrit. `holds` dit qui tient la référence, `publishes && inFlight` dit si
-quelqu'un travaille encore, et `recover()` rend **toutes** les passes qu'il
-abandonne. Dix tours de revue ont raffiné un proxy pour cette question ; il n'y en
+quelqu'un travaille encore — **une attente détachée compte comme en vol** —, et
+`recover()` rend **toutes** les passes qu'il abandonne. Dix tours de revue ont raffiné un proxy pour cette question ; il n'y en
 a pas de bon, et il n'y en a pas non plus pour « ce fait est-il durable ? ». Une passe qui retombe en laissant l'attente allumée la fait
 réadopter ; c'est ce qui rend inatteignable le repli de `recover()`, lequel
 rendrait contre l'état courant — c'est-à-dire ne rendrait rien.

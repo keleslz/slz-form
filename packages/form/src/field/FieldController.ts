@@ -723,7 +723,7 @@ export class FieldController<T = string, M = never> {
         if (isPromise(result)) {
             return;
         }
-        // `pass.owned`, et non une transition d'activité devinée : c'est
+        // `pass.holds`, et non une transition d'activité devinée : c'est
         // `setSlice` qui sait qui a allumé l'attente, et il vient de le dire.
         // Deviner fermait une passe **titulaire** quand le champ était déjà
         // `loading` à l'entrée du hook — l'attente devenait orpheline, et
@@ -734,6 +734,14 @@ export class FieldController<T = string, M = never> {
             // refermera. La laisser telle quelle en faisait un fantôme
             // définitif, que `recover()` prenait ensuite pour référence.
             pass.detached = true;
+            // **Une attente détachée est du travail en vol.** Les deux autres
+            // créateurs de titulaire détaché — `adopt` et le repli de
+            // `setSlice` — le posent ; l'oublier ici faisait conclure au rejet
+            // d'une sœur que plus personne ne travaillait. L'attente
+            // s'éteignait sans être rendue, et le `locked` posé avec elle
+            // devenait hors de portée de `recover()`, qui ne visite que les
+            // tranches encore `loading`.
+            pass.inFlight = true;
             return;
         }
         this.close(behavior, pass);
@@ -970,9 +978,11 @@ export class FieldController<T = string, M = never> {
         // c'est soit un écho synchrone, soit une passe discrète qui n'affiche
         // rien — ni l'un ni l'autre ne doit garder le champ occupé.
         //
-        // `publishes` seul suffirait aujourd'hui, un écho synchrone se fermant
-        // dès son `dispatch` : la conjonction est là pour que la propriété
-        // reste vraie si cet ordre change.
+        // La conjonction est nécessaire dans les deux sens : un écho synchrone
+        // publie sans travailler, une passe discrète travaille sans publier.
+        // Et `inFlight` doit être vrai pour **toute** passe ouverte qui tient
+        // une attente, y compris détachée — sans quoi la conjonction éteint ce
+        // qu'elle devait préserver.
         const stillWaiting = (this.openPasses.get(behavior) ?? [])
             .some((open) => open.publishes && open.inFlight);
         // Aucun écrivain : si `loading` est republié, c'est qu'une sœur le tient

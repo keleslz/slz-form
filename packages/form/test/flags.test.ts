@@ -2392,3 +2392,113 @@ describe("l'écrivain doit être reconnu avant d'être fermé", () => {
         expect(await form.submit()).toBe(true);
     });
 });
+
+describe("une attente détachée est du travail en vol", () => {
+    it("un envoi lancé par un hook synchrone n'est pas éteint par le rejet d'une sœur", async () => {
+        const form = new FormController<{ a: string }>({ name: "f91" });
+        const behavior: IBehavior<string> = {
+            // Synchrone : il démarre un envoi externe et affiche l'attente.
+            // Rien ne retombera pour lui — c'est le rappel qui posera la valeur.
+            onChange: (ctx) => {
+                setTimeout(() => {
+                    ctx.setValue("valeur-du-serveur");
+                    ctx.push(ctx.state.idle().unlock());
+                }, 60);
+                return ctx.state.loading().lock();
+            },
+            onBlur: async () => { await wait(10); throw new Error("télémétrie HS"); },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("saisie");
+        field.blur();
+        await wait(30);
+
+        // Le rejet de la sœur concluait « plus personne ne travaille » et
+        // éteignait une attente que personne n'avait rendue : la soumission
+        // partait avec la valeur d'avant.
+        expect(field.isBusy).toBe(true);
+        expect(await form.submit()).toBe(true);
+        expect(form.getSnapshot().values).toEqual({ a: "valeur-du-serveur" });
+    });
+
+    it("et recover() peut encore la rattraper si elle ne répond jamais", async () => {
+        const form = new FormController<{ a: string }>({ name: "f92", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            onChange: (ctx) => {
+                void wait(10_000);
+                return ctx.state.loading().lock();
+            },
+            onBlur: async () => { await wait(10); throw new Error("télémétrie HS"); },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("saisie");
+        field.blur();
+        await wait(30);
+
+        expect(await form.submit()).toBe(false);
+        // Une attente éteinte à tort sortait `recover()` du jeu — il ne visite
+        // que les tranches encore `loading` — et le verrou restait à vie.
+        expect(field.snapshot.hasAny("loading", "locked")).toBe(false);
+    });
+});
+
+describe("les trois créateurs d'attente détachée s'accordent", () => {
+    it("une attente réadoptée compte comme du travail", async () => {
+        const form = new FormController<{ a: string }>({ name: "f93", settleTimeout: 60 });
+        const behavior: IBehavior<string> = {
+            // Elle allume l'attente et retombe sans avis : l'attente devient
+            // orpheline, donc réadoptée.
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().lock());
+                await wait(10);
+            },
+            onBlur: async () => { await wait(30); throw new Error("télémétrie HS"); },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("saisie");
+        field.blur();
+        await wait(50);
+
+        // Le rejet de la sœur ne doit pas éteindre une attente que personne
+        // n'a rendue.
+        expect(field.snapshot.hasFlag("loading", "locked")).toBe(true);
+        expect(await form.submit()).toBe(false);
+        expect(field.snapshot.hasAny("loading", "locked")).toBe(false);
+    });
+
+    it("une attente ouverte par un abonnement externe compte comme du travail", async () => {
+        const form = new FormController<{ a: string }>({ name: "f94", settleTimeout: 60 });
+        const external: { start?: () => void } = {};
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => {
+                external.start = () => ctx.push(ctx.state.loading().lock());
+                return ctx.state;
+            },
+            onBlur: async () => { await wait(20); throw new Error("télémétrie HS"); },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        external.start?.();
+        field.blur();
+        await wait(40);
+
+        expect(field.snapshot.hasFlag("loading", "locked")).toBe(true);
+        expect(await form.submit()).toBe(false);
+        expect(field.snapshot.hasAny("loading", "locked")).toBe(false);
+    });
+});
