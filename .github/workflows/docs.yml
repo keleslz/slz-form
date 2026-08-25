@@ -1,0 +1,79 @@
+name: Documentation
+
+# Sur une PR : on construit sans déployer — le build est le vérificateur de
+# liens (`onBrokenLinks: "throw"`) et il échoue si la référence TypeDoc ne se
+# génère plus. Sur `master` : on construit puis on publie.
+on:
+  pull_request:
+    paths:
+      - "website/**"
+      - "docs/**"
+      - "packages/*/src/**"
+      - ".github/workflows/docs.yml"
+  push:
+    branches: [master]
+    paths:
+      - "website/**"
+      - "docs/**"
+      - "packages/*/src/**"
+      - ".github/workflows/docs.yml"
+  # Pour republier sans avoir rien changé — par exemple après avoir activé
+  # Pages dans les réglages du dépôt.
+  workflow_dispatch:
+
+# Requiert Settings → Pages → Source = « GitHub Actions ».
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Un déploiement à la fois, et on ne coupe pas celui qui est en cours : une
+# publication interrompue laisse le site dans un état à moitié écrit.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Construire le site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # TypeDoc lit les **sources** des packages : la résolution de `slz-form`
+      # depuis `react-form` passe par le `node_modules` de la racine, pas par
+      # celui du site. Sans cette installation-ci, la référence de l'adapter
+      # ne se génère pas.
+      - name: Installer la racine
+        run: npm ci
+
+      - name: Installer le site
+        working-directory: website
+        run: npm ci
+
+      - name: Construire
+        working-directory: website
+        run: npm run build
+
+      - name: Empaqueter pour Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/build
+
+  deploy:
+    name: Publier sur GitHub Pages
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
