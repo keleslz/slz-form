@@ -41,6 +41,12 @@ onChange: async (ctx) => {
 Sans cette règle, une réponse périmée qui ne dit rien gardait le champ occupé à
 vie.
 
+Côté bas niveau, `BehaviorState` gagne un témoin lisible, `activityStated` :
+vrai quand la tranche vient d'un `loading()` / `idle()` **appelé**, faux quand
+elle n'a fait qu'hériter de l'activité de `ctx.state`. Le constructeur prend un
+troisième paramètre optionnel qui le porte ; son absence garde le comportement
+d'avant.
+
 Deux corollaires, visibles eux aussi :
 
 - **un abonnement externe éteint l'attente qu'il a allumée.** Le rappel qui
