@@ -82,33 +82,55 @@ Pas de `useState`, pas de `useEffect`, pas de spinner câblé à la main, pas de
 `disabled` composé de trois booléens. Ce n'est pas seulement plus court — c'est
 ce que ça rend impossible qui compte.
 
-### L'UI est pilotée par des flags, sur des axes qui ne se contredisent pas
-
-Les flags ne vivent pas sur un seul plan. Les mettre à plat dans un `Set`
-produit des états impossibles : deux comportements qui émettent l'un `pristine`
-et l'autre `error` donneraient `["pristine", "error"]`. Ils sont donc groupés
-par **axe** :
-
-| Axe | Valeurs | Nature | Qui l'émet |
-|---|---|---|---|
-| Validité | `pristine` · `valid` · `error` | exclusif | le Validator, seul |
-| Activité | `idle` · `loading` | exclusif | Behaviors + Validator |
-| Disponibilité | `locked` · `readonly` · `invisible` | cumulatif | Behaviors + Controller + vue |
+### L'UI est pilotée par des flags, et se lit avec deux fonctions
 
 Le composant ne décide de rien : il lit et se rend.
 
 ```tsx
-if (!field.isVisible) return null;
-<input disabled={field.isLocked} />
-{field.isLoading && <Spinner />}
-{field.showError && <p>{field.error}</p>}
+if (field.hasFlag("invisible")) return null;
+<input disabled={field.hasFlag("locked")} />
+{field.hasFlag("loading") && <Spinner />}
+{field.hasFlag("error") && <p>{field.error}</p>}
 ```
 
-Retirer un flag suffit à faire réagir l'UI. Aucun composant n'est modifié.
+`hasFlag(...)` est le **ET**, `hasAny(...)` le **OU** — ce qui supprime
+précisément le `disabled={loading || submitting || !brand}` recomposé à la main
+dans chaque champ. Le bouton de soumission tient en un appel :
+
+```tsx
+<button disabled={!form.hasFlag("valid", "idle")}>Envoyer</button>
+```
+
+Ce qu'un champ **est** se lit en flags ; ce qu'il **contient** — valeur,
+options, messages — se lit en données. Il n'y a aucun booléen d'état dans la
+surface de lecture : un besoin de `isX` signale un flag manquant.
+
+| Flag | Nature | Qui l'émet |
+|---|---|---|
+| `pristine` · `valid` · `error` | **s'excluent** | le Validator, seul |
+| `idle` · `loading` | **s'excluent** | Behaviors + Validator |
+| `locked` · `readonly` · `invisible` | s'additionnent | Behaviors + Controller + vue |
+| `required` · `touched` · `focused` · `mounted` · `submitting` | s'additionnent | le Controller |
+| *ceux de ton application* | s'additionnent | Behaviors — `ctx.state.mark("skeleton")` |
+
+Les deux premiers groupes sont **exclusifs** : les mettre à plat dans un `Set`
+produirait des états impossibles, `pristine` **et** `error` à la fois. Les autres
+**s'additionnent**, et l'absence vaut défaut — un seul `lock()` verrouille, même
+si trois comportements parlent en même temps. Retirer un flag suffit à faire
+réagir l'UI, et aucun composant n'est modifié.
+
+C'est aussi ce qui rend le vocabulaire extensible sans toucher au moteur : un
+comportement publie `mark("skeleton")`, la vue lit `hasFlag("skeleton")`, et le
+moteur n'a jamais eu à connaître le mot. Les mots du moteur, eux, sont refusés
+sur ce chemin — sans quoi on republierait l'état impossible qu'on vient
+d'écarter.
+
+Le formulaire répond aux mêmes deux fonctions, avec les mêmes mots : `valid` ·
+`error` (le verdict), `idle` · `submitting` · `submitted`, `loading`, `touched`.
 
 ### La validité a une autorité unique
 
-Seul le Validator produit l'axe validité. Aucun comportement ne peut le
+Seul le Validator produit la validité. Aucun comportement ne peut le
 contredire, donc il n'y a jamais d'arbitrage à faire entre deux sources qui ne
 sont pas d'accord.
 
@@ -264,7 +286,7 @@ le README du core montre [le même prefill dans ses trois
 formes](packages/form/README.md#trois-façons-de-préremplir-un-champ) : classe de
 behavior, avec validator, puis utilitaire.
 
-📄 La modélisation complète, les arbitrages et les 30 invariants d'architecture
+📄 La modélisation complète, les arbitrages et les 33 invariants d'architecture
 sont dans **[`docs/MODEL.md`](docs/MODEL.md)**.
 
 ---
