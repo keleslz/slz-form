@@ -2110,7 +2110,13 @@ describe("rejet et abandon rendent la même chose", () => {
         expect(field.snapshot.hasFlag("loading")).toBe(false);
     });
 
-    it("un abandon après réadoption rend la passe adoptante", async () => {
+    it("un abandon ne rend que ce que la passe abandonnée avait posé", async () => {
+        // Cette forme était écrite « pousse l'attente puis retombe sans avis » :
+        // l'attente restait alors allumée, orpheline, et il fallait la réadopter
+        // pour pouvoir la rendre. Une passe qui retombe sans rien dire de
+        // l'activité a désormais fini — plus d'orpheline, donc plus de
+        // réadoption. Ce qui se vérifie ici reste le fond : la restitution est
+        // **nominative**.
         const form = new FormController<{ a: string }>({ name: "f81", settleTimeout: 40 });
         const behavior: IBehavior<string> = {
             onMount: (ctx) => ctx.state.mark("premium"),
@@ -2118,8 +2124,7 @@ describe("rejet et abandon rendent la même chose", () => {
                 ctx.push(ctx.state.mark("skeleton"));
                 await wait(5);
                 ctx.push(ctx.state.loading());
-                // Elle retombe sans avis : l'attente reste allumée et devient
-                // orpheline, donc réadoptée.
+                await wait(10_000);
             },
         };
         const field = form.field("a", { behaviors: [behavior] });
@@ -2129,7 +2134,6 @@ describe("rejet et abandon rendent la même chose", () => {
 
         field.change("x");
         await until(() => field.snapshot.hasFlag("loading"));
-        await wait(20);
         expect(field.snapshot.hasFlag("skeleton", "premium")).toBe(true);
 
         expect(await form.submit()).toBe(false);
@@ -2137,6 +2141,58 @@ describe("rejet et abandon rendent la même chose", () => {
         // Ce que **cette** passe a posé part ; ce qu'une autre avait posé reste.
         expect(field.snapshot.hasFlag("skeleton")).toBe(false);
         expect(field.snapshot.hasFlag("premium")).toBe(true);
+    });
+
+    it("une passe qui retombe sans rien dire de l'activité rend l'attente", async () => {
+        // Le pendant du cas précédent, et la règle qui l'a remplacé : l'attente
+        // d'une passe dure jusqu'à sa dernière parole. Un `await` qui finit sans
+        // redéclarer `loading` a fini — sans quoi une réponse périmée gardait le
+        // champ occupé jusqu'à la soumission suivante, voire à vie.
+        const form = new FormController<{ a: string }>({ name: "f95", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().mark("skeleton"));
+                await wait(10);
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("loading"));
+
+        await until(() => !field.snapshot.hasFlag("loading"));
+        expect(field.isBusy).toBe(false);
+        // Elle n'a rien retiré : ce qu'elle a poussé reste publié. Seul
+        // l'abandon rend, et cette passe n'a pas été abandonnée.
+        expect(field.snapshot.hasFlag("skeleton")).toBe(true);
+    });
+
+    it("une passe asynchrone garde l'attente si elle la redéclare en sortie", async () => {
+        // L'échappatoire, explicite : le hook a passé la main à un envoi
+        // externe, il le dit en rendant `loading`. C'est aussi ce que fait un
+        // hook synchrone qui pousse l'attente et rend la main.
+        const form = new FormController<{ a: string }>({ name: "f96", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                await wait(10);
+                return ctx.state.loading().lock();
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(20);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("loading"));
+        await wait(40);
+        expect(field.snapshot.hasFlag("loading", "locked")).toBe(true);
+
+        expect(await form.submit()).toBe(false);
+        expect(field.snapshot.hasAny("loading", "locked")).toBe(false);
     });
 });
 
@@ -2173,16 +2229,20 @@ describe("plus rien ne devine qui tient l'attente", () => {
         expect(form.getSnapshot().values).toEqual({ a: "gardée" });
     });
 
-    it("une sœur non titulaire n'empêche pas la réadoption", async () => {
+    it("une sœur qui ne tient rien n'empêche pas la restitution", async () => {
+        // La forme abandonnait l'attente en retombant sans avis, pour la faire
+        // réadopter ; la réadoption n'existe plus. Ce qui se vérifie reste
+        // entier : une sœur ouverte, qui ne demande pas l'attente, ne doit pas
+        // servir de référence à la restitution d'une autre — son état d'entrée
+        // portait déjà le masquage, et `recover()` ne rendait donc rien.
         const form = new FormController<{ a: string }>({ name: "f83", settleTimeout: 40 });
         const behavior: IBehavior<string> = {
             onChange: async (ctx) => {
                 ctx.push(ctx.state.loading().hide());
-                await wait(10);
-                // Elle retombe sans avis : l'attente devient orpheline.
+                await wait(10_000);
             },
             // Une sœur ouverte, qui ne tient rien.
-            onBlur: async () => { await wait(200); },
+            onBlur: async () => { await wait(10_000); },
         };
         const field = form.field("a", {
             required: true,
@@ -2199,9 +2259,6 @@ describe("plus rien ne devine qui tient l'attente", () => {
         await wait(30);
 
         expect(await form.submit()).toBe(false);
-        // Abandonner l'adoption dès qu'une passe est ouverte — même sans
-        // attente — laissait `recover()` rendre contre la sœur, dont l'entrée
-        // portait déjà le masquage.
         expect(field.snapshot.hasFlag("invisible")).toBe(false);
         expect(form.getSnapshot().values).toEqual({ a: "gardée2" });
     });
@@ -2450,15 +2507,17 @@ describe("une attente détachée est du travail en vol", () => {
     });
 });
 
-describe("les trois créateurs d'attente détachée s'accordent", () => {
-    it("une attente réadoptée compte comme du travail", async () => {
+describe("les créateurs d'attente détachée s'accordent", () => {
+    it("une attente encore en vol compte comme du travail", async () => {
+        // Elle s'appelait « une attente réadoptée » : la passe retombait sans
+        // avis et laissait l'attente orpheline. Elle pend maintenant pour de
+        // bon — c'est le même cas de figure côté sœur, qui est ce que le test
+        // garde : le rejet de l'une n'éteint pas l'attente de l'autre.
         const form = new FormController<{ a: string }>({ name: "f93", settleTimeout: 60 });
         const behavior: IBehavior<string> = {
-            // Elle allume l'attente et retombe sans avis : l'attente devient
-            // orpheline, donc réadoptée.
             onChange: async (ctx) => {
                 ctx.push(ctx.state.loading().lock());
-                await wait(10);
+                await wait(10_000);
             },
             onBlur: async () => { await wait(30); throw new Error("télémétrie HS"); },
         };
@@ -2476,6 +2535,205 @@ describe("les trois créateurs d'attente détachée s'accordent", () => {
         expect(field.snapshot.hasFlag("loading", "locked")).toBe(true);
         expect(await form.submit()).toBe(false);
         expect(field.snapshot.hasAny("loading", "locked")).toBe(false);
+    });
+
+    it("une passe périmée lâche son attente sans rien rendre", async () => {
+        // Elle a deux devoirs opposés, et un seul est le bon. Lâcher l'attente :
+        // sinon une réponse périmée occupe le champ à vie. Mais ne **rien
+        // rendre** : ce qu'elle avait posé a déjà été effacé par ce qui l'a
+        // supplantée, et son `added` désigne maintenant les flags d'autrui —
+        // ici celui que le remontage vient de reposer.
+        const form = new FormController<{ a: string }>({ name: "f99" });
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => ctx.state.mark("badge"),
+            onBlur: (ctx) => ctx.state.unmark("badge"),
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.mark("badge").loading());
+                await wait(30);
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.blur();
+        expect(field.snapshot.hasFlag("badge")).toBe(false);
+        field.change("x");
+        expect(field.snapshot.hasFlag("badge")).toBe(true);
+
+        // `reset()` supplante : il efface les tranches et rejoue le montage,
+        // qui repose `badge`.
+        await wait(5);
+        field.reset();
+        await wait(5);
+        expect(field.snapshot.hasFlag("badge")).toBe(true);
+
+        await wait(40);
+        expect(field.snapshot.hasFlag("badge")).toBe(true);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        expect(field.isBusy).toBe(false);
+    });
+
+    it("un abonnement externe éteint l'attente qu'il a allumée", async () => {
+        // Le rappel qui allume l'attente n'a plus de passe ouverte — la sienne
+        // est retombée. Lui en ouvrir une neuve, anonyme, lui donnait une
+        // référence mais lui retirait la parole : le même rappel disant `idle`
+        // n'était plus reconnu, et le champ restait occupé jusqu'à la
+        // soumission. C'est **sa** passe qui rouvre.
+        const form = new FormController<{ a: string }>({ name: "f97" });
+        const external: { start?: () => void; done?: () => void } = {};
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => {
+                external.start = () => ctx.push(ctx.state.loading().lock());
+                external.done = () => ctx.push(ctx.state.idle().unlock());
+                return ctx.state;
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        external.start?.();
+        expect(field.snapshot.hasFlag("loading", "locked")).toBe(true);
+
+        external.done?.();
+        expect(field.snapshot.hasAny("loading", "locked")).toBe(false);
+        expect(field.isBusy).toBe(false);
+        // Et le formulaire part sans avoir à attendre une convergence.
+        expect(await form.submit()).toBe(true);
+    });
+
+    it("un écho de `loading` ne fait pas rouvrir une passe retombée", async () => {
+        // Le rappel externe ne pousse qu'un marqueur : `ctx.state` étant la
+        // tranche fusionnée, son écriture porte `loading` sans l'avoir demandé.
+        // Rouvrir là-dessus, c'était remettre une passe close à la merci du
+        // prochain `recover()` — et lui faire rendre un fait qui n'est pas à
+        // elle. Seule une intention déclarée fait rouvrir.
+        const form = new FormController<{ a: string }>({ name: "f101", settleTimeout: 40 });
+        const external: { badge?: () => void } = {};
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => {
+                external.badge = () => ctx.push(ctx.state.mark("badge"));
+                return ctx.state;
+            },
+            // Une sœur qui pend : c'est elle qui fera passer `recover()`.
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().lock());
+                await wait(10_000);
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("x");
+        external.badge?.();
+        expect(field.snapshot.hasFlag("loading", "locked", "badge")).toBe(true);
+
+        expect(await form.submit()).toBe(false);
+        expect(field.snapshot.hasAny("loading", "locked")).toBe(false);
+        // Personne ne l'a demandée, personne ne la rend.
+        expect(field.snapshot.hasFlag("badge")).toBe(true);
+    });
+
+    it("une passe encore en vol ne se ferme pas en rendant l'attente", async () => {
+        // Elle rend l'attente entre deux phases, puis la reprend. Se fermer
+        // là-dessus lui aurait fait perdre le compte de ses ajouts en rouvrant,
+        // et l'abandon aurait laissé `skeleton` sur le champ — c'est-à-dire le
+        // symptôme même que ce chantier ferme. Seule une passe **détachée** se
+        // ferme en rendant l'attente : rien ne retombera plus pour elle.
+        const form = new FormController<{ a: string }>({ name: "f102", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.mark("skeleton").loading());
+                await wait(10);
+                ctx.push(ctx.state.idle());
+                await wait(10);
+                ctx.push(ctx.state.loading());
+                await wait(10_000);
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("skeleton"));
+        await wait(40);
+        expect(field.snapshot.hasFlag("loading")).toBe(true);
+
+        expect(await form.submit()).toBe(false);
+        expect(field.snapshot.hasAny("loading", "skeleton")).toBe(false);
+    });
+
+    it("ce qu'un rappel externe laisse après avoir rendu l'attente est acquis", async () => {
+        // L'abonnement a fini de parler : sa passe se referme. La laisser
+        // ouverte, c'était la garder à la merci du prochain `recover()` — celui
+        // d'une **sœur** qui pend encore — et rendre des faits déjà acquis.
+        const form = new FormController<{ a: string }>({ name: "f100", settleTimeout: 40 });
+        const external: { start?: () => void; done?: () => void } = {};
+        const behavior: IBehavior<string> = {
+            onMount: (ctx) => {
+                external.start = () => ctx.push(ctx.state.loading().mark("badge"));
+                external.done = () => ctx.push(ctx.state.idle().mark("badge"));
+                return ctx.state;
+            },
+            // Une sœur qui pend : c'est elle qui fera passer `recover()`.
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.loading().lock());
+                await wait(10_000);
+            },
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        external.start?.();
+        field.change("x");
+        external.done?.();
+        expect(field.snapshot.hasFlag("badge", "loading", "locked")).toBe(true);
+
+        expect(await form.submit()).toBe(false);
+        // La sœur est rendue ; ce que l'abonnement avait conclu reste.
+        expect(field.snapshot.hasAny("loading", "locked")).toBe(false);
+        expect(field.snapshot.hasFlag("badge")).toBe(true);
+    });
+
+    it("ce qu'une passe repose après un retrait n'est plus imputable à la première", async () => {
+        // `skeleton` a deux auteurs successifs : la passe qui pend l'avait posé,
+        // une autre l'a retiré, une troisième l'a reposé. L'imputation doit
+        // suivre — sinon l'abandon de la première emporte le fait d'une autre,
+        // et c'est exactement le symptôme que le chantier ferme.
+        const form = new FormController<{ a: string }>({ name: "f98", settleTimeout: 40 });
+        const behavior: IBehavior<string> = {
+            onChange: async (ctx) => {
+                ctx.push(ctx.state.mark("skeleton").loading());
+                await wait(10_000);
+            },
+            onBlur: (ctx) => ctx.state.unmark("skeleton"),
+            onFocus: (ctx) => ctx.state.mark("skeleton"),
+        };
+        const field = form.field("a", { behaviors: [behavior] });
+        field.mount();
+        form.mount();
+        await wait(10);
+
+        field.change("x");
+        await until(() => field.snapshot.hasFlag("loading"));
+        field.blur();
+        expect(field.snapshot.hasFlag("skeleton")).toBe(false);
+        field.focus();
+        expect(field.snapshot.hasFlag("skeleton")).toBe(true);
+
+        expect(await form.submit()).toBe(false);
+        expect(field.snapshot.hasFlag("loading")).toBe(false);
+        // Reposé par une passe qui a conclu : c'est un fait acquis.
+        expect(field.snapshot.hasFlag("skeleton")).toBe(true);
     });
 
     it("une attente ouverte par un abonnement externe compte comme du travail", async () => {

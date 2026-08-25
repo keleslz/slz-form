@@ -16,6 +16,16 @@ export class BehaviorState {
 
     readonly activity: ActivityFlag;
     readonly markers: readonly AnyUiFlag[];
+    /**
+     * L'auteur de cette tranche a **parlé de l'activité** — il a appelé
+     * `loading()` ou `idle()`.
+     *
+     * `ctx.state` rend la tranche fusionnée du behavior : un hook qui ajoute un
+     * marqueur pendant un appel écrit `loading` sans l'avoir demandé. Sans ce
+     * témoin, le moteur ne peut pas distinguer une intention d'un écho — et il
+     * l'a payé en tours de revue.
+     */
+    readonly activityStated: boolean;
 
     /**
      * Le constructeur garde la même règle que `mark` — sinon la garde ne
@@ -24,20 +34,21 @@ export class BehaviorState {
      * ["error"])` publiait `pristine` **et** `error`, et un `loading` marqueur
      * que la lecture confondait avec l'activité.
      */
-    constructor(activity: ActivityFlag, markers: readonly AnyUiFlag[]) {
+    constructor(activity: ActivityFlag, markers: readonly AnyUiFlag[], activityStated = false) {
         this.activity = activity;
         this.markers = Object.freeze(
             [...new Set(markers.map((flag) => refuseReserved(flag, "new BehaviorState")))].sort(),
         );
+        this.activityStated = activityStated;
     }
 
     // ── exclusive group (setting one replaces the other) ──────────────────
     loading(): BehaviorState {
-        return this.activity === "loading" ? this : new BehaviorState("loading", this.markers);
+        return new BehaviorState("loading", this.markers, true);
     }
 
     idle(): BehaviorState {
-        return this.activity === "idle" ? this : new BehaviorState("idle", this.markers);
+        return new BehaviorState("idle", this.markers, true);
     }
 
     // ── cumulative markers (added / removed independently) ────────────────
@@ -90,7 +101,7 @@ export class BehaviorState {
 
     /** Drops every flag this behavior contributes — the field reverts to what the others say. */
     clear(): BehaviorState {
-        return BehaviorState.neutral;
+        return new BehaviorState("idle", [], true);
     }
 
     has(flag: AnyUiFlag): boolean {
@@ -107,14 +118,14 @@ export class BehaviorState {
         if (this.markers.includes(flag)) {
             return this;
         }
-        return new BehaviorState(this.activity, [...this.markers, flag]);
+        return new BehaviorState(this.activity, [...this.markers, flag], this.activityStated);
     }
 
     private without(flag: AnyUiFlag): BehaviorState {
         if (!this.markers.includes(flag)) {
             return this;
         }
-        return new BehaviorState(this.activity, this.markers.filter((f) => f !== flag));
+        return new BehaviorState(this.activity, this.markers.filter((f) => f !== flag), this.activityStated);
     }
 }
 

@@ -28,51 +28,41 @@ import type { AnyFieldView, FieldView } from "./FieldView";
 type Listener = () => void;
 
 /**
- * Une passe d'un behavior : un appel de hook, et ce que valait sa tranche
- * **juste avant** cet appel.
+ * Une passe d'un behavior : un appel de hook, et ce que **cette passe** a voulu.
  *
- * La référence appartient à la passe. C'est ce qui rend la restitution
- * univoque : `release` rend la passe qu'on lui donne, sans avoir à deviner
- * laquelle d'un état partagé était la bonne.
+ * Ce qui est par passe, c'est l'intention — pas l'état. La tranche reste
+ * partagée par behavior, parce que `ctx.state` la rend telle quelle et que les
+ * helpers en dépendent. C'est ce partage qui faisait qu'une passe défaisait le
+ * travail d'une sœur ; en attribuant chaque écriture à son auteur, on ne défait
+ * plus que la sienne.
  */
 interface Pass {
-    readonly before: BehaviorState;
     readonly generation: number;
     /**
-     * Personne ne viendra la refermer en retombant : c'est le retour à `idle`
-     * qui s'en charge.
-     *
-     * Deux cas. Une écriture hors hook — le `ctx.push` d'un behavior abonné à
-     * une source externe — et un hook **synchrone** qui allume `loading` sans
-     * rendre de promesse : lui non plus n'a rien qui retombera.
+     * Personne ne viendra la refermer en retombant : c'est le retour au repos
+     * qui s'en charge. Un hook synchrone qui ouvre une attente, un `ctx.push`
+     * d'abonnement, une passe dont la promesse a retombé en laissant l'attente.
      */
     detached: boolean;
     /**
-     * Cette passe **a allumé** l'attente en cours : c'est son état d'entrée qui
-     * sert de référence pour la rendre.
+     * Les marqueurs que **cette passe** a introduits et qui lui sont encore
+     * imputables. C'est tout ce qu'on lui retire si elle échoue ou si on
+     * l'abandonne : ce qu'une **autre** passe a posé ne s'y trouve pas, et
+     * survit donc.
      */
-    holds: boolean;
+    readonly added: Set<AnyUiFlag>;
     /**
-     * Cette passe **publie** l'attente : sa dernière écriture portait `loading`.
-     * Remis à faux dès qu'une écriture ramène le repos.
-     */
-    publishes: boolean;
-    /**
-     * Cette passe a du travail **en vol** — une promesse qui n'a pas retombé,
-     * ou une attente détachée que rien ne viendra clore.
+     * Sa dernière écriture demandait l'attente.
      *
-     * Il faut les deux pour dire « quelqu'un travaille encore », et c'est la
-     * leçon du douzième tour : un booléen unique répondait à deux questions
-     * incompatibles. « Qui tient la référence ? » n'admet qu'une réponse à la
-     * fois ; « quelqu'un travaille-t-il encore ? » en admet plusieurs, et
-     * seulement parmi ceux qui publient l'attente. Les confondre faisait
-     * qu'un écho synchrone de `loading` — un hook qui ajoute un badge pendant
-     * un appel — passait pour un travailleur, et `release` republiait un
-     * `loading` que plus rien n'éteignait ; ou qu'une passe discrète, qui
-     * n'affiche rien, gardait le champ occupé.
+     * L'activité du behavior en est **dérivée** — `loading` si et seulement si
+     * une passe ouverte la veut. C'est le cœur : `ctx.state` rend la tranche
+     * partagée du behavior, donc une sœur qui retournait `ctx.state.idle()`
+     * éteignait l'attente d'une autre sans le vouloir. Elle ne dit plus que
+     * « moi, j'ai fini ».
      */
-    inFlight: boolean;
+    wantsLoading: boolean;
 }
+
 
 /**
  * Quel champ possède quel validator. Une `WeakMap` : elle ne retient rien et ne
@@ -125,28 +115,14 @@ export class FieldController<T = string, M = never> {
     private readonly validator: IValidator<T>;
     private readonly statesByBehavior = new Map<IBehavior<T, M>, BehaviorState>();
     /**
-     * La tranche de chaque behavior **avant l'appel de son hook**.
-     *
-     * C'est la référence dont `release` se sert quand la passe échoue : pas
-     * `neutral`, qui effacerait aussi ce qu'il avait posé hors de l'attente — un
-     * fait permanent émis au montage, que personne ne remettrait puisque
-     * `onMount` n'est pas rejoué.
-     *
-     * **Avant le hook**, et non avant le passage à `loading` : une passe entre
-     * en attente dès que son hook rend une promesse, qu'elle publie `loading`
-     * ou non. S'indexer sur `loading` ratait tout behavior qui pousse un état
-     * sans lui — à commencer par le skeleton de `parity.test.ts`, dont le
-     * masquage restait alors collé après un échec.
-     */
-    /**
      * Les passes **ouvertes** de chaque behavior, dans l'ordre où elles se sont
-     * ouvertes. Chacune porte son propre état d'entrée.
+     * ouvertes. Chacune porte ce qu'elle a ajouté et ce qu'elle veut.
      *
-     * La référence appartient à la passe, pas au behavior. Une map partagée
-     * avait deux auteurs — le hook et l'écriture d'un `loading` — arbitrés par
-     * un « premier arrivé, premier servi », et deux comptabilités qui pouvaient
-     * se contredire : c'est de ces contradictions que sortaient les trois
-     * dernières régressions.
+     * La tranche, elle, reste **partagée** par behavior : `ctx.state` la rend
+     * telle quelle, et les helpers en dépendent — `lockUntilValid` pose le
+     * verrou dans `onMount` et le retire dans `onDependencyChanged`, donc
+     * depuis deux passes. Ce qui est par passe, c'est l'**intention**, pas
+     * l'état.
      */
     private readonly openPasses = new Map<IBehavior<T, M>, Pass[]>();
     /**
@@ -414,20 +390,16 @@ export class FieldController<T = string, M = never> {
                 // laissait ce qu'une autre avait posé, et un champ obligatoire
                 // restait masqué : hors payload, formulaire déclaré valide.
                 //
-                // Ne survit donc que ce qui était déjà là à l'entrée de
-                // **chacune** d'elles.
+                // Ne survit donc que ce qu'aucune d'elles n'avait ajouté.
                 //
                 // Et seul **ce** behavior est supplanté : `recover()` passe sur
                 // tous les champs montés dès que la convergence expire, et
                 // supplanter le champ entier rendait muet, définitivement, un
                 // voisin qui n'avait rien en vol.
                 this.supersede(behavior);
-                const passes = this.openPasses.get(behavior) ?? [];
-                const kept = state.markers.filter(
-                    (flag) => passes.every((open) => open.before.has(flag)),
-                );
-                this.openPasses.delete(behavior);
-                this.setSlice(behavior, new BehaviorState("idle", kept), null);
+                for (const pass of [...(this.openPasses.get(behavior) ?? [])]) {
+                    this.release(behavior, pass);
+                }
             }
         }
         this.commit();
@@ -702,12 +674,10 @@ export class FieldController<T = string, M = never> {
         call: (ctx: BehaviorContext<T, M>) => BehaviorResult,
     ): void {
         const pass: Pass = {
-            before: this.statesByBehavior.get(behavior) ?? BehaviorState.neutral,
             generation: this.generationOf(behavior),
             detached: false,
-            holds: false,
-            publishes: false,
-            inFlight: false,
+            added: new Set<AnyUiFlag>(),
+            wantsLoading: false,
         };
         this.passesOf(behavior).push(pass);
 
@@ -715,36 +685,28 @@ export class FieldController<T = string, M = never> {
         // à `ctx.push` de dire qui écrit au lieu de le laisser deviner.
         const ctx = this.buildContext(behavior, signal, pass);
         const result = this.invoke(() => call(ctx));
-        // Le travail en vol, c'est la promesse. Ce qu'il **affiche**, c'est
-        // `publishes`, que `setSlice` a déjà posé pendant le préfixe synchrone.
-        pass.inFlight = isPromise(result);
         this.apply(behavior, result, signal, pass);
 
         if (isPromise(result)) {
             return;
         }
-        // `pass.holds`, et non une transition d'activité devinée : c'est
-        // `setSlice` qui sait qui a allumé l'attente, et il vient de le dire.
-        // Deviner fermait une passe **titulaire** quand le champ était déjà
-        // `loading` à l'entrée du hook — l'attente devenait orpheline, et
-        // `recover()` ne rendait plus rien.
-        if (pass.holds) {
-            // Elle a ouvert une attente sans rien qui retombera : c'est la
-            // définition d'une détachée, et c'est le retour à `idle` qui la
-            // refermera. La laisser telle quelle en faisait un fantôme
-            // définitif, que `recover()` prenait ensuite pour référence.
+        // Rien ne retombera pour elle : elle ne garde l'attente que si elle l'a
+        // demandée — `wantsLoading` ne se pose que sur une intention déclarée.
+        if (pass.wantsLoading) {
             pass.detached = true;
-            // **Une attente détachée est du travail en vol.** Les deux autres
-            // créateurs de titulaire détaché — `adopt` et le repli de
-            // `setSlice` — le posent ; l'oublier ici faisait conclure au rejet
-            // d'une sœur que plus personne ne travaillait. L'attente
-            // s'éteignait sans être rendue, et le `locked` posé avec elle
-            // devenait hors de portée de `recover()`, qui ne visite que les
-            // tranches encore `loading`.
-            pass.inFlight = true;
             return;
         }
         this.close(behavior, pass);
+        this.syncActivity(behavior);
+    }
+
+    /** Republie l'activité après la fermeture d'une passe. */
+    private syncActivity(behavior: IBehavior<T, M>): void {
+        const current = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
+        const activity = this.activityOf(behavior);
+        if (current.activity !== activity) {
+            this.statesByBehavior.set(behavior, new BehaviorState(activity, current.markers));
+        }
     }
 
     private passesOf(behavior: IBehavior<T, M>): Pass[] {
@@ -758,38 +720,36 @@ export class FieldController<T = string, M = never> {
     }
 
     /**
-     * Une passe vient de retomber en laissant `loading` allumé et plus personne
-     * pour l'éteindre : on la réadopte, avec **son** état d'entrée.
+     * Une passe dont la promesse vient de retomber, et sa **dernière parole**.
      *
-     * C'est ce qui ferme la classe : plus aucune attente ne se retrouve sans
-     * titulaire, donc le repli de `recover()` — qui rendait contre l'état
-     * courant, c'est-à-dire ne rendait rien — devient inatteignable.
+     * L'attente d'une passe dure jusqu'à ce qu'elle ait fini de parler. Un hook
+     * synchrone parle une dernière fois en poussant, un hook asynchrone en
+     * retombant : une attente poussée en cours de route s'éteint donc avec la
+     * promesse, sauf si le hook la **redéclare en sortie**
+     * (`return ctx.state.loading()`) parce qu'il a passé la main à un envoi
+     * externe. Sans cette règle, une réponse périmée qui ne dit rien gardait le
+     * champ occupé à vie — et c'est un cas bien plus fréquent que l'autre.
+     *
+     * Un travail lancé vers l'extérieur peut aussi se signaler tout seul : son
+     * `ctx.push` ultérieur n'aura aucune passe ouverte pour vouloir l'attente,
+     * et `setSlice` lui en ouvrira une détachée.
      */
-    private adopt(behavior: IBehavior<T, M>, pass: Pass): void {
-        if (this.statesByBehavior.get(behavior)?.activity !== "loading") {
+    private settle(behavior: IBehavior<T, M>, pass: Pass, lastWord: BehaviorResult): void {
+        const declares = lastWord instanceof BehaviorState
+            && lastWord.activityStated
+            && lastWord.activity === "loading";
+        if (declares) {
+            // Rien ne retombera plus pour elle : elle reste ouverte pour tenir
+            // l'attente, et c'est `recover()` qui la rendra.
+            pass.detached = true;
             return;
         }
-        // Une passe ouverte **qui tient l'attente**, pas une passe ouverte : une
-        // sœur non titulaire — un `blur` asynchrone suffit — empêchait sinon
-        // toute réadoption, et `recover()` rendait contre elle.
-        if ((this.openPasses.get(behavior) ?? []).some((open) => open.holds)) {
-            return;
-        }
-        this.passesOf(behavior).push({
-            before: pass.before,
-            generation: this.generationOf(behavior),
-            detached: true,
-            holds: true,
-            publishes: true,
-            inFlight: true,
-        });
+        pass.wantsLoading = false;
+        this.close(behavior, pass);
+        this.syncActivity(behavior);
     }
 
     /** Ferme une passe. Idempotent : une passe déjà fermée est simplement absente. */
-    private isOpen(behavior: IBehavior<T, M>, pass: Pass): boolean {
-        return (this.openPasses.get(behavior) ?? []).includes(pass);
-    }
-
     private close(behavior: IBehavior<T, M>, pass: Pass): void {
         const passes = this.openPasses.get(behavior);
         if (!passes) {
@@ -824,27 +784,31 @@ export class FieldController<T = string, M = never> {
         this.invoke(() => {
             void result.then(
                 (state) => {
-                    // Son travail a retombé, mais elle n'est pas encore fermée :
-                    // `setSlice` doit pouvoir la reconnaître comme l'écrivain.
-                    // Fermer d'abord la rendait inconnue, et l'attente qu'elle
-                    // publiait se voyait fabriquer une référence de secours
-                    // portant déjà tout ce qu'elle venait de poser.
-                    pass.inFlight = false;
+                    // Elle n'est pas fermée avant d'avoir écrit : `setSlice`
+                    // doit pouvoir la reconnaître comme l'écrivain.
                     if (signal.aborted || pass.generation !== this.generationOf(behavior)) {
-                        this.close(behavior, pass);
-                        this.adopt(behavior, pass);
+                        // Supplantée : elle lâche son attente sans rien
+                        // **rendre**. Ce qu'elle avait posé a déjà été effacé
+                        // par ce qui l'a supplantée, et son `added` désigne
+                        // désormais les flags d'autrui : `reset()` reposait
+                        // `badge` au remontage, et la passe périmée l'emportait
+                        // en retombant.
+                        //
+                        // Garde assumée, et sans effet observable aujourd'hui :
+                        // les trois chemins qui supplantent — `reset()`,
+                        // `unmount()`, `recover()` — vident déjà les passes
+                        // ouvertes. C'est ce qui la rend sûre : si un
+                        // quatrième apparaît, la passe lâche quand même.
+                        this.settle(behavior, pass, undefined);
+                        this.commit();
                         return;
                     }
-                    if (!(state instanceof BehaviorState)) {
-                        // « Pas d'avis » : la tranche précédente est conservée,
-                        // attente comprise — il faut donc quelqu'un pour la tenir.
-                        this.close(behavior, pass);
-                        this.adopt(behavior, pass);
-                        return;
+                    if (state instanceof BehaviorState) {
+                        this.setSlice(behavior, state, pass);
                     }
-                    this.setSlice(behavior, state, pass);
-                    this.close(behavior, pass);
-                    this.adopt(behavior, pass);
+                    // Sinon, « pas d'avis » : la tranche précédente est
+                    // conservée telle quelle.
+                    this.settle(behavior, pass, state);
                     this.commit();
                 },
                 // En **second argument**, pas en `.catch` chaîné : sans quoi un
@@ -852,10 +816,11 @@ export class FieldController<T = string, M = never> {
                 // abonnés sans filet — envoyait une passe réussie dans le
                 // chemin d'échec, et la fermait deux fois.
                 (error: unknown) => {
-                    pass.inFlight = false;
-                    this.close(behavior, pass);
                     if (signal.aborted || pass.generation !== this.generationOf(behavior)) {
-                        this.adopt(behavior, pass);
+                        // Supplantée : même raison qu'au succès — elle lâche
+                        // l'attente sans rien rendre.
+                        this.settle(behavior, pass, undefined);
+                        this.commit();
                         return;
                     }
                     // Un behavior rejeté ne doit rien laisser derrière lui de ce
@@ -863,8 +828,7 @@ export class FieldController<T = string, M = never> {
                     // le masquage, ni un `skeleton`. Un champ resté `invisible`
                     // sort du payload — donc une valeur obligatoire disparaît en
                     // silence et le formulaire se déclare valide.
-                    this.release(behavior, pass.before);
-                    this.adopt(behavior, pass);
+                    this.release(behavior, pass);
                     // Et il est signalé : le chemin synchrone passe par `invoke`,
                     // qui rapporte. Se taire ici rendait un behavior asynchrone
                     // définitivement muet, sans une ligne de journal.
@@ -884,52 +848,71 @@ export class FieldController<T = string, M = never> {
      * aucune passe, et sans référence `recover()` n'avait plus rien à quoi la
      * comparer — il ne rendait donc rien.
      */
+    /**
+     * Range la tranche, en attribuant l'écriture à son auteur.
+     *
+     * L'activité publiée est **dérivée** : `loading` si et seulement si une
+     * passe ouverte la veut. La déduire de la dernière écriture faisait qu'une
+     * sœur retournant `ctx.state.idle()` — la tranche *fusionnée* du behavior —
+     * éteignait l'attente d'une autre, et le formulaire partait avant
+     * convergence.
+     */
     private setSlice(behavior: IBehavior<T, M>, next: BehaviorState, writer: Pass | null): void {
         const previous = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
-        this.statesByBehavior.set(behavior, next);
+        const appeared = next.markers.filter((flag) => !previous.has(flag));
+        const vanished = previous.markers.filter((flag) => !next.has(flag));
+        const stated = next.activityStated;
 
-        if (next.activity === "loading") {
-            // L'écrivain se **déclare**, il ne se devine pas. Neuf tours de
-            // revue ont raffiné le même proxy — « la dernière passe ouverte » —
-            // qui se trompe dès qu'une passe sœur s'ouvre après celle qui écrit :
-            // le voisin était déclaré titulaire, et le vrai travailleur ne
-            // l'était pas.
-            if (previous.activity === "loading") {
-                // L'attente était déjà allumée : cette écriture n'en ouvre pas
-                // une nouvelle, elle la répercute. L'écho publie l'attente,
-                // mais ne prend pas la référence — sans quoi il resterait
-                // ouvert en détaché, et `adopt` le croirait titulaire.
-                if (writer && this.isOpen(behavior, writer)) {
-                    writer.publishes = true;
+        if (writer && stated && next.activity === "loading" && !this.isOpen(behavior, writer)) {
+            // Sa promesse est retombée, et elle écrit encore : un rappel
+            // externe — un abonnement, une réponse tardive — parle en son nom.
+            // Elle rouvre, **détachée**, pour tenir cette attente-là ; c'est
+            // ce qui lui rend une référence, sans quoi `recover()` n'aurait
+            // rien à quoi la comparer. Elle ne reprend pas à son compte ce
+            // qu'elle avait posé de son vivant : cette passe-là s'est terminée
+            // normalement, et ce qu'elle a poussé est acquis.
+            writer.added.clear();
+            writer.detached = true;
+            this.passesOf(behavior).push(writer);
+        }
+
+        if (writer && this.isOpen(behavior, writer)) {
+            for (const flag of appeared) {
+                writer.added.add(flag);
+            }
+            // Seulement si l'auteur s'est prononcé : sinon c'est un écho de la
+            // tranche fusionnée, pas une intention.
+            if (stated) {
+                writer.wantsLoading = next.activity === "loading";
+                if (writer.detached && !writer.wantsLoading) {
+                    // Le rappel qui avait allumé l'attente vient de l'éteindre.
+                    // Rien ne retombera plus pour elle : la laisser ouverte,
+                    // c'était garder une passe que seule la soumission fermait,
+                    // et rendre plus tard des faits devenus acquis.
+                    this.close(behavior, writer);
                 }
-                return;
-            }
-            if (writer && this.isOpen(behavior, writer)) {
-                writer.holds = true;
-                writer.publishes = true;
-                return;
-            }
-            // Personne d'ouvert pour la tenir — écriture d'un abonnement
-            // externe, ou passe déjà retombée : l'attente s'ouvre une référence.
-            this.passesOf(behavior).push({
-                before: previous,
-                generation: this.generationOf(behavior),
-                detached: true,
-                holds: true,
-                publishes: true,
-                inFlight: true,
-            });
-            return;
-        }
-        // Retour au repos : plus personne ne tient d'attente, et ce qu'aucune
-        // promesse ne refermera est refermé ici.
-        for (const pass of [...(this.openPasses.get(behavior) ?? [])]) {
-            pass.holds = false;
-            pass.publishes = false;
-            if (pass.detached) {
-                this.close(behavior, pass);
             }
         }
+
+        // Ce qui disparaît n'est plus imputable à personne.
+        for (const pass of this.openPasses.get(behavior) ?? []) {
+            for (const flag of vanished) {
+                pass.added.delete(flag);
+            }
+        }
+
+        this.statesByBehavior.set(behavior, new BehaviorState(this.activityOf(behavior), next.markers));
+    }
+
+    private isOpen(behavior: IBehavior<T, M>, pass: Pass): boolean {
+        return (this.openPasses.get(behavior) ?? []).includes(pass);
+    }
+
+    /** `loading` si et seulement si une passe ouverte le veut. */
+    private activityOf(behavior: IBehavior<T, M>): "idle" | "loading" {
+        return (this.openPasses.get(behavior) ?? []).some((open) => open.wantsLoading)
+            ? "loading"
+            : "idle";
     }
 
     private generationOf(behavior: IBehavior<T, M>): number {
@@ -944,50 +927,23 @@ export class FieldController<T = string, M = never> {
     /**
      * Rend une passe — **ce qu'elle a ajouté, et rien d'autre**.
      *
-     * Ni la tranche entière (un fait posé au montage disparaîtrait, et
-     * `onMount` n'est pas rejoué), ni son état d'entrée tel quel (un flag que
-     * le behavior venait de **retirer** reviendrait : un champ masqué qui se
-     * montre puis échoue redevenait invisible, donc sortait du payload — et le
-     * formulaire se déclarait valide sans sa valeur obligatoire).
-     *
-     * La règle exacte est l'**intersection** : on garde ce qui était là à
-     * l'entrée de la passe et qui y est encore. Ce qu'elle a ajouté part, ce
-     * qu'elle a retiré reste retiré.
+     * Ce qu'une sœur vivante a posé n'est pas dans son `added`, donc survit. Ce
+     * qu'elle a retiré reste retiré (arbitrage 32). Et son attente s'éteint
+     * parce qu'elle cesse de la vouloir, pas parce qu'on écrit `idle`.
      */
-    /**
-     * @param from  l'état d'entrée de la passe qu'on rend — le **même** pour un
-     *              rejet et pour un abandon.
-     *
-     * Distinguer les deux avait l'air fin et ne l'était pas : la question
-     * « ce fait est-il durable ou décoratif ? » n'est pas observable par le
-     * moteur. Deux passes au flux identique — l'une posant `verified`+`locked`,
-     * l'autre `skeleton`+`invisible`, puis attendant — exigeraient des issues
-     * opposées. Un fait posé par **une autre** passe survit de toute façon,
-     * puisqu'il est dans le `before` de celle-ci.
-     */
-    private release(behavior: IBehavior<T, M>, from: BehaviorState): void {
+    private release(behavior: IBehavior<T, M>, pass: Pass): void {
         const current = this.statesByBehavior.get(behavior) ?? BehaviorState.neutral;
-        const kept = current.markers.filter((flag) => from.has(flag));
-        // `idle` seulement si plus rien n'est en vol : une passe sœur encore en
-        // cours rendait sinon le formulaire soumettable pendant que le behavior
-        // travaillait toujours.
-        // Une sœur **qui travaille**, pas une sœur ouverte : une passe ouverte
-        // n'est pas une passe en vol, et le `loading` publié ici n'aurait alors
-        // eu personne pour l'éteindre.
-        // Publier l'attente **et** avoir du travail en vol. L'un sans l'autre,
-        // c'est soit un écho synchrone, soit une passe discrète qui n'affiche
-        // rien — ni l'un ni l'autre ne doit garder le champ occupé.
-        //
-        // La conjonction est nécessaire dans les deux sens : un écho synchrone
-        // publie sans travailler, une passe discrète travaille sans publier.
-        // Et `inFlight` doit être vrai pour **toute** passe ouverte qui tient
-        // une attente, y compris détachée — sans quoi la conjonction éteint ce
-        // qu'elle devait préserver.
-        const stillWaiting = (this.openPasses.get(behavior) ?? [])
-            .some((open) => open.publishes && open.inFlight);
-        // Aucun écrivain : si `loading` est republié, c'est qu'une sœur le tient
-        // déjà — cette passe-ci ne prétend rien.
-        this.setSlice(behavior, new BehaviorState(stillWaiting ? "loading" : "idle", kept), null);
+        const kept = current.markers.filter((flag) => !pass.added.has(flag));
+        // Vidé pour la même raison, et avec la même réserve : un rejet qui
+        // suivrait un abandon retirerait sinon des flags qu'un autre a reposés
+        // entre-temps. Aujourd'hui ce rejet passe par la branche « supplantée »
+        // et ne rend rien ; demain, ce compte sera juste.
+        pass.added.clear();
+        // Fermer suffit à éteindre son attente — l'activité est dérivée des
+        // passes **ouvertes**. Y remettre `wantsLoading` en plus ne se lisait
+        // nulle part.
+        this.close(behavior, pass);
+        this.statesByBehavior.set(behavior, new BehaviorState(this.activityOf(behavior), kept));
     }
 
     private buildContext(
