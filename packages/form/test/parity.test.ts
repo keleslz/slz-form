@@ -242,7 +242,7 @@ describe("parité — ce qui exigeait de modifier le cœur", () => {
         expect(c.snapshot.value).toBe("c:b:1");
     });
 
-    it("champ conditionnel obligatoire : masqué veut dire hors du formulaire", async () => {
+    it("champ conditionnel obligatoire : masqué veut dire hors de la validité", async () => {
         const form = new FormController<{ brand: string; otherBrand: string }>({ name: "p10" });
         const { hideWhen } = behaviorsFor(form);
         const brand = form.field("brand", {});

@@ -308,7 +308,7 @@ describe("les flags du formulaire", () => {
         expect(await form.submit()).toBe(true);
     });
 
-    it("un champ masqué ne pèse ni sur le verdict ni sur le payload", async () => {
+    it("un champ masqué ne pèse pas sur le verdict", async () => {
         const form = new FormController<{ a: string; b: string }>({ name: "f16" });
         const hidden: IBehavior<string> = { onMount: (ctx) => ctx.state.hide() };
         form.field("a", { required: true, behaviors: [hidden] }).mount();
@@ -316,8 +316,21 @@ describe("les flags du formulaire", () => {
         form.mount();
         await wait(20);
 
+        // Masqué et obligatoire mais vide : il ne condamne pas la soumission.
         expect(form.getSnapshot().hasFlag("valid")).toBe(true);
-        expect(Object.keys(form.getSnapshot().values)).toEqual(["b"]);
+    });
+
+    it("un champ masqué entre dans le payload tant qu'il est monté", async () => {
+        const form = new FormController<{ a: string; b: string }>({ name: "f16b" });
+        const hidden: IBehavior<string> = { onMount: (ctx) => ctx.state.hide() };
+        form.field("a", { required: true, behaviors: [hidden] }).mount();
+        form.field("b", { initialValue: "ok" }).mount();
+        form.mount();
+        await wait(20);
+
+        // La visibilité n'est plus qu'un fait d'affichage pour le payload : `a`
+        // reste dans `values` tant qu'il est monté (arbitrage 35).
+        expect(Object.keys(form.getSnapshot().values)).toEqual(["a", "b"]);
     });
 });
 
@@ -980,10 +993,12 @@ describe("un rejet sans attente ne rase rien", () => {
         await wait(60);
 
         // Sans attente enregistrée il n'y a rien à rendre : raser la tranche
-        // faisait réapparaître un champ que le behavior avait masqué, le
-        // faisait entrer dans le payload et condamnait la soumission.
+        // faisait réapparaître un champ que le behavior avait masqué. La tranche
+        // survit donc — `invisible` et `audit` tiennent. Le champ reste masqué
+        // mais, étant monté, entre bien dans le payload (arbitrage 35) sans pour
+        // autant condamner la soumission.
         expect(extra.snapshot.hasFlag("invisible", "audit")).toBe(true);
-        expect(Object.keys(form.getSnapshot().values)).not.toContain("extra");
+        expect(Object.keys(form.getSnapshot().values)).toContain("extra");
         expect(form.getSnapshot().hasFlag("valid")).toBe(true);
     });
 });
