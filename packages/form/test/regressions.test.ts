@@ -281,7 +281,7 @@ describe("régressions", () => {
         expect(field.snapshot.hasFlag("loading")).toBe(false);
     });
 
-    it("B5 — un champ masqué invalide part au payload, hors des errors, sans invalider le form", async () => {
+    it("B13 — un champ masqué invalide part au payload, hors des errors, sans invalider le form", async () => {
         const form = new FormController<{ x: string; y: string }>({ name: "b5-decouple" });
         const { hideWhen } = behaviorsFor(form);
         class Rejette extends IValidator<string> {
@@ -309,7 +309,7 @@ describe("régressions", () => {
         expect(form.snapshot.hasFlag("valid")).toBe(true);
     });
 
-    it("B6 — une ligne d'array avec un champ masqué envoie sa valeur dans le payload", async () => {
+    it("B14 — une ligne d'array avec un champ masqué envoie sa valeur dans le payload", async () => {
         type Row = { visible: string; caché: string };
         const form = new FormController<{ rows: FieldArray<Row> }>({ name: "b6-array" });
         // Le champ de ligne se masque au montage — le chemin
