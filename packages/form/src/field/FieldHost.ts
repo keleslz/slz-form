@@ -1,4 +1,5 @@
 import type { FieldChanges } from "../behavior/IBehavior";
+import type { EngineError } from "../error/EngineError";
 import type { FormView } from "../form/FormView";
 
 /**
@@ -17,4 +18,13 @@ export interface FieldHost {
      *                 l'observent (arbitrage 18).
      */
     notifyFieldChanged(name: string, changes: FieldChanges): void;
+    /**
+     * Route une erreur du moteur vers la surface portée par le formulaire.
+     *
+     * Le champ n'a personne à qui remonter une erreur asynchrone — la promesse
+     * qui la porte n'est attendue par personne. Il la remet donc au formulaire,
+     * qui la bufferise et notifie ses abonnés (invariant 38). Le moteur ne
+     * loggue jamais.
+     */
+    reportEngineError(error: EngineError): void;
 }

@@ -1,3 +1,4 @@
+import { EngineGuardError } from "../error/EngineError";
 import { isReservedFlag, type ActivityFlag, type AnyUiFlag, type BehaviorFlag } from "./UiFlag";
 
 /**
@@ -136,7 +137,9 @@ export class BehaviorState {
  */
 function refuseReserved(flag: BehaviorFlag, method: string): BehaviorFlag {
     if (isReservedFlag(flag)) {
-        throw new Error(
+        // Garde du moteur : erreur typée, pour que le site du catch la classe en
+        // `guard-violation` sans lire le message.
+        throw new EngineGuardError(
             `[slz] \`${method}("${String(flag)}")\` : "${String(flag)}" appartient au moteur. `
             + "Un behavior émet la disponibilité (`lock`, `readOnly`, `hide`) et ses propres flags.",
         );
