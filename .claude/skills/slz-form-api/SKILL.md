@@ -65,9 +65,14 @@ et le contournement contredit les invariants affichés par le projet.
 - Il ne connaît ni skeleton, ni spinner, ni couleur, ni libellé.
 - `packages/form/src` : **aucun import non relatif**. Pas de DOM, pas de
   framework. Les seuls globaux sont ceux que tout hôte JavaScript fournit :
-  `setTimeout`/`clearTimeout`, `AbortController`, `Date.now`, et
-  `console.error` pour signaler une erreur du moteur qu'on ne peut pas
-  propager.
+  `setTimeout`/`clearTimeout`, `AbortController`, `Date.now`.
+- **Le moteur ne loggue jamais** (invariant 38) : `grep -rn "console\."
+  packages/form/src` doit rester vide. Une erreur qu'on ne peut pas propager —
+  un hook asynchrone qui rejette, une garde violée, une règle qui casse — est
+  **routée** vers le formulaire (`form.engineErrors` / `form.onEngineError`),
+  taguée `hook-error` ou `guard-violation`. Le diagnostic se lit là, pas dans la
+  console. Seul angle mort assumé : un validator appelé **hors** d'un formulaire
+  (contexte détaché) n'a nulle part où router et se tait.
 - Un adapter (`packages/react-form`) est un pont, pas un endroit où mettre des
   règles.
 
