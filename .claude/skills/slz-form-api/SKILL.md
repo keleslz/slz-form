@@ -245,6 +245,16 @@ Douze tours de revue d'affilée y ont trouvé un bloquant, toujours le même
 symptôme : un champ obligatoire reste masqué après un échec, sort du payload, et
 le formulaire part vide en se croyant valide.
 
+> **Note (règle payload changée).** Les phrases de cette section qui posent
+> « un champ masqué **sort du payload** » comme le comportement correct
+> décrivent l'**ancienne** règle. Depuis l'arbitrage 35, un champ masqué **reste
+> dans le payload** tant qu'il est monté (`values` itère les montés) ; seule la
+> **validité** continue de l'exclure. La leçon des passes ci-dessous — l'activité
+> publiée est ce que les passes ouvertes veulent, l'attente suit le travail
+> réellement en vol — est, elle, **inchangée** : ne pas la réécrire. Ce qui a
+> bougé, c'est la seule règle « masqué ⇒ hors payload », pas la mécanique des
+> passes.
+
 La cause, une fois nommée : la tranche d'état est **partagée** par behavior —
 `ctx.state` la rend telle quelle, et les helpers en dépendent — pendant que le
 travail, lui, est **par passe**. Toutes les tentatives qui ont échoué cherchaient
