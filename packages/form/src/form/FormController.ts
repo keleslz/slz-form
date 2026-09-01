@@ -462,7 +462,12 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         };
     };
 
-    /** Le payload : ni les champs démontés, ni les champs masqués. */
+    /**
+     * Le payload : tous les champs **montés**, masqués inclus. Un champ figure
+     * dans `values` tant qu'il n'a pas été démonté ; sa visibilité n'est plus
+     * qu'un fait d'affichage. Seuls les champs démontés en sortent (arbitrage
+     * 35). La validité, elle, continue d'exclure les masqués.
+     */
     values(): Readonly<Record<string, unknown>> {
         return this.buildSnapshot().values;
     }
