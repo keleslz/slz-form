@@ -5,6 +5,8 @@ import {
     FormController,
     IValidator,
     type BehaviorContext,
+    type FieldArray,
+    type IBehavior,
     type ValidationReport,
 } from "../src/index";
 import { copyFrom, observes, until, wait } from "./helpers";
@@ -57,7 +59,7 @@ describe("régressions", () => {
         expect(field.snapshot.errors.length > 0).toBe(true);
     });
 
-    it("B4 — un champ invisible et obligatoire ne bloque ni la soumission ni le payload", async () => {
+    it("B4 — un champ invisible et obligatoire ne bloque pas la soumission mais reste dans le payload", async () => {
         const form = new FormController<{ x: string; y: string }>({ name: "b4" });
         const { hideWhen } = behaviorsFor(form);
         const hidden = form.field("y", {
@@ -69,9 +71,11 @@ describe("régressions", () => {
         form.mount();
         await wait(20);
 
+        // Masqué = hors validité (la soumission aboutit malgré `required` vide),
+        // mais toujours dans le payload tant que monté (arbitrage 35).
         expect(hidden.snapshot.hasFlag("invisible")).toBe(true);
         await expect(form.submit()).resolves.toBe(true);
-        expect(form.values()).not.toHaveProperty("y");
+        expect(form.values()).toHaveProperty("y");
     });
 
     it("B5 — une réponse lente et périmée n'écrase pas une réponse plus récente", async () => {
@@ -275,5 +279,57 @@ describe("régressions", () => {
 
         expect(field.snapshot.hasFlag("locked")).toBe(false);
         expect(field.snapshot.hasFlag("loading")).toBe(false);
+    });
+
+    it("B13 — un champ masqué invalide part au payload, hors des errors, sans invalider le form", async () => {
+        const form = new FormController<{ x: string; y: string }>({ name: "b5-decouple" });
+        const { hideWhen } = behaviorsFor(form);
+        class Rejette extends IValidator<string> {
+            protected validate(_value: string, report: ValidationReport): void {
+                report.error("toujours faux");
+            }
+        }
+        const hidden = form.field("y", {
+            initialValue: "valeur-cachée",
+            validator: new Rejette(),
+            behaviors: [hideWhen({ watch: ["x"], when: () => true })],
+        });
+        form.field("x", {}).mount();
+        hidden.mount();
+        form.mount();
+        await wait(20);
+
+        expect(hidden.snapshot.hasFlag("invisible")).toBe(true);
+        // Le découplage payload / validité (arbitrage 35), épinglé : la valeur du
+        // champ masqué part dans le payload...
+        expect(form.values()).toHaveProperty("y", "valeur-cachée");
+        // ...son constat bloquant reste hors des `errors` du formulaire...
+        expect(form.snapshot.errors).not.toHaveProperty("y");
+        // ...et le formulaire reste donc valide.
+        expect(form.snapshot.hasFlag("valid")).toBe(true);
+    });
+
+    it("B14 — une ligne d'array avec un champ masqué envoie sa valeur dans le payload", async () => {
+        type Row = { visible: string; caché: string };
+        const form = new FormController<{ rows: FieldArray<Row> }>({ name: "b6-array" });
+        // Le champ de ligne se masque au montage — le chemin
+        // `FieldArrayController.values()` → `row.values()` → `FormSnapshot.values`
+        // est partagé, donc un champ masqué de ligne suit la même règle
+        // (arbitrage 35) : sa valeur figure au payload tant qu'il est monté.
+        const hide: IBehavior<string> = { onMount: (ctx) => ctx.state.hide() };
+        const rows = form.array("rows");
+        form.mount();
+
+        const id = rows.append();
+        const row = rows.row(id);
+        row?.field("visible").mount();
+        const hidden = row?.field("caché", { behaviors: [hide] });
+        hidden?.mount();
+        hidden?.change("secret");
+        row?.field("visible").change("montré");
+        await wait(20);
+
+        expect(hidden?.snapshot.hasFlag("invisible")).toBe(true);
+        expect(form.values()).toEqual({ rows: [{ visible: "montré", caché: "secret" }] });
     });
 });

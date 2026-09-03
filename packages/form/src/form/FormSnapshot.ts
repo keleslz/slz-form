@@ -82,7 +82,7 @@ export class FormSnapshot {
 
     get values(): Readonly<Record<string, unknown>> {
         const values: Record<string, unknown> = {};
-        for (const field of this.contributing) {
+        for (const field of this.inPayload) {
             values[field.name] = field.value;
         }
         for (const rows of this.arrays) {
@@ -137,9 +137,24 @@ export class FormSnapshot {
         return clean ? "valid" : "error";
     }
 
-    /** Les champs qui pèsent sur la validité et sur le payload. */
+    /**
+     * Les champs qui pèsent sur la **validité** et les **errors** — les montés
+     * visibles. Un champ masqué en sort : il ne doit pas condamner la soumission
+     * (invariant 29, côté validité).
+     */
     private get contributing(): readonly FieldSummary[] {
         return this.mounted.filter((field) => !field.ui.hasFlag("invisible"));
+    }
+
+    /**
+     * Les champs qui entrent dans le **payload** — tous les montés, masqués
+     * inclus. La visibilité n'est plus qu'un fait d'affichage pour le payload :
+     * un champ figure dans `values` tant qu'il n'a pas été démonté (arbitrage
+     * 35). La validité, elle, reste sur `contributing` — un champ masqué ne
+     * bloque pas la soumission.
+     */
+    private get inPayload(): readonly FieldSummary[] {
+        return this.mounted;
     }
 
     /** Les champs qui font partie du formulaire, visibles ou non. */

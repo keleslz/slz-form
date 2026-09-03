@@ -179,9 +179,11 @@ describe("l'activité publiée suit le travail en vol", () => {
         await until(() => field.snapshot.hasFlag("invisible"));
         await wait(60);
 
-        // La passe vivante tient toujours le champ masqué : personne d'autre
-        // n'a le droit de le rendre au payload.
+        // La passe vivante tient toujours le champ masqué : la sœur qui échoue
+        // ne défait pas le `invisible` qu'elle a posé. Le masquage n'est plus
+        // qu'un fait d'affichage pour le payload — le champ, resté monté, y
+        // figure avec sa valeur (arbitrage 35).
         expect(field.snapshot.hasFlag("invisible")).toBe(true);
-        expect(form.getSnapshot().values).toEqual({});
+        expect(form.getSnapshot().values).toEqual({ a: "secret" });
     });
 });

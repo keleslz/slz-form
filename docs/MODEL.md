@@ -73,7 +73,7 @@ mécaniquement, sans qu'aucun composant ne soit modifié.
 | `idle` · `loading` | exclusive | Behaviors + Validator | un travail est en vol |
 | `locked` | cumulée | Behaviors + Controller + vue | grisé, hors saisie |
 | `readonly` | cumulée | Behaviors + Controller + vue | lisible et sélectionnable, non modifiable |
-| `invisible` | cumulée | Behaviors | pas rendu — et hors du formulaire (invariant 29) |
+| `invisible` | cumulée | Behaviors | pas rendu — hors validité, mais dans le payload tant que monté (invariant 29) |
 | `required` | cumulée | le Controller | obligatoire |
 | `touched` · `focused` | cumulée | le Controller | l'interaction |
 | `mounted` | cumulée | le Controller | fait partie du formulaire qu'on remplit |
@@ -382,6 +382,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 32 | Rendre une ou N passes | ce que **cette** passe a ajouté, et rien d'autre (`Pass.added`) — un rejet en rend une, `recover()` les rend toutes | ce qu'elle a ajouté part, ce qu'elle a retiré reste retiré. L'intersection avec son état d'entrée disait la même chose tant qu'une seule passe écrivait ; à deux, elle effaçait ce qu'une sœur **vivante** avait posé depuis. Distinguer « fait durable » de « décoration transitoire » parmi ses propres ajouts n'est toujours pas observable : deux passes au flux identique — `verified`+`locked` d'un côté, `skeleton`+`invisible` de l'autre — exigeraient des issues opposées |
 | 33 | Passe supplantée | une génération **par behavior**, capturée par la passe ; une passe plus ancienne n'écrit plus rien — ni tranche, ni valeur, ni options | sans ça, une promesse retombée après coup rasait la tranche qu'on venait de rendre. Par behavior et non par champ : `recover()` passe sur tous les champs montés dès que la convergence expire, et un compteur de champ rendait muet, définitivement, un voisin qui n'avait rien en vol |
 | 34 | La dernière parole d'une passe | l'attente d'une passe dure jusqu'à ce qu'elle ait fini de parler : un hook synchrone parle une dernière fois en **poussant**, un hook asynchrone en **retombant** | une attente poussée en cours de route s'éteint donc avec la promesse, sauf si le hook la redéclare en sortie (`return ctx.state.loading()`). L'inverse — la garder par défaut — laissait une réponse périmée occuper le champ à vie, et c'est le cas fréquent ; deviner lequel des deux le behavior voulait est ce qui a coûté douze tours. Un envoi externe a deux façons de le dire, et les deux sont explicites : la redéclarer, ou la rallumer depuis son rappel |
+| 35 | Payload vs validité pour un champ masqué | un champ masqué **reste dans le payload** tant qu'il est monté ; la validité et les `errors`, elles, continuent de l'exclure | découpler les deux (Option A) satisfait le besoin d'envoyer la valeur par défaut d'un champ caché — un champ conditionnel prérempli doit partir avec le formulaire — sans réintroduire ce que l'invariant 29 avait fermé : un champ invisible obligatoire ne doit pas bloquer la soumission. `values` itère les montés, `errors`/`validity` restent sur les montés visibles. Pour exclure un champ du payload, on le **démonte** — la visibilité n'est plus que de l'affichage |
 
 ---
 
@@ -417,7 +418,7 @@ Ajouter un champ = ajouter cette ligne. Le module `form` n'est pas touché.
 | 26 | Le Validator lit, n'écrit pas | `ValidationContext` n'a aucune méthode de mutation ; `watched()` throw sur un nom non déclaré |
 | 27 | Le moteur ne décide pas de l'affichage | il porte `severity` et `code` ; aucun libellé, aucune couleur, aucun composant |
 | 28 | Cumulé ouvert, exclusif fermé | un groupe exclusif ne prend que des valeurs déclarées — l'ouvrir recréerait le `Set` plat et ses états impossibles ; les flags cumulés acceptent ceux de l'application, où l'union ne peut pas se contredire |
-| 29 | Masqué vaut absent | un champ `invisible` sort de la validité **et** du payload |
+| 29 | Masqué vaut absent — pour la validité | `FormSnapshot.contributing` filtre `invisible` et pilote `validity` et `errors` : un champ masqué ne bloque pas la soumission. Le payload, lui, itère `FormSnapshot.inPayload` = les montés, masqués inclus, donc un champ masqué reste dans `values` tant qu'il est monté (arbitrage 35) |
 | 30 | Une ligne est un formulaire | `FieldArrayController` compose des `FormController` ; aucun nommage par chemins |
 | 31 | Une passe interrompue n'est pas un verdict | une règle qui casse ne rend rien : la valeur est publiée **non vérifiée** et bloque, jamais valide, jamais jugée par le verdict d'une autre saisie |
 | 32 | Aucun booléen d'état dans la surface de lecture | `FieldSnapshot`, `FormSnapshot`, `useField()` et `useForm()` n'exposent que `hasFlag` / `hasAny`, les données et les actions |
