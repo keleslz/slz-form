@@ -79,6 +79,19 @@ export interface ValidationContext {
      */
     readonly signal: AbortSignal;
     watched(name: string): AnyFieldView | null;
+    /**
+     * Route l'échec d'une règle vers le formulaire (invariant 38).
+     *
+     * Injecté **au site du catch** : le validator ne journalise plus rien
+     * lui-même. La base l'appelle quand une règle asynchrone rejette, le
+     * composite quand un membre casse — chacun passe le nom de la règle fautive
+     * et l'objet levé, que le `FieldController` enveloppe dans un `EngineError`
+     * de `scope: "validator"`.
+     *
+     * Optionnel, et **absent du contexte détaché** : un validator appelé hors
+     * d'un formulaire n'a nulle part où router, et se tait — angle mort assumé.
+     */
+    reportFailure?(rule: string, error: unknown): void;
 }
 
 /**
@@ -264,7 +277,10 @@ export abstract class IValidator<T = string> {
             try {
                 await pending;
             } catch (error) {
-                reportRuleFailure(this.constructor.name, error);
+                // Routé vers le formulaire, jamais journalisé (invariant 38) :
+                // le contexte détaché ne porte pas le sink, donc un validator
+                // hors formulaire se tait.
+                ctx.reportFailure?.(this.constructor.name, error);
                 report.fail();
                 // Une règle qui casse — un réseau tombé — n'est pas un verdict.
                 // Mais les règles qui ont **réussi** dans la même passe en ont
@@ -441,11 +457,7 @@ function detachedContext(): ValidationContext {
         form: { name: "<detached>", status: "idle", field: () => null, values: () => ({}) },
         signal: new AbortController().signal,
         watched: () => null,
+        // Pas de `reportFailure` : un validator appelé hors d'un formulaire n'a
+        // nulle part où router son échec. Silence détaché, assumé.
     };
-}
-
-/** Un échec de règle est signalé : l'avaler ferait d'un réseau tombé un silence. */
-function reportRuleFailure(rule: string, error: unknown): void {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[slz] Validation rule "${rule}" failed: ${message}`, error);
 }

@@ -156,22 +156,30 @@ describe("septième tour de revue", () => {
         expect((thrown as Error | undefined)?.message).toMatch(/without declaring it in `watch`/);
     });
 
-    it("un échec de règle est signalé, pas avalé", async () => {
+    it("un échec de règle atterrit sur le formulaire, sans toucher la console", async () => {
         const seen: string[] = [];
         const original = console.error;
         console.error = (...args: unknown[]) => void seen.push(String(args[0]));
+        const form = new FormController<{ a: string }>({ name: "s6" });
         try {
-            const form = new FormController<{ a: string }>({ name: "s6" });
             const field = form.field("a", { validator: new FastReject() });
             field.mount();
             form.mount();
             field.change("x");
-            await wait(80);
+            await until(() => form.engineErrors.length > 0, { timeout: 1000 });
         } finally {
             console.error = original;
         }
 
-        expect(seen.some((line) => line.includes("[slz]"))).toBe(true);
+        // Le moteur ne loggue plus (invariant 38) : l'échec est routé vers le
+        // formulaire, taggé validator/hook-error, avec le nom de la règle fautive.
+        expect(seen).toEqual([]);
+        const [reported] = form.engineErrors;
+        expect(reported?.scope).toBe("validator");
+        expect(reported?.kind).toBe("hook-error");
+        expect(reported?.field).toBe("a");
+        expect(reported?.rule).toBe("FastReject");
+        expect((reported?.error as Error).message).toBe("503");
     });
 
     it("les constats serveur survivent à la panne d'une autre règle", async () => {
