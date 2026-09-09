@@ -25,7 +25,6 @@ invalid or submitting. In most libraries that logic ends up scattered across the
 view as ad-hoc booleans:
 
 ```tsx
-// Recomposed by hand, in every field, forever:
 <input disabled={loading || submitting || !brand || readOnly} />
 {showError && touched && <p>{error}</p>}
 ```
@@ -97,12 +96,10 @@ their state, and gate submission — no React in sight:
 ```ts
 import { FormController, IValidator, type ValidationReport } from "slz-form";
 
-// The map declares what each field is worth. This is where narrowing comes from.
 type SignupFields = { email: string; password: string };
 
 const form = new FormController<SignupFields>({ name: "signup" });
 
-// A validator is the single authority on validity. Extend IValidator and report.
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 class EmailValidator extends IValidator<string> {
     protected validate(value: string, report: ValidationReport): void {
@@ -196,16 +193,13 @@ import { behaviorsFor } from "slz-form";
 
 const { prefill, loadOptions, lookup, suggest, lockWhile, hideWhen } = behaviorsFor(form);
 
-// Fill a field from an API on mount, locked and `loading` meanwhile:
 const brandPrefill = prefill({ field: "brand", fetch: () => fetchDefaultBrand() });
 
-// Lock one field while another is not yet consented — cross-field, read-only:
 const lockedUntilConsent = lockWhile({
     watch: ["consent"],
     when: ({ consent }) => consent !== true,
 });
 
-// Emit `invisible` (display-only) until a value is chosen:
 const onlyWhenOther = hideWhen({
     watch: ["brand"],
     when: ({ brand }) => brand !== "other",
@@ -213,6 +207,9 @@ const onlyWhenOther = hideWhen({
 
 form.field("otherBrand", { behaviors: [onlyWhenOther] });
 ```
+
+`prefill` fills a field from an API on mount, locked and `loading` meanwhile;
+`lockWhile` and `hideWhen` react to other fields declared in `watch`.
 
 When no helper fits, a behavior is just an object — the full lifecycle is
 `onMount` / `onChange` / `onDependencyChanged` / `onBlur` / `onFocus` /
@@ -250,12 +247,11 @@ wrapped:
 ```ts
 import { DebouncedValidator, ExternalValidator } from "slz-form";
 
-// Debounce an expensive rule while typing:
 new DebouncedValidator(new UsernameValidator(), 400);
-
-// Ask a server, and re-judge without the value changing (ExternalValidator).
 ```
 
+`DebouncedValidator` delays an expensive rule while the user types;
+`ExternalValidator` asks a server and can re-judge without the value changing.
 Rules do not run on an empty value (that is what `required` is for), unless the
 validator opts in.
 
@@ -291,12 +287,12 @@ type OrderFields = { lines: FieldArray<{ product: string; qty: number }> };
 const form = new FormController<OrderFields>({ name: "order" });
 const lines = form.array("lines");
 
-const id = lines.append();          // returns a stable row id
+const id = lines.append();          // a stable row id, never an index
 lines.row(id)?.form.field("qty").change(2);
 lines.move(0, 1);
 lines.remove(id);
 
-lines.values();                      // readonly array of row payloads
+lines.values();
 ```
 
 ## Submission
@@ -309,15 +305,13 @@ returns `true` only if the form is settled and valid.
 
 ```ts
 if (await form.submit()) {
-    // The form is valid and everything settled — now YOU send it.
     await api.save(form.values());
     form.reset();
-} else {
-    // Invalid (errors are already on screen) or it did not converge in time.
 }
 ```
 
-Keep the two reads distinct: `form.hasFlag("valid", "idle")` is the passive
+A `false` return means the form is invalid (its errors are already on screen)
+or it did not converge in time. Keep the two reads distinct: `form.hasFlag("valid", "idle")` is the passive
 "is it ready right now?" for a disabled button; `await form.submit()` is the
 active "make it ready, then judge." The actual network call is your code, after
 the gate opens — the engine never sends anything.
@@ -329,17 +323,19 @@ engine guard is violated, a rule crashes — the engine catches it, recovers, an
 records it. It **never logs to the console**: that is the consumer's call, not
 the engine's.
 
-You read those records off the form, when you have a reason to (after a rejected
-submit, in a debug panel, in a test):
+You read those records off the form, when you have a reason to — after a rejected
+submit, in a debug panel, in a test:
 
 ```ts
 if (!(await form.submit())) {
     for (const err of form.engineErrors) {
-        // { scope, kind: "hook-error" | "guard-violation", field, error, at }
         reportToSentry(err);
     }
 }
 ```
+
+Each `EngineError` carries `scope`, `kind` (`"hook-error"` or `"guard-violation"`),
+`field`, `error`, and `at`.
 
 This is a **pull** surface — an accessor, not a subscription. An engine error is
 a crash the engine already recovered from: a diagnostic record, not a live event
