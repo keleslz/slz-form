@@ -5,8 +5,8 @@
  * qu'une règle de validation casse, ou qu'une garde du moteur est violée, il
  * n'a personne à qui remonter l'erreur — la promesse qui la porte n'est
  * attendue par personne. Plutôt que de l'écrire dans la console, il la **route**
- * vers une surface portée par le `FormController`, que le consommateur lit
- * (`form.engineErrors`) ou écoute (`form.onEngineError`).
+ * vers un tampon porté par le `FormController`, que le consommateur lit par
+ * `form.engineErrors` quand il a une raison de le consulter.
  *
  * Cette surface est **hors du snapshot** et n'existe qu'au formulaire, jamais
  * sur `FieldView` : la vue lue par behaviors et validators n'ouvre aucune

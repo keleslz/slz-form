@@ -10,9 +10,9 @@ import { until, wait } from "./helpers";
 /**
  * Le moteur ne loggue plus jamais (invariant 38). Toute erreur asynchrone d'un
  * hook, tout échec de règle, toute violation de garde est **routée** vers le
- * formulaire : lisible par `form.engineErrors`, écoutable par
- * `form.onEngineError`. Chaque test vérifie donc deux choses — l'erreur atterrit
- * bien sur le formulaire, et la console n'a **jamais** été touchée.
+ * formulaire, lisible par `form.engineErrors`. Chaque test vérifie donc deux
+ * choses — l'erreur atterrit bien sur le formulaire, et la console n'a **jamais**
+ * été touchée.
  */
 describe("le moteur route ses erreurs vers le formulaire", () => {
     let errorSpy: ReturnType<typeof vi.spyOn>;
@@ -113,33 +113,6 @@ describe("le moteur route ses erreurs vers le formulaire", () => {
         await wait(20);
 
         expect(errorSpy).not.toHaveBeenCalled();
-    });
-
-    it("un abonné onEngineError qui lève ne fait ni boucler ni crasher", async () => {
-        const form = new FormController<{ a: string }>({ name: "e5" });
-        let calls = 0;
-        form.onEngineError(() => {
-            calls += 1;
-            throw new Error("abonné fautif");
-        });
-        const boom: IBehavior<string> = {
-            onChange: async () => {
-                await wait(5);
-                throw new Error("panne");
-            },
-        };
-        const field = form.field("a", { behaviors: [boom] });
-        field.mount();
-        form.mount();
-        field.change("x");
-        await until(() => form.engineErrors.length > 0);
-        await wait(20);
-
-        // Appelé une fois, son throw avalé — jamais re-routé, sinon la panne de
-        // l'abonné alimenterait le canal en boucle (trap B).
-        expect(calls).toBe(1);
-        expect(errorSpy).not.toHaveBeenCalled();
-        expect(form.engineErrors).toHaveLength(1);
     });
 
     it("le tampon est borné aux 50 plus récentes, et vidé par reset()", async () => {

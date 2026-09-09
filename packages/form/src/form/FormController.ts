@@ -69,12 +69,13 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
     private readonly graph = new DependencyGraph();
     private readonly listeners = new Set<Listener>();
     /**
-     * Le tampon des erreurs du moteur, et ses abonnés. **Hors du snapshot**
-     * (invariant 10) : le consommateur les lit par `engineErrors` ou les écoute
-     * par `onEngineError`, jamais par la surface de rendu.
+     * Le tampon des erreurs du moteur. **Hors du snapshot** (invariant 10) : le
+     * consommateur les lit par `engineErrors`, jamais par la surface de rendu.
+     * Un tampon, pas un canal d'abonnement : une erreur du moteur est un crash
+     * déjà rattrapé — un enregistrement de diagnostic, pas un événement à traiter
+     * en temps réel.
      */
     private readonly engineErrors_: EngineError[] = [];
-    private readonly engineErrorListeners = new Set<(error: EngineError) => void>();
     private readonly readOnlyView: FormView;
 
     private readonly settleTimeout: number;
@@ -274,29 +275,18 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
     }
 
     /**
-     * Reçoit une erreur du moteur remontée par un champ, la bufferise et notifie
-     * les abonnés (invariant 38). Le moteur ne loggue jamais.
+     * Reçoit une erreur du moteur remontée par un champ et la bufferise
+     * (invariant 38). Le moteur ne loggue jamais ; le consommateur lit le tampon
+     * par `engineErrors` quand il a une raison de le consulter — après un
+     * `submit()` refusé, dans un panneau de diagnostic, dans un test.
      *
-     * Buffer **et** push : un abonné tardif la retrouve dans `engineErrors`, et
-     * une erreur d'`onUnmount` arrivée après le cleanup n'est perdue pour
-     * personne. Le tampon est borné aux plus récentes.
-     *
-     * Chaque listener est enveloppé try/catch : un `onEngineError` qui lève est
-     * **avalé**, jamais re-routé (trap B). Le re-router bouclerait sans fin sur
-     * mount/change/unmount (invariant 35).
+     * Le tampon est borné aux plus récentes : une erreur d'`onUnmount` arrivée
+     * après le cleanup y reste lisible, rien n'est perdu.
      */
     reportEngineError(error: EngineError): void {
         this.engineErrors_.push(error);
         if (this.engineErrors_.length > ENGINE_ERROR_CAP) {
             this.engineErrors_.splice(0, this.engineErrors_.length - ENGINE_ERROR_CAP);
-        }
-        for (const listener of this.engineErrorListeners) {
-            try {
-                listener(error);
-            } catch {
-                // Avalé : un abonné qui lève ne doit ni faire boucler le canal,
-                // ni empêcher les autres abonnés d'être notifiés.
-            }
         }
     }
 
@@ -513,25 +503,13 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
      * récentes (bornées à {@link ENGINE_ERROR_CAP}). Vidées par `reset()`, pas
      * par la soumission.
      *
-     * **Hors du snapshot** (invariant 10) : à lire côté React dans un `useEffect`,
-     * pas pendant le rendu. Une copie défensive — le tampon interne ne fuite pas.
+     * **Hors du snapshot** (invariant 10) : ce n'est pas de l'état de rendu mais
+     * un enregistrement de diagnostic, à consulter quand on a une raison — après
+     * un `submit()` refusé, dans un panneau de debug, dans un test. Une copie
+     * défensive — le tampon interne ne fuite pas.
      */
     get engineErrors(): readonly EngineError[] {
         return [...this.engineErrors_];
-    }
-
-    /**
-     * S'abonne aux erreurs du moteur. Rend une fonction de désabonnement.
-     *
-     * L'abonné est notifié des erreurs **à venir** ; celles déjà captées sont
-     * dans `engineErrors`. Un abonné qui lève est avalé (trap B), jamais
-     * re-routé.
-     */
-    onEngineError(listener: (error: EngineError) => void): () => void {
-        this.engineErrorListeners.add(listener);
-        return () => {
-            this.engineErrorListeners.delete(listener);
-        };
     }
 
     /**

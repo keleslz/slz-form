@@ -6,9 +6,13 @@ Le moteur ne loggue plus jamais : il route ses erreurs vers le formulaire.
 
 Nouvelle surface publique sur `FormController`, **hors du snapshot** :
 
-- `form.onEngineError(listener): () => void` — s'abonner aux erreurs du moteur ;
 - `form.engineErrors: readonly EngineError[]` — les erreurs captées, bornées aux
   50 plus récentes, vidées par `reset()` (pas par la soumission).
+
+Une surface **pull** : un accesseur qu'on lit quand on a une raison (après un
+`submit()` refusé, dans un panneau de debug, dans un test), pas un abonnement.
+Une erreur du moteur est un crash déjà rattrapé — un enregistrement de
+diagnostic, pas un événement à traiter en temps réel.
 
 Le type `EngineError` et la classe `EngineGuardError` sont exportés.
 
