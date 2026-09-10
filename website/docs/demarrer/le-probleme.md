@@ -42,12 +42,12 @@ useEffect(() => {
 Ce qui coûte cher n'est pas la longueur, c'est ce que ce code installe :
 
 - **L'état métier vit dans le composant.** Le parent devient propriétaire de la
-  valeur, du `touched`, des options. Il n'est plus déplaçable ni testable seul.
+  valeur, du `touched`, des options ; il n'est plus déplaçable ni testable seul.
 - **Les règles d'affichage sont recalculées à la main.**
   `disabled={loading || submitting || !brand}` est réécrit, légèrement
   différemment, dans chaque champ. Une règle qui change se corrige à N endroits.
 - **Les dépendances entre champs sont implicites.** Rien ne dit que ce champ
-  dépend de `brand` sauf un tableau de `useEffect` qu'il faut lire pour le
+  dépend de `brand`, sinon un tableau de `useEffect` qu'il faut lire pour le
   découvrir.
 - **Les états impossibles sont représentables.** Rien n'empêche `touched=false`
   avec un `error` affiché, ou un spinner pendant que le champ est déjà en erreur.
@@ -58,8 +58,9 @@ Ce qui coûte cher n'est pas la longueur, c'est ce que ce code installe :
 
 ## Le même champ, avec le moteur
 
+Le behavior est déclaré une fois, dans le module du formulaire :
+
 ```ts
-// une fois, dans le module du formulaire
 const modelOptions = loadOptions({
     field: "model",
     watch: ["brand"],
@@ -71,22 +72,22 @@ const modelOptions = loadOptions({
 <SelectField name="model" label="Modèle" required behaviors={[modelOptions]} />
 ```
 
-Pas de `useState`, pas de `useEffect`, pas de spinner câblé à la main, pas de
-`disabled` composé de trois booléens. Ce n'est pas seulement plus court — c'est
-ce que ça rend **impossible** qui compte.
+Plus de `useState`, plus de `useEffect`, plus de spinner câblé à la main, plus
+de `disabled` composé de trois booléens. Ce n'est pas seulement plus court —
+c'est ce que ça rend **impossible** qui compte.
 
 ## Ce que le système garantit
 
 **La validité a une autorité unique.** Seul le Validator la produit. Aucun
 behavior ne peut le contredire, donc il n'y a jamais d'arbitrage entre deux
-sources qui ne sont pas d'accord. `IValidator<T>` est générique : le même
-contrat couvre texte, nombre, booléen, liste d'options, fichier, date, heure et
-datetime — chaque validateur valide son propre type, sans un seul cast.
+sources en désaccord. `IValidator<T>` est générique : le même contrat couvre
+texte, nombre, booléen, liste d'options, fichier, date, heure et datetime —
+chaque validateur juge son propre type, sans un seul cast.
 
-**Les dépendances sont déclarées, et vérifiées.** Un behavior liste les champs
-qu'il observe. Lire un champ non déclaré **lève**, et un cycle est rejeté au
-câblage plutôt que découvert en boucle infinie. Un champ peut lire les autres ;
-il ne peut jamais en écrire un.
+**Les dépendances sont déclarées, et vérifiées.** Un behavior ou un validator
+liste les champs qu'il observe dans `watch`. Lire un champ non déclaré **lève**,
+et un cycle est rejeté au câblage plutôt que découvert en boucle infinie. Un
+champ peut lire les autres ; il ne peut jamais en écrire un.
 
 **Un champ qui change ne re-rend pas les autres.** Chaque champ a son propre
 abonnement et un snapshot stable par référence. S'abonner au formulaire entier
