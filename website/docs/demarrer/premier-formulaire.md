@@ -23,9 +23,7 @@ class EmailValidator extends IValidator<string> {
     }
 }
 
-const form = new FormController<{ email: string; postcode: string; city: string }>({
-    name: "signup",
-});
+const form = new FormController<{ email: string }>({ name: "signup" });
 
 const email = form.field("email", { required: true, validator: new EmailValidator() });
 
@@ -60,7 +58,8 @@ export type CarFields = {
 
 export const carForm = new FormController<CarFields>({ name: "car-configuration" });
 
-export const { lookup, loadOptions, suggest, prefill, lockWhile, hideWhen } = behaviorsFor(carForm);
+export const { lookup, loadOptions, suggest, prefill, lockWhile, lockUntilValid, hideWhen } =
+    behaviorsFor(carForm);
 export const { useField, useForm, useFieldArray } = hooksFor(carForm);
 ```
 
@@ -71,9 +70,9 @@ Il n'y a plus de formulaire à nommer sur chaque champ, et `name` est vérifié 
 y compris contre le **type** du champ :
 
 ```tsx
-<NumberField name="mileage" />   // ✓
-<NumberField name="brand" />     // ✗ brand est un string, ne compile pas
-<TextField   name="typo" />      // ✗ champ inexistant, ne compile pas
+<NumberField name="mileage" label="Kilométrage" />   // ✓
+<NumberField name="brand" label="Marque" />          // ✗ brand est un string, ne compile pas
+<TextField   name="typo" label="Inconnu" />          // ✗ champ inexistant, ne compile pas
 ```
 
 C'est le prix assumé du narrowing : ajouter un champ coûte une ligne dans la map
@@ -87,10 +86,10 @@ observe dans `watch` est ce que reçoit le callback, narrowé sur la map :
 
 ```ts
 lookup({
-    field: "city",
-    watch: ["postcode"],
+    field: "model",
+    watch: ["brand"],
     debounce: 400,
-    fetch: ({ postcode }) => fetchCity(postcode),   // postcode: string
+    fetch: ({ brand }) => fetchDefaultModel(brand),   // brand: string
 });
 ```
 
@@ -98,11 +97,12 @@ Deux listes, et la distinction compte :
 
 | Depuis `behaviorsFor(form)` — typés sur la map | Exports nus — le nom du champ est à votre charge |
 |---|---|
-| `lookup`, `loadOptions`, `suggest`, `prefill`, `lockWhile`, `lockUntilValid`, `hideWhen` | `lookup`, `loadOptions`, `prefill`, `lockWhile`, `hideWhen`, `dependsOn`, `createBehavior`, `lockedWhilePending`, `openWhilePending` |
+| `lookup`, `loadOptions`, `suggest`, `prefill`, `lockWhile`, `lockUntilValid`, `hideWhen` | `lookup`, `loadOptions`, `prefill`, `lockWhile`, `hideWhen`, `dependsOn`, `createBehavior` |
 
-`suggest` et `lockUntilValid` n'existent que par `behaviorsFor` : ils lisent
-d'autres champs, donc ils n'ont de sens qu'une fois liés à une map qui les
-déclare.
+`suggest` n'a pas de `watch` : il ne lit aucun autre champ. S'il n'existe que par
+`behaviorsFor`, c'est parce que les options qu'il produit sont typées sur son
+propre champ. `lockUntilValid`, lui, est le seul qui lit d'autres champs — il
+observe leur **validité**, pas leur valeur (`on: ["validity"]`).
 
 Quand le besoin sort de l'ordinaire, le même comportement s'écrit à la main :
 [les trois formes du même prefill](../guides/preremplir.md) montrent le passage
