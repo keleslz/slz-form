@@ -11,8 +11,10 @@ description: useField, useForm, et pourquoi aucun useState ne recopie l'état du
 |---|---|
 | `hooksFor(form)` | rend `useField`, `useFieldArray` et `useForm` liés à un formulaire, typés par sa map |
 | `useField` | un champ : valeur, constats, flags, handlers |
+| `useForm` | le formulaire entier : `snapshot`, `values`, `errors`, flags, `submit`, `reset` |
 | `useFieldArray` | les lignes d'une liste : `rows`, `append`, `remove`, `move`, `clear` |
 | `useFieldOn(form, params)` | `useField` lié à un formulaire donné — sert à câbler un champ de ligne |
+| `useFieldArrayOn(form, name)` | `useFieldArray` lié à un formulaire donné — une liste imbriquée dans une ligne |
 | `FormProvider` | publie le `FormRegister` dans l'arbre, pour l'accès transverse |
 | `useFormRegister` | accès direct au register |
 
@@ -32,6 +34,9 @@ const { hasFlag, submit } = useForm();
     Envoyer
 </button>
 ```
+
+Les mots eux-mêmes — `valid`, `idle`, `locked`, `loading`… —, leur nature et qui
+les émet : [Flags](../modele/flags.md).
 
 :::note `error` au champ et au formulaire ne disent pas la même chose
 Au champ, `error` est ce qu'on **affiche** — éteint tant qu'on n'a pas touché,
