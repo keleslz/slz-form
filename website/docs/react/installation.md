@@ -21,6 +21,9 @@ même découpage qu'une slice :
 
 ```ts
 // src/form/signup-form.ts
+import { FormController } from "slz-form";
+import { hooksFor } from "slz-react-form";
+
 export type SignupFields = { email: string; postcode: string; city: string };
 
 export const signupForm = new FormController<SignupFields>({ name: "signup" });
@@ -65,6 +68,10 @@ function EmailField() {
 
 **Ajouter un champ au formulaire, c'est monter ce composant.** Rien à déclarer
 en amont.
+
+Les deux fonctions de lecture — `hasFlag` / `hasAny` — et l'isolation des rendus
+sont détaillées dans [Les hooks](./hooks.md) ; les listes, dans
+[Listes répétables](./listes.md).
 
 ## Pas de rendu serveur, pour l'instant
 
