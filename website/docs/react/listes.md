@@ -12,8 +12,8 @@ la composition ; chaque ligne est un formulaire à part entière.
 
 ```ts
 // src/form/invoice-form.ts
-import { FormController, type FieldArray, type FieldArrayRow } from "slz-form";
-import { hooksFor, useFieldOn } from "slz-react-form";
+import { FormController, type FieldArray } from "slz-form";
+import { hooksFor } from "slz-react-form";
 
 export type InvoiceLine = { label: string; qty: number };
 type InvoiceFields = { lines: FieldArray<InvoiceLine> };
