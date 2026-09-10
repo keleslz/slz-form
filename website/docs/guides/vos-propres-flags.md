@@ -12,7 +12,11 @@ connaître.
 
 ```ts
 onMount: (ctx) => ctx.state.mark("skeleton"),
-// plus tard
+```
+
+Puis, quand les données arrivent, le behavior le retire :
+
+```ts
 ctx.push(ctx.state.unmark("skeleton"));
 ```
 

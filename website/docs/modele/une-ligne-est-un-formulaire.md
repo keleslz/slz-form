@@ -19,7 +19,7 @@ const id = lines.append();
 
 const row = lines.row(id);          // `null` si la ligne a été retirée
 const qty = row!.field("qty");
-qty.mount();                        // comme pour un champ de formulaire
+qty.mount();
 qty.change(3);
 
 lines.remove(id);
@@ -50,8 +50,10 @@ class SharesMakeAHundred extends IValidator<string> {
     readonly watch = ["parts"];
     readonly validateWhenEmpty = true;
     protected validate(_value, report, ctx) {
-        const sum = (ctx.form.values().parts as { share: number }[])
-            .reduce((total, part) => total + part.share, 0);
+        const parts = ctx.form.values().parts;
+        const sum = Array.isArray(parts)
+            ? parts.reduce((total, part) => total + Number(part.share), 0)
+            : 0;
         report.errorIf(sum !== 100, `la somme fait ${sum}, pas 100`, { code: "sum" });
     }
 }
