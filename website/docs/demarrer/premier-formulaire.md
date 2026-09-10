@@ -2,45 +2,53 @@
 id: premier-formulaire
 title: Premier formulaire
 sidebar_position: 3
-description: Déclarer la map des champs, dériver les helpers, monter un champ.
+description: Déclarer la map des champs, dériver les helpers typés, monter un champ.
 ---
 
 # Premier formulaire
 
 ## Le moteur, seul
 
-```ts
-import { behaviorsFor, FormController, IValidator, type ValidationReport } from "slz-form";
-
-class EmailValidator extends IValidator<string> {
-    protected validate(value: string, report: ValidationReport) {
-        report.errorIf(!value.includes("@"), "Adresse email invalide");
-    }
-}
-
-// la map déclare ce que vaut chaque champ : tout le reste s'infère
-const form = new FormController<{ email: string; postcode: string; city: string }>({
-    name: "signup",
-});
-
-const email = form.field("email", { required: true, validator: new EmailValidator() });
-email.listen(() => render(email.snapshot));
-email.mount();
-email.change("ada@lovelace.dev");
-
-email.hasFlag("valid");   // true
-```
-
 Aucun framework requis : ce code tourne tel quel dans un navigateur, sous Node,
 Deno ou Bun.
 
+```ts
+import { FormController, IValidator, type ValidationReport } from "slz-form";
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+class EmailValidator extends IValidator<string> {
+    protected validate(value: string, report: ValidationReport): void {
+        if (!EMAIL.test(value)) report.error("Adresse email invalide");
+    }
+}
+
+const form = new FormController<{ email: string }>({ name: "signup" });
+
+const email = form.field("email", { required: true, validator: new EmailValidator() });
+
+const unsubscribe = email.listen(() => console.log(email.snapshot.flags));
+email.mount();
+email.change("ada@lovelace.dev");
+
+email.hasFlag("valid");   // true — change() a marqué le champ touché, la règle a jugé
+```
+
+La map passée à `FormController` déclare ce que vaut chaque champ ; tout le reste
+s'en infère — le nom passé à `field()`, la valeur, le meta des options. Un
+`field()` répété rend la même instance : le champ est créé au premier appel.
+
 ## La map, et ce qu'elle fait gagner
 
-Le formulaire déclare ce que vaut chaque champ ; behaviors et hooks en dérivent.
-Écrit une fois, dans le module du formulaire :
+Le formulaire se déclare une fois, dans son module contextualisé — le pendant
+d'une slice. Behaviors et hooks en sont dérivés, donc entièrement typés sur la
+map :
 
 ```ts
 // src/form/car-configuration-form.ts        (≈ une slice)
+import { behaviorsFor, FormController } from "slz-form";
+import { hooksFor } from "slz-react-form";
+
 export type CarFields = {
     brand: string;
     model: string;
@@ -50,17 +58,21 @@ export type CarFields = {
 
 export const carForm = new FormController<CarFields>({ name: "car-configuration" });
 
-export const { lookup, loadOptions, suggest, prefill } = behaviorsFor(carForm);
-export const { useField, useFieldArray, useForm } = hooksFor(carForm);
+export const { lookup, loadOptions, suggest, prefill, lockWhile, lockUntilValid, hideWhen } =
+    behaviorsFor(carForm);
+export const { useField, useForm, useFieldArray } = hooksFor(carForm);
 ```
+
+`CarFields` est un `type`, pas une `interface` : seul le premier porte la
+signature d'index implicite qu'exige la contrainte `FieldsShape` du moteur.
 
 Il n'y a plus de formulaire à nommer sur chaque champ, et `name` est vérifié —
 y compris contre le **type** du champ :
 
 ```tsx
-<NumberField name="mileage" />   // ✓
-<NumberField name="brand" />     // ✗ ne compile pas : brand est un string
-<TextField   name="typo" />      // ✗ ne compile pas : champ inexistant
+<NumberField name="mileage" label="Kilométrage" />   // ✓
+<NumberField name="brand" label="Marque" />          // ✗ brand est un string, ne compile pas
+<TextField   name="typo" label="Inconnu" />          // ✗ champ inexistant, ne compile pas
 ```
 
 C'est le prix assumé du narrowing : ajouter un champ coûte une ligne dans la map
@@ -69,16 +81,15 @@ consommateur.
 
 ## Les behaviors prêts à l'emploi
 
-Dérivés du formulaire, donc entièrement typés :
+`behaviorsFor(carForm)` rend sept helpers, tous liés à la map. Ce qu'un champ
+observe dans `watch` est ce que reçoit le callback, narrowé sur la map :
 
 ```ts
-const { lookup, suggest, prefill } = behaviorsFor(carForm);
-
 lookup({
-    field: "city",
-    watch: ["postcode"],
+    field: "model",
+    watch: ["brand"],
     debounce: 400,
-    fetch: ({ postcode }) => fetchCity(postcode),   // postcode: string
+    fetch: ({ brand }) => fetchDefaultModel(brand),   // brand: string
 });
 ```
 
@@ -86,13 +97,14 @@ Deux listes, et la distinction compte :
 
 | Depuis `behaviorsFor(form)` — typés sur la map | Exports nus — le nom du champ est à votre charge |
 |---|---|
-| `lookup`, `loadOptions`, `suggest`, `prefill`, `lockWhile`, `lockUntilValid`, `hideWhen` | `lookup`, `loadOptions`, `prefill`, `lockWhile`, `hideWhen`, `dependsOn`, `createBehavior`, `lockedWhilePending`, `openWhilePending` |
+| `lookup`, `loadOptions`, `suggest`, `prefill`, `lockWhile`, `lockUntilValid`, `hideWhen` | `lookup`, `loadOptions`, `prefill`, `lockWhile`, `hideWhen`, `dependsOn`, `createBehavior` |
 
-`suggest` et `lockUntilValid` n'existent que par `behaviorsFor` : ils lisent
-d'autres champs, donc ils n'ont de sens qu'une fois liés à une map qui les
-déclare.
+`suggest` n'a pas de `watch` : il ne lit aucun autre champ. S'il n'existe que par
+`behaviorsFor`, c'est parce que les options qu'il produit sont typées sur son
+propre champ. `lockUntilValid`, lui, est le seul qui lit d'autres champs — il
+observe leur **validité**, pas leur valeur (`on: ["validity"]`).
 
-Le même besoin s'écrit toujours à la main quand il sort de l'ordinaire :
+Quand le besoin sort de l'ordinaire, le même comportement s'écrit à la main :
 [les trois formes du même prefill](../guides/preremplir.md) montrent le passage
 de la classe écrite entièrement à l'utilitaire en trois lignes.
 
@@ -123,10 +135,7 @@ Seule l'**écriture** du callback change, parce que JavaScript ne sait pas
 destructurer un nom qui n'est pas un identifiant :
 
 ```ts
-// destructuration avec renommage
 fetch: async ({ "Toto-1": toto1, "2-champ": deux }) => { … }   // string, number
-
-// ou accès par index
 fetch: async (deps) => deps["Toto-1"]                          // string | undefined
 ```
 
