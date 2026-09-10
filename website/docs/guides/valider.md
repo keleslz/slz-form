@@ -7,6 +7,11 @@ description: Constats, gravité, codes, validators composés et erreurs serveur.
 
 # Valider
 
+Un validator **juge** une valeur : il est la seule autorité sur la validité. On
+étend `IValidator<T>` et on rapporte ses constats par `report` ; une règle
+asynchrone renvoie une promesse, et le champ porte `loading` le temps qu'elle
+retombe.
+
 ## Une règle
 
 ```ts
