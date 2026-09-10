@@ -25,7 +25,7 @@ lines.row(id)?.field("qty").change(3);
 
 lines.move(0, 1);
 lines.remove(id);
-lines.values();                     // les valeurs, ligne par ligne
+lines.values();
 ```
 
 `append()` rend l'identifiant de la nouvelle ligne ; `row(id)` rend la ligne, ou
@@ -79,9 +79,9 @@ Une liste répond aux mêmes deux fonctions que le reste, et publie `valid` ·
 `error` — jamais `pristine` : c'est un agrégat, pas un champ qu'on touche.
 
 ```ts
-lines.ui.hasFlag("error");   // au moins une ligne refuse
-lines.errors;                // les constats, à plat
-lines.isBusy;                // une ligne a du travail en vol
+lines.ui.hasFlag("error");     // au moins une ligne refuse
+lines.errors;                  // les constats, à plat
+lines.ui.hasFlag("loading");   // une ligne a du travail en vol
 ```
 
 Côté React, le même état agrégé se lit par `useForm().snapshot.arrays` — et non
