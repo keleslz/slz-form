@@ -1,3 +1,4 @@
+import { EngineGuardError } from "../error/EngineError";
 import {
     IValidator,
     type ValidationContext,
@@ -88,12 +89,14 @@ export class CompositeValidator<T = string> extends IValidator<T> {
                 const result = member.runInto(value, report, this.contextFor(member, ctx));
                 if (result instanceof Promise) {
                     pending.push(result.catch((error: unknown) => {
-                        reportRuleFailure(ctx.name, member, error);
+                        // Routé vers le formulaire par le sink porté par `ctx`,
+                        // jamais journalisé (invariant 38).
+                        ctx.reportFailure?.(member.constructor.name, error);
                         report.fail();
                     }));
                 }
             } catch (error) {
-                reportRuleFailure(ctx.name, member, error);
+                ctx.reportFailure?.(member.constructor.name, error);
                 report.fail();
             }
         }
@@ -126,12 +129,17 @@ export class CompositeValidator<T = string> extends IValidator<T> {
             },
             watched: (name) => {
                 if (!declared.includes(name)) {
-                    throw new Error(
+                    // Garde du moteur : erreur typée, classée `guard-violation`
+                    // au site du catch.
+                    throw new EngineGuardError(
                         `[slz] Validator on "${ctx.name}" reads "${name}" without declaring it in \`watch\`.`,
                     );
                 }
                 return ctx.watched(name);
             },
+            // Le sink traverse jusqu'au membre : un membre lui-même composite ou
+            // différé route son échec au même point.
+            reportFailure: ctx.reportFailure,
         };
     }
 
@@ -148,13 +156,4 @@ export class CompositeValidator<T = string> extends IValidator<T> {
         super.reset();
     }
 
-}
-
-/** Signale l'échec d'une règle sans l'imputer aux autres membres. */
-function reportRuleFailure(field: string, member: object, error: unknown): void {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(
-        `[slz] Validation rule "${member.constructor.name}" of "${field}" failed: ${message}`,
-        error,
-    );
 }

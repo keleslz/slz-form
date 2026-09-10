@@ -7,6 +7,7 @@ import {
     type FieldChanges,
     type IBehavior,
 } from "../behavior";
+import { EngineGuardError, type EngineError } from "../error/EngineError";
 import { Lifecycle } from "../lifecycle";
 import { BehaviorState, UiState } from "../state";
 import type { AnyUiFlag, ValidityFlag } from "../state";
@@ -309,8 +310,11 @@ export class FieldController<T = string, M = never> {
                     // `unmount()` lui-même, donc sautait la neutralisation des
                     // tranches, l'abandon du validator et le `commit` final —
                     // exactement la panne que le passage par `invoke` corrigeait.
+                    // L'abort a déjà eu lieu (le form vit) ; on route quand même
+                    // l'échec du nettoyage — un onUnmount qui rejette après le
+                    // cleanup ne doit pas disparaître (trap C).
                     void Promise.resolve(result).catch(
-                        (error: unknown) => reportEngineError(this.name, error),
+                        (error: unknown) => this.routeBehaviorError(error),
                     );
                 }
                 return undefined;
@@ -581,7 +585,7 @@ export class FieldController<T = string, M = never> {
         try {
             await this.runValidation();
         } catch (error) {
-            reportEngineError(this.name, error);
+            this.routeBehaviorError(error);
             this.commit();
         }
     }
@@ -624,6 +628,9 @@ export class FieldController<T = string, M = never> {
                 }
                 return this.host?.formView().field(name) ?? null;
             },
+            // Le sink du validator : ce qu'une règle casse est routé vers le
+            // formulaire, `scope: "validator"`, jamais journalisé.
+            reportFailure: (rule, error) => this.routeValidatorError(rule, error),
         };
     }
 
@@ -646,9 +653,38 @@ export class FieldController<T = string, M = never> {
         try {
             return hook();
         } catch (error) {
-            reportEngineError(this.name, error);
+            this.routeBehaviorError(error);
             return undefined;
         }
+    }
+
+    /**
+     * Route une erreur de behavior vers le formulaire (invariant 38).
+     *
+     * `scope: "behavior"`, et la nature lue par `instanceof` : une garde du
+     * moteur donne `guard-violation`, tout le reste `hook-error`. Sans host —
+     * champ jamais rattaché à un formulaire —, silence assumé : personne n'écoute.
+     */
+    private routeBehaviorError(error: unknown): void {
+        this.host?.reportEngineError({
+            scope: "behavior",
+            kind: engineErrorKind(error),
+            field: this.name,
+            error,
+            at: Date.now(),
+        });
+    }
+
+    /** Route l'échec d'une règle vers le formulaire — `scope: "validator"`. */
+    private routeValidatorError(rule: string, error: unknown): void {
+        this.host?.reportEngineError({
+            scope: "validator",
+            kind: engineErrorKind(error),
+            field: this.name,
+            rule,
+            error,
+            at: Date.now(),
+        });
     }
 
     private runChange(value: T | undefined): void {
@@ -816,8 +852,11 @@ export class FieldController<T = string, M = never> {
                 // chemin d'échec, et la fermait deux fois.
                 (error: unknown) => {
                     if (signal.aborted || pass.generation !== this.generationOf(behavior)) {
-                        // Supplantée : même raison qu'au succès — elle lâche
-                        // l'attente sans rien rendre.
+                        // Supplantée ou abortée : elle lâche l'attente sans rien
+                        // rendre. Son rejet n'est **pas** routé (trap C) — la
+                        // passe qui l'a remplacée est la seule pertinente, et un
+                        // démontage a déjà avorté le champ ; personne n'écoute
+                        // plus ce résultat périmé. Silence assumé.
                         this.settle(behavior, pass, undefined);
                         this.commit();
                         return;
@@ -828,10 +867,10 @@ export class FieldController<T = string, M = never> {
                     // sort du payload — donc une valeur obligatoire disparaît en
                     // silence et le formulaire se déclare valide.
                     this.release(behavior, pass);
-                    // Et il est signalé : le chemin synchrone passe par `invoke`,
-                    // qui rapporte. Se taire ici rendait un behavior asynchrone
-                    // définitivement muet, sans une ligne de journal.
-                    reportEngineError(this.name, error);
+                    // Et il est routé vers le formulaire : le chemin synchrone
+                    // passe par `invoke`, qui route aussi. Se taire ici rendait
+                    // un behavior asynchrone définitivement muet.
+                    this.routeBehaviorError(error);
                     this.commit();
                 },
             );
@@ -1153,11 +1192,9 @@ function toValidator<T>(validator?: IValidator<T> | readonly IValidator<T>[]): I
 }
 
 /**
- * Une erreur du moteur — une garde violée, une règle qui casse — ne doit pas
- * remonter dans une promesse que personne n'attend. On la signale, bruyamment,
- * sans faire tomber l'application.
+ * La nature d'une erreur, lue par `instanceof` : le moteur a levé une garde, ou
+ * le code consommateur a cassé.
  */
-function reportEngineError(field: string, error: unknown): void {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`[slz] Validation of "${field}" failed: ${message}`, error);
+function engineErrorKind(error: unknown): EngineError["kind"] {
+    return error instanceof EngineGuardError ? "guard-violation" : "hook-error";
 }

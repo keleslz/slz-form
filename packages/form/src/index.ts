@@ -7,6 +7,10 @@
  * et n'y figurent pas.
  */
 
+// ── erreurs du moteur ───────────────────────────────────────────────────────
+export { EngineGuardError } from "./error/EngineError";
+export type { EngineError } from "./error/EngineError";
+
 // ── état de l'UI ──────────────────────────────────────────────────────────
 export { BehaviorState } from "./state/BehaviorState";
 export { UiState } from "./state/UiState";

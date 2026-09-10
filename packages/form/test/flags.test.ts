@@ -535,33 +535,36 @@ describe("la garde ne casse pas ce qu'elle protège", () => {
         expect(isReservedFlag("skeleton")).toBe(false);
     });
 
-    it("un mot refusé dans un behavior asynchrone est signalé, pas tu", async () => {
-        const reported: string[] = [];
+    it("un mot refusé dans un behavior asynchrone atterrit sur le formulaire, pas dans la console", async () => {
+        const seen: string[] = [];
         const original = console.error;
-        console.error = (...args: unknown[]) => { reported.push(args.map(String).join(" ")); };
+        console.error = (...args: unknown[]) => { seen.push(args.map(String).join(" ")); };
+        const form = new FormController<{ asyncGuard: string }>({ name: "f27" });
         try {
-            const form = new FormController<{ asyncGuard: string }>({ name: "f27" });
             const late: IBehavior<string> = {
                 onMount: async (ctx) => {
                     ctx.push(ctx.state.mark("skeleton"));
                     await wait(10);
+                    // "touched" appartient au moteur : la garde lève une
+                    // EngineGuardError depuis un chemin asynchrone.
                     return ctx.state.mark("touched");
                 },
             };
             const field = form.field("asyncGuard", { behaviors: [late] });
             field.mount();
             form.mount();
-            await until(
-                () => reported.some((line) => line.includes("asyncGuard")),
-                { timeout: 1000 },
-            );
+            await until(() => form.engineErrors.length > 0, { timeout: 1000 });
         } finally {
             console.error = original;
         }
-        // Le chemin synchrone rapportait déjà ; se taire ici rendait un behavior
-        // asynchrone définitivement muet. On vérifie **ce** message, pas qu'il
-        // se soit passé quelque chose dans la console.
-        expect(reported.find((line) => line.includes("asyncGuard"))).toMatch(/appartient au moteur/);
+        // Le moteur ne loggue plus : la garde violée est routée vers le
+        // formulaire et classée guard-violation par `instanceof EngineGuardError`.
+        expect(seen).toEqual([]);
+        const [reported] = form.engineErrors;
+        expect(reported?.scope).toBe("behavior");
+        expect(reported?.kind).toBe("guard-violation");
+        expect(reported?.field).toBe("asyncGuard");
+        expect((reported?.error as Error).message).toMatch(/appartient au moteur/);
     });
 });
 
@@ -802,7 +805,7 @@ describe("rendre l'attente, c'est rendre ce qu'elle a ajouté", () => {
 });
 
 describe("ce qui doit survivre à un démontage", () => {
-    it("un onUnmount asynchrone qui rejette est rattrapé", async () => {
+    it("un onUnmount asynchrone qui rejette est routé vers le formulaire, le form vit", async () => {
         const form = new FormController<{ a: string }>({ name: "f36" });
         const messy: IBehavior<string> = {
             onUnmount: async () => {
@@ -816,18 +819,26 @@ describe("ce qui doit survivre à un démontage", () => {
         await wait(10);
 
         const original = console.error;
-        const reported: string[] = [];
-        console.error = (...args: unknown[]) => { reported.push(args.map(String).join(" ")); };
+        const seen: string[] = [];
+        console.error = (...args: unknown[]) => { seen.push(args.map(String).join(" ")); };
         try {
             field.unmount();
             // `invoke` ne couvre que le throw synchrone : sans `catch` sur le
-            // retour, ce rejet était une promesse non rattrapée, donc la fin du
-            // process sous Node.
-            await until(() => reported.some((line) => line.includes("nettoyage raté")), { timeout: 1000 });
+            // retour, ce rejet était une promesse non rattrapée. Il est désormais
+            // routé vers le formulaire après l'abort — le form vit, son tampon
+            // le capte (trap C).
+            await until(
+                () => form.engineErrors.some((e) => (e.error as Error).message === "nettoyage raté"),
+                { timeout: 1000 },
+            );
         } finally {
             console.error = original;
         }
+        expect(seen).toEqual([]);
         expect(field.isUnmounted).toBe(true);
+        const reported = form.engineErrors.find((e) => (e.error as Error).message === "nettoyage raté");
+        expect(reported?.scope).toBe("behavior");
+        expect(reported?.kind).toBe("hook-error");
     });
 
     it("un champ retiré pendant la soumission est libéré lui aussi", async () => {
@@ -958,12 +969,16 @@ describe("rien ne fait dérailler le démontage", () => {
         await wait(10);
 
         const original = console.error;
-        console.error = () => undefined;
+        const seen: string[] = [];
+        console.error = (...args: unknown[]) => { seen.push(args.map(String).join(" ")); };
         try {
             expect(() => form.unmount()).not.toThrow();
         } finally {
             console.error = original;
         }
+        // Le moteur ne loggue plus : le rejet du thenable est routé vers le
+        // formulaire, jamais écrit dans la console.
+        expect(seen).toEqual([]);
         expect(b.isUnmounted).toBe(true);
         expect(a.snapshot.hasFlag("mounted")).toBe(false);
     });
@@ -1425,24 +1440,31 @@ describe("la référence appartient à la passe", () => {
         expect(await form.submit()).toBe(true);
     });
 
-    it("un thenable dont then lève ne fait dérailler aucun hook", () => {
+    it("un thenable dont then lève ne fait dérailler aucun hook, et est routé", () => {
         const form = new FormController<{ a: string; b: string }>({ name: "f59" });
         const trapped: IBehavior<string> = {
             onMount: () => ({ then: () => { throw new Error("then piégé"); } }) as never,
         };
         const a = form.field("a", { behaviors: [trapped] });
         const b = form.field("b", {});
-        a.mount();
-        b.mount();
 
         const original = console.error;
-        console.error = () => undefined;
+        const seen: string[] = [];
+        console.error = (...args: unknown[]) => { seen.push(args.map(String).join(" ")); };
         try {
+            // Le spy couvre les montages : c'est `a.mount()` qui déclenche le
+            // thenable piégé, et le moteur ne doit toucher la console à aucun
+            // moment.
+            a.mount();
+            b.mount();
             expect(() => form.mount()).not.toThrow();
         } finally {
             console.error = original;
         }
+        expect(seen).toEqual([]);
         expect(b.snapshot.hasFlag("mounted")).toBe(true);
+        // Routé vers le formulaire au lieu d'être journalisé.
+        expect(form.engineErrors.length).toBeGreaterThan(0);
     });
 });
 

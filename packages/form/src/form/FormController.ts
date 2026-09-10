@@ -9,6 +9,7 @@ import {
     type ValueOf,
 } from "../field";
 import type { FieldChanges } from "../behavior/IBehavior";
+import type { EngineError } from "../error/EngineError";
 import { FieldArrayController } from "../array/FieldArrayController";
 import type { ArrayNameOf, PlainNameOf, RowOf } from "../array/FieldArray";
 import { Lifecycle } from "../lifecycle";
@@ -29,6 +30,13 @@ export type FieldNameOf<TFields extends FieldsShape> = PlainNameOf<TFields>;
 const MAX_SETTLE_ROUNDS = 5;
 /** Filet de sécurité : le graphe interdit les cycles, ceci attrape les oscillations. */
 const MAX_PROPAGATION_DEPTH = 50;
+
+/**
+ * Taille maximale du tampon d'erreurs du moteur. On garde les **plus récentes** :
+ * un formulaire qui vit longtemps et casse en boucle ne doit pas retenir un
+ * historique sans fin, et ce qui vient de se produire prime.
+ */
+const ENGINE_ERROR_CAP = 50;
 
 export interface FormParams {
     name: string;
@@ -60,6 +68,14 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
     private readonly arrays = new Map<string, FieldArrayController<FieldsShape>>();
     private readonly graph = new DependencyGraph();
     private readonly listeners = new Set<Listener>();
+    /**
+     * Le tampon des erreurs du moteur. **Hors du snapshot** (invariant 10) : le
+     * consommateur les lit par `engineErrors`, jamais par la surface de rendu.
+     * Un tampon, pas un canal d'abonnement : une erreur du moteur est un crash
+     * déjà rattrapé — un enregistrement de diagnostic, pas un événement à traiter
+     * en temps réel.
+     */
+    private readonly engineErrors_: EngineError[] = [];
     private readonly readOnlyView: FormView;
 
     private readonly settleTimeout: number;
@@ -258,6 +274,22 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         }
     }
 
+    /**
+     * Reçoit une erreur du moteur remontée par un champ et la bufferise
+     * (invariant 38). Le moteur ne loggue jamais ; le consommateur lit le tampon
+     * par `engineErrors` quand il a une raison de le consulter — après un
+     * `submit()` refusé, dans un panneau de diagnostic, dans un test.
+     *
+     * Le tampon est borné aux plus récentes : une erreur d'`onUnmount` arrivée
+     * après le cleanup y reste lisible, rien n'est perdu.
+     */
+    reportEngineError(error: EngineError): void {
+        this.engineErrors_.push(error);
+        if (this.engineErrors_.length > ENGINE_ERROR_CAP) {
+            this.engineErrors_.splice(0, this.engineErrors_.length - ENGINE_ERROR_CAP);
+        }
+    }
+
     private dispatch(name: string, changes: FieldChanges): void {
         const observers = this.graph.observersOf(name);
         if (observers.length === 0) {
@@ -443,6 +475,10 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         for (const rows of this.arrays.values()) {
             rows.reset();
         }
+        // Le tampon d'erreurs suit le cycle de vie du remplissage : `reset()` le
+        // vide, la soumission le laisse intact (une erreur survenue en
+        // soumettant doit rester lisible après coup).
+        this.engineErrors_.length = 0;
         this.setStatus("idle");
     }
 
@@ -461,6 +497,20 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             this.listeners.delete(listener);
         };
     };
+
+    /**
+     * Les erreurs du moteur captées jusqu'ici, des plus anciennes aux plus
+     * récentes (bornées à {@link ENGINE_ERROR_CAP}). Vidées par `reset()`, pas
+     * par la soumission.
+     *
+     * **Hors du snapshot** (invariant 10) : ce n'est pas de l'état de rendu mais
+     * un enregistrement de diagnostic, à consulter quand on a une raison — après
+     * un `submit()` refusé, dans un panneau de debug, dans un test. Une copie
+     * défensive — le tampon interne ne fuite pas.
+     */
+    get engineErrors(): readonly EngineError[] {
+        return [...this.engineErrors_];
+    }
 
     /**
      * Le payload : tous les champs **montés**, masqués inclus. Un champ figure
