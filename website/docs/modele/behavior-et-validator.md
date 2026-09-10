@@ -32,14 +32,17 @@ sources qui ne sont pas d'accord — et cet arbitrage n'a pas de bonne réponse.
 C'est ce qui rend les flags dignes de confiance : `valid` veut dire qu'un juge
 s'est prononcé, pas qu'un composant l'a décrété.
 
-Pour que la séparation tienne sans rien rendre impossible, le juge a des
-**yeux** et le réacteur une **sonnette** :
+Pour que la séparation tienne sans rien rendre impossible, le juge reçoit de
+quoi travailler — jamais de quoi écrire. Des **yeux** : il déclare `watch` et
+lit `ctx.watched(...)`. Une **sonnette** : `requestRevalidation()`, qu'il
+actionne pour rejuger quand son verdict peut changer sans que la valeur bouge.
 
 | Besoin | Comment |
 |---|---|
 | Confirmer un mot de passe, ordonner deux dates | le validator déclare `watch` et lit `ctx.watched(...)` |
 | `required` seulement dans certains cas | le validator décide, avec `validateWhenEmpty` |
 | Une erreur renvoyée par le serveur | `ExternalValidator`, composé avec les règles métier |
+| Rejuger après coup, sans nouvelle frappe | `requestRevalidation()`, la sonnette du validator |
 | Un avertissement qui ne bloque pas | `report.warn(...)` |
 | Router un message vers une snackbar | `report.error(msg, { code })`, et la vue lit `code` |
 | Verrouiller tant qu'un autre champ n'est pas valide | `lockUntilValid({ watch })` |
@@ -57,11 +60,11 @@ la **configuration** — une URL, un debounce —, jamais de l'état, sinon la
 partager entre deux champs les coupleraient.
 
 ```ts
-// ✓ partageable : ne porte que sa configuration
-const prefillRef = prefill({ field: "customerReference", fetch: fetchReference });
+// ✓ partageable : ne porte que sa configuration, aucun état de champ
+const prefillFromProfile = prefill(fetchProfileDefault);
 
-form.field("a", { behaviors: [prefillRef] });
-form.field("b", { behaviors: [prefillRef] });
+form.field("shipTo", { behaviors: [prefillFromProfile] });
+form.field("billTo", { behaviors: [prefillFromProfile] });
 ```
 
 ## Un champ lit, il n'écrit jamais chez le voisin
