@@ -2,7 +2,7 @@
 id: behavior-et-validator
 title: Behavior ou Validator ?
 sidebar_position: 2
-description: Le réacteur a une sonnette, le juge a des yeux — et l'autorité ne se partage pas.
+description: Le juge a les yeux et la sonnette ; le réacteur réagit, il ne décide jamais de la validité.
 ---
 
 # Behavior ou Validator ?
