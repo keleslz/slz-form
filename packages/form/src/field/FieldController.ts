@@ -1019,6 +1019,21 @@ export class FieldController<T = string, M = never> {
                 }
                 this.assign(next);
             },
+            clear: () => {
+                if (superseded()) {
+                    return;
+                }
+                // Le champ repart de zéro : ce n'est pas l'utilisateur qui l'a
+                // vidé, donc rien ne doit s'allumer avant qu'il y revienne
+                // (arbitrage 37). Le verdict, lui, reste rendu.
+                this.touched = false;
+                if (this.value === undefined) {
+                    // `assign` ne ferait rien : il faut quand même republier.
+                    this.commit();
+                    return;
+                }
+                this.assign(undefined);
+            },
             setOptions: (options) => {
                 if (superseded()) {
                     return;

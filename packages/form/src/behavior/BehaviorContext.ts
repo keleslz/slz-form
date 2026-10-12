@@ -32,12 +32,12 @@ export interface BehaviorContext<T = string, M = never> {
     /**
      * Aborted on unmount: guard after every `await`.
      *
-     * Une passe supplantée cesse aussi d'écrire : `setValue`, `setOptions` et
-     * `push` y deviennent muets, sans que le signal soit avorté. C'est le cas
-     * après un `reset()`, et après un `recover()` **pour le behavior dont il a
-     * libéré l'attente** — un voisin qui n'avait rien en vol continue, lui, de
-     * publier. Dans `onUnmount`, les trois sont muets d'office : le hook sert à
-     * nettoyer, pas à publier.
+     * Une passe supplantée cesse aussi d'écrire : `setValue`, `clear`,
+     * `setOptions` et `push` y deviennent muets, sans que le signal soit
+     * avorté. C'est le cas après un `reset()`, et après un `recover()` **pour
+     * le behavior dont il a libéré l'attente** — un voisin qui n'avait rien en
+     * vol continue, lui, de publier. Dans `onUnmount`, ils sont muets d'office :
+     * le hook sert à nettoyer, pas à publier.
      */
     readonly signal: AbortSignal;
 
@@ -48,6 +48,17 @@ export interface BehaviorContext<T = string, M = never> {
      * from a prefill or a dependency is not a user interaction.
      */
     setValue(next: T | undefined): void;
+
+    /**
+     * Vide la valeur **et** rend le champ non touché : il repart de zéro.
+     *
+     * Pour un champ dont la valeur n'a plus de sens — la liste d'un select
+     * dépendant vient de changer sous lui. `setValue(undefined)` laisserait
+     * `touched` en place, et un champ obligatoire afficherait « requis » pour
+     * un effacement que l'utilisateur n'a pas fait. Le verdict n'est pas
+     * touché : vide et obligatoire, le formulaire ne part toujours pas.
+     */
+    clear(): void;
 
     /** Publishes the option list (select / multi-select / radio). */
     setOptions(options: readonly FieldOption<OptionValue<T>, M>[]): void;

@@ -332,4 +332,77 @@ describe("régressions", () => {
         expect(hidden?.snapshot.hasFlag("invisible")).toBe(true);
         expect(form.values()).toEqual({ rows: [{ visible: "montré", caché: "secret" }] });
     });
+
+    it("B15 — un select dépendant vidé par sa dépendance n'allume pas « requis »", async () => {
+        const form = new FormController<{ brand: string; model: string }>({ name: "b15" });
+        const { loadOptions } = behaviorsFor(form);
+        const brand = form.field("brand");
+        const model = form.field("model", {
+            required: true,
+            behaviors: [loadOptions({
+                field: "model",
+                watch: ["brand"],
+                fetch: async () => {
+                    await wait(10);
+                    return [{ value: "a", label: "A" }];
+                },
+            })],
+        });
+        brand.mount();
+        model.mount();
+        form.mount();
+        brand.change("peugeot");
+        await until(() => model.snapshot.options.length > 0 && !model.snapshot.hasFlag("loading"));
+
+        // L'utilisateur choisit un modèle, puis quitte le champ : il est touché.
+        model.change("a");
+        model.blur();
+        await until(() => model.snapshot.hasFlag("valid"));
+
+        // La marque change : la liste part sous le champ, qui est vidé. Ce
+        // n'est pas l'utilisateur qui l'a vidé — « requis » ne doit s'allumer
+        // ni pendant le chargement, ni une fois la liste revenue.
+        brand.change("renault");
+        expect(model.snapshot.value).toBeUndefined();
+        expect(model.snapshot.hasFlag("loading")).toBe(true);
+        expect(model.snapshot.hasFlag("error")).toBe(false);
+        expect(model.snapshot.hasFlag("touched")).toBe(false);
+
+        await until(() => !model.snapshot.hasFlag("loading"));
+        await wait(10);
+        expect(model.snapshot.hasFlag("error")).toBe(false);
+        expect(model.snapshot.hasFlag("pristine")).toBe(true);
+
+        // Le verdict, lui, n'a pas bougé : vide et obligatoire, le formulaire
+        // ne part pas — et soumettre rallume l'erreur (arbitrage 24).
+        expect(model.snapshot.errors).toHaveLength(1);
+        expect(form.snapshot.hasFlag("valid")).toBe(false);
+        expect(await form.submit()).toBe(false);
+        expect(model.snapshot.hasFlag("error")).toBe(true);
+    });
+
+    it("B16 — ctx.clear() éteint l'erreur d'un champ touché resté vide", async () => {
+        const form = new FormController<{ source: string; target: string }>({ name: "b16" });
+        const clears: IBehavior<string> = {
+            watch: ["source"],
+            onDependencyChanged: (ctx) => ctx.clear(),
+        };
+        const source = form.field("source");
+        const target = form.field("target", { required: true, behaviors: [clears] });
+        source.mount();
+        target.mount();
+        form.mount();
+
+        // Touché et vide : « requis » est affiché.
+        target.blur();
+        await until(() => target.snapshot.hasFlag("error"));
+
+        // La valeur ne change pas — elle était déjà vide —, mais le champ
+        // repart de zéro : l'erreur s'éteint quand même.
+        source.change("x");
+        await wait(10);
+        expect(target.snapshot.hasFlag("touched")).toBe(false);
+        expect(target.snapshot.hasFlag("error")).toBe(false);
+        expect(target.snapshot.errors).toHaveLength(1);
+    });
 });
