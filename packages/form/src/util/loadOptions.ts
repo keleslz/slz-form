@@ -122,8 +122,10 @@ export function loadOptions<T = string, M = never>(
             ? (ctx) => {
                 // La liste change sous le champ : la sélection précédente n'a
                 // plus de sens. Ne vaut que pour un rechargement par dépendance.
+                // `clear` et non `setValue(undefined)` : le champ repart non
+                // touché, sinon un select obligatoire afficherait « requis ».
                 if (resetOnReload) {
-                    ctx.setValue(undefined);
+                    ctx.clear();
                 }
                 return load(ctx);
             }
