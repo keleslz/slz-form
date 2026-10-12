@@ -1,5 +1,5 @@
 ---
-id: behavior-et-validator
+id: behavior-and-validator
 title: Behavior ou Validator ?
 sidebar_position: 2
 description: Le juge a les yeux et la sonnette ; le réacteur réagit, il ne décide jamais de la validité.
@@ -71,4 +71,4 @@ form.field("billTo", { behaviors: [prefillFromProfile] });
 
 Un champ est source de vérité pour lui-même et pour rien d'autre. Verrouillages,
 masquages et rechargements croisés passent tous par une **lecture** déclarée,
-sans mutation. Voir [Dépendances déclarées](../guides/dependances.md).
+sans mutation. Voir [Dépendances déclarées](../guides/dependencies.md).

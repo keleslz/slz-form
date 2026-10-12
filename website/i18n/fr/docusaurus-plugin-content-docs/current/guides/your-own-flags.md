@@ -1,5 +1,5 @@
 ---
-id: vos-propres-flags
+id: your-own-flags
 title: Vos propres flags
 sidebar_position: 5
 description: Étendre le vocabulaire sans toucher au moteur — et pourquoi ses mots à lui sont refusés.

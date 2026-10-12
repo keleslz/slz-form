@@ -43,8 +43,8 @@ semble n'avoir aucun effet, vérifiez ce point d'abord.
 ## Depuis le dépôt
 
 ```bash
-git clone https://github.com/keleslz/slz-form-event.git
-cd slz-form-event
+git clone https://github.com/keleslz/slz-form.git
+cd slz-form
 npm install     # workspaces npm : tout est lié localement
 npm run dev     # ouvre la démo React
 ```

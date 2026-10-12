@@ -1,5 +1,5 @@
 ---
-id: champs-repetables
+id: repeatable-fields
 title: Champs répétables
 sidebar_position: 4
 description: Ajouter, retirer et valider des lignes — chacune étant un formulaire.
@@ -32,7 +32,7 @@ lines.values();
 `null` si elle a été retirée entre-temps. Une ligne **est** un formulaire — même
 API, même validation, mêmes behaviors : `.field("qty")` la pilote exactement
 comme un champ du parent. Le pourquoi est dans
-[Une ligne est un formulaire](../modele/une-ligne-est-un-formulaire.md).
+[Une ligne est un formulaire](../model/a-row-is-a-form.md).
 
 ## Une règle qui porte sur l'ensemble
 
@@ -86,4 +86,4 @@ lines.ui.hasFlag("loading");   // une ligne a du travail en vol
 
 Côté React, le même état agrégé se lit par `useForm().snapshot.arrays` — et non
 par `useFieldArray`, qui ne s'abonne qu'à la **composition** de la liste (ajout,
-retrait, déplacement). Le détail des hooks est dans [Listes](../react/listes.md).
+retrait, déplacement). Le détail des hooks est dans [Listes](../react/lists.md).

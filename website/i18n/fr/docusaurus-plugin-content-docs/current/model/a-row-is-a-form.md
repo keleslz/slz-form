@@ -1,5 +1,5 @@
 ---
-id: une-ligne-est-un-formulaire
+id: a-row-is-a-form
 title: Une ligne est un formulaire
 sidebar_position: 4
 description: Pourquoi les champs répétables n'ont pas de nommage par chemins.

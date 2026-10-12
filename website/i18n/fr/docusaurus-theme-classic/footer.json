@@ -1,0 +1,32 @@
+{
+  "link.title.Documentation": {
+    "message": "Documentation"
+  },
+  "link.title.Design notes": {
+    "message": "Le dossier de conception"
+  },
+  "link.title.Repository": {
+    "message": "Le dépôt"
+  },
+  "link.item.label.Getting started": {
+    "message": "Démarrer"
+  },
+  "link.item.label.The model": {
+    "message": "Le modèle"
+  },
+  "link.item.label.API reference": {
+    "message": "Référence API"
+  },
+  "link.item.label.Trade-offs and invariants": {
+    "message": "Arbitrages et invariants"
+  },
+  "link.item.label.GitHub": {
+    "message": "GitHub"
+  },
+  "link.item.label.The demo": {
+    "message": "La démo"
+  },
+  "copyright": {
+    "message": "slz-form — MIT. Documentation construite avec Docusaurus."
+  }
+}

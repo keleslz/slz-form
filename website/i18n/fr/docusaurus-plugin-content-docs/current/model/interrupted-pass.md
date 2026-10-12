@@ -1,5 +1,5 @@
 ---
-id: passe-interrompue
+id: interrupted-pass
 title: Une passe interrompue n'est pas un verdict
 sidebar_position: 3
 description: Ce que publie le moteur quand une règle casse, et pourquoi ce n'est ni « valide » ni l'ancien verdict.

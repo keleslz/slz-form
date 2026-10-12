@@ -27,8 +27,8 @@ const typedocCommon = {
     parametersFormat: "table",
     sidebar: { autoConfiguration: true, pretty: true },
     // Les titres générés sont préfixés du genre — « Class: BehaviorState ».
-    // Dans une barre latérale française, le préfixe n'apprend rien que le nom
-    // ne dise déjà, et il décale la lecture d'une colonne.
+    // Dans la barre latérale, le préfixe n'apprend rien que le nom ne dise
+    // déjà, et il décale la lecture d'une colonne.
     textContentMappings: {
         "title.memberPage": "{name}",
     },
@@ -36,13 +36,13 @@ const typedocCommon = {
 
 const config: Config = {
     title: "slz-form",
-    tagline: "Un moteur de formulaires piloté par des flags, indépendant du framework",
+    tagline: "A flag-driven, framework-agnostic form engine",
     favicon: "img/favicon.svg",
 
     url: "https://keleslz.github.io",
-    baseUrl: "/slz-form-event/",
+    baseUrl: "/slz-form/",
     organizationName: "keleslz",
-    projectName: "slz-form-event",
+    projectName: "slz-form",
     trailingSlash: false,
 
     // Le build **est** le vérificateur de liens : une ancre morte casse la CI
@@ -55,11 +55,19 @@ const config: Config = {
         },
     },
 
-    // Tout le contenu est en français ; l'interface doit suivre, sinon on lit
-    // « Next » et « Previous » sous des pages qui disent « Démarrer ».
+    // L'anglais est la langue source : c'est lui qu'on écrit, dans `docs` et
+    // `src/pages`, et il est servi à la racine. Le français en est la
+    // traduction, sous `i18n/fr`, servi sous `/fr/`. Une page sans traduction
+    // retombe sur l'anglais. Deux exceptions, en français dans toutes les
+    // langues : la référence, générée depuis les commentaires du code, et le
+    // dossier de conception, lu en place.
     i18n: {
-        defaultLocale: "fr",
-        locales: ["fr"],
+        defaultLocale: "en",
+        locales: ["en", "fr"],
+        localeConfigs: {
+            en: { label: "English" },
+            fr: { label: "Français" },
+        },
     },
 
     presets: [
@@ -70,13 +78,47 @@ const config: Config = {
                     path: "docs",
                     routeBasePath: "docs",
                     sidebarPath: "./sidebars.ts",
-                    editUrl: "https://github.com/keleslz/slz-form-event/tree/master/website/",
+                    editUrl: "https://github.com/keleslz/slz-form/tree/master/website/",
+                    // Les deux packages de la référence génèrent les mêmes
+                    // catégories — « classes », « interfaces »… — dans la même
+                    // barre latérale. Leur clé de traduction est dérivée du
+                    // libellé : sans la préfixer du dossier, elles se
+                    // télescopent dès qu'une seconde locale existe.
+                    sidebarItemsGenerator: async ({ defaultSidebarItemsGenerator, ...args }) => {
+                        const items = await defaultSidebarItemsGenerator(args);
+                        return items.map((item) =>
+                            item.type === "category"
+                                ? { ...item, key: `${args.item.dirName}/${item.label}` }
+                                : item,
+                        );
+                    },
                 },
                 blog: false,
                 theme: {
                     customCss: "./src/css/custom.css",
                 },
             } satisfies Preset.Options,
+        ],
+    ],
+
+    // La recherche est **locale** : l'index est construit avec le site et
+    // servi avec lui, une fois par langue. Aucun service tiers à ouvrir ni à
+    // maintenir, et elle marche avant même que le site soit en ligne. Elle
+    // n'existe que dans un build — pas sous `docusaurus start`.
+    themes: [
+        [
+            "@easyops-cn/docusaurus-search-local",
+            {
+                hashed: true,
+                language: ["en", "fr"],
+                indexBlog: false,
+                // Le guide, la référence, et le dossier de conception.
+                docsRouteBasePath: ["docs", "conception"],
+                docsDir: ["docs", "../docs"],
+                searchResultLimits: 10,
+                highlightSearchTermsOnTargetPage: true,
+                explicitSearchResultPath: true,
+            },
         ],
     ],
 
@@ -92,7 +134,7 @@ const config: Config = {
                 path: "../docs",
                 routeBasePath: "conception",
                 sidebarPath: "./sidebars.conception.ts",
-                editUrl: "https://github.com/keleslz/slz-form-event/tree/master/",
+                editUrl: "https://github.com/keleslz/slz-form/tree/master/",
             },
         ],
         [
@@ -118,57 +160,59 @@ const config: Config = {
     ],
 
     themeConfig: {
+        colorMode: { respectPrefersColorScheme: true },
         navbar: {
             title: "slz-form",
             logo: { alt: "slz-form", src: "img/logo.svg" },
             items: [
                 { type: "docSidebar", sidebarId: "guide", position: "left", label: "Guide" },
-                { type: "docSidebar", sidebarId: "reference", position: "left", label: "Référence" },
+                { type: "docSidebar", sidebarId: "reference", position: "left", label: "Reference" },
                 {
                     to: "/conception/MODEL",
                     position: "left",
-                    label: "Conception",
+                    label: "Design",
                 },
+                { type: "localeDropdown", position: "right" },
                 {
-                    href: "https://github.com/keleslz/slz-form-event",
+                    href: "https://github.com/keleslz/slz-form",
                     label: "GitHub",
                     position: "right",
                 },
             ],
         },
         footer: {
-            style: "dark",
             links: [
                 {
                     title: "Documentation",
                     items: [
-                        { label: "Démarrer", to: "/docs/demarrer/le-probleme" },
-                        { label: "Le modèle", to: "/docs/modele/flags" },
-                        { label: "Référence API", to: "/docs/reference/slz-form" },
+                        { label: "Getting started", to: "/docs/getting-started/the-problem" },
+                        { label: "The model", to: "/docs/model/flags" },
+                        { label: "API reference", to: "/docs/reference/slz-form" },
                     ],
                 },
                 {
-                    title: "Le dossier de conception",
+                    title: "Design notes",
                     items: [
-                        { label: "Arbitrages et invariants", to: "/conception/MODEL" },
+                        { label: "Trade-offs and invariants", to: "/conception/MODEL" },
                     ],
                 },
                 {
-                    title: "Le dépôt",
+                    title: "Repository",
                     items: [
-                        { label: "GitHub", href: "https://github.com/keleslz/slz-form-event" },
+                        { label: "GitHub", href: "https://github.com/keleslz/slz-form" },
                         {
-                            label: "La démo",
-                            href: "https://github.com/keleslz/slz-form-event/tree/master/examples/react",
+                            label: "The demo",
+                            href: "https://github.com/keleslz/slz-form/tree/master/examples/react",
                         },
                     ],
                 },
             ],
-            copyright: `slz-form — MIT. Documentation construite avec Docusaurus.`,
+            copyright: `slz-form — MIT. Documentation built with Docusaurus.`,
         },
         prism: {
-            theme: prismThemes.github,
-            darkTheme: prismThemes.dracula,
+            // Le code est sur fond sombre dans les deux modes : un seul thème.
+            theme: prismThemes.nightOwl,
+            darkTheme: prismThemes.nightOwl,
             additionalLanguages: ["bash", "diff", "json"],
         },
     } satisfies Preset.ThemeConfig,

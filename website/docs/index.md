@@ -1,33 +1,33 @@
 ---
 id: index
 title: slz-form
-sidebar_label: Vue d'ensemble
+sidebar_label: Overview
 sidebar_position: 0
-description: Un moteur de formulaires agnostique de tout framework, où l'UI est pilotée par des flags.
+description: A framework-agnostic form engine, where the UI is driven by flags.
 ---
 
 # slz-form
 
-:::warning Pré-publication
-Les packages sont construits et prêts, **rien n'est encore sur npm**. L'API peut
-encore bouger.
+:::warning Pre-release
+The packages are built and ready, **nothing is on npm yet**. The API may still
+move.
 :::
 
-Un formulaire est rarement difficile à cause de ses valeurs. Il l'est à cause de
-tout ce qui les entoure : un champ verrouillé pendant un appel réseau, un autre
-masqué tant qu'une case n'est pas cochée, une erreur qui n'apparaît qu'après
-avoir quitté le champ mais jamais sur un prefill, un bouton grisé tant que le
-formulaire est invalide ou en cours d'envoi. Cette logique finit d'ordinaire
-éparpillée dans la vue, en booléens recalculés à la main :
+A form is rarely hard because of its values. It is hard because of everything
+around them: a field locked while a request is in flight, another hidden until
+a checkbox is ticked, an error that only shows after the user leaves the field
+but never on a prefill, a button greyed out while the form is invalid or
+submitting. That logic usually ends up scattered across the view, as booleans
+recomputed by hand:
 
 ```tsx
 <input disabled={loading || submitting || !brand || readOnly} />
 {touched && error && <p>{error}</p>}
 ```
 
-slz-form la déplace dans le moteur. **Ce qu'un champ *est* se lit en flags ; ce
-qu'il *contient* se lit en données.** Le composant ne décide de rien — il lit un
-état et se rend :
+slz-form moves it into the engine. **What a field *is* is read as flags; what
+it *contains* is read as data.** The component decides nothing — it reads a
+state and renders:
 
 ```tsx
 if (field.hasFlag("invisible")) return null;
@@ -37,42 +37,42 @@ if (field.hasFlag("invisible")) return null;
 {field.hasFlag("error") && <p>{field.error}</p>}
 ```
 
-Deux fonctions lisent tous les états, au champ comme au formulaire :
-`hasFlag(...)` est le **ET** — toutes présentes ; `hasAny(...)` le **OU** — au
-moins une. C'est toute la surface de lecture, et c'est ce qui dissout le
-`loading || submitting || !brand` ci-dessus.
+Two functions read every state, at the field and at the form: `hasFlag(...)` is
+the **AND** — all present; `hasAny(...)` is the **OR** — at least one. That is
+the whole read surface, and it is what dissolves the
+`loading || submitting || !brand` above.
 
 ```tsx
-<button disabled={!form.hasFlag("valid", "idle")}>Envoyer</button>
+<button disabled={!form.hasFlag("valid", "idle")}>Submit</button>
 ```
 
-## Par où commencer
+## Where to start
 
-| Vous voulez… | Allez à |
+| You want to… | Go to |
 |---|---|
-| voir ce que ça remplace | [Le problème](demarrer/le-probleme.md) |
-| l'installer, lancer la démo | [Installation](demarrer/installation.md) |
-| écrire votre premier formulaire | [Premier formulaire](demarrer/premier-formulaire.md) |
-| comprendre le modèle avant de coder | [Les flags, et les deux fonctions](modele/flags.md) |
-| brancher un besoin précis | [Guides](guides/preremplir.md) |
-| la signature exacte d'une fonction | [Référence API](reference/slz-form/index.md) |
-| savoir **pourquoi** c'est fait ainsi | [Le dossier de conception](/conception/MODEL) |
+| see what it replaces | [The problem](getting-started/the-problem.md) |
+| install it, run the demo | [Installation](getting-started/installation.md) |
+| write your first form | [First form](getting-started/first-form.md) |
+| understand the model before coding | [Flags, and the two functions](model/flags.md) |
+| wire up a specific need | [Guides](guides/prefill.md) |
+| the exact signature of a function | [API reference](reference/slz-form/index.md) |
+| know **why** it is built this way | [The design notes](/conception/MODEL) |
 
-## Ce que ce n'est pas
+## What it is not
 
-- **Pas une bibliothèque de composants.** Aucun style, aucun design system,
-  aucun markup imposé : le moteur produit un état, le rendu reste à vous. Les
-  composants de la démo sont des exemples, pas l'API.
-- **Pas un validateur de schéma.** Il ne remplace ni Zod ni Yup et n'invente pas
-  de langage de règles : il orchestre les validateurs que vous écrivez — et peut
-  en encapsuler un.
-- **Pas un state manager généraliste.** Il gère l'état de vos formulaires, pas
-  celui de votre application, et ne se branche sur aucun store.
-- **Pas une couche HTTP.** Il ne fait aucun appel réseau ; il orchestre les
-  vôtres — quand les lancer, quoi verrouiller pendant, quoi faire du résultat.
-- **Pas un générateur de formulaires.** Pas de rendu depuis un JSON, pas de
-  schéma déclaratif produisant une page. Vous écrivez votre vue.
-- **Pas encore de rendu serveur.** L'adapter React lit son état via
-  `useSyncExternalStore` sans `getServerSnapshot` : le rendu côté serveur lève.
-- **Pas une abstraction de React.** Le cœur ignore l'existence de React ;
-  l'adapter est mince et remplaçable, pas une couche de compatibilité.
+- **Not a component library.** No styling, no design system, no imposed markup:
+  the engine produces a state, the rendering stays yours. The demo's components
+  are examples, not the API.
+- **Not a schema validator.** It replaces neither Zod nor Yup and invents no
+  rule language: it orchestrates the validators you write — and can wrap one.
+- **Not a general-purpose state manager.** It manages the state of your forms,
+  not of your application, and plugs into no store.
+- **Not an HTTP layer.** It makes no network call; it orchestrates yours — when
+  to fire them, what to lock meanwhile, what to do with the result.
+- **Not a form generator.** No rendering from JSON, no declarative schema
+  producing a page. You write your view.
+- **No server rendering yet.** The React adapter reads its state via
+  `useSyncExternalStore` without `getServerSnapshot`: server-side rendering
+  throws.
+- **Not an abstraction over React.** The core does not know React exists; the
+  adapter is thin and replaceable, not a compatibility layer.

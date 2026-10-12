@@ -1,5 +1,5 @@
 ---
-id: dependances
+id: dependencies
 title: Dépendances déclarées
 sidebar_position: 3
 description: Observer un voisin — sa valeur, ou son état — sans jamais écrire chez lui.

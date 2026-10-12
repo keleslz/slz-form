@@ -1,5 +1,5 @@
 ---
-id: listes
+id: lists
 title: Listes répétables
 sidebar_position: 3
 description: useFieldArray, useFieldOn, et pourquoi la liste ne publie pas les flags de ses lignes.
@@ -76,5 +76,5 @@ exposer des flags les rendrait périmés dès la frappe suivante — un état fa
 affiché avec assurance, ce qui est pire que pas d'état du tout.
 
 Le pourquoi — une ligne est un `FormController` identifié, jamais indexé — est
-dans [Une ligne est un formulaire](../modele/une-ligne-est-un-formulaire.md) ; le
-versant moteur, dans [Champs répétables](../guides/champs-repetables.md).
+dans [Une ligne est un formulaire](../model/a-row-is-a-form.md) ; le
+versant moteur, dans [Champs répétables](../guides/repeatable-fields.md).

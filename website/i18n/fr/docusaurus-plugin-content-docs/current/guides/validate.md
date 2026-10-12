@@ -1,5 +1,5 @@
 ---
-id: valider
+id: validate
 title: Valider
 sidebar_position: 2
 description: Constats, gravité, codes, validators composés et erreurs serveur.
@@ -75,7 +75,7 @@ de corriger.
 
 ## Quand une règle casse
 
-Voir [Une passe interrompue n'est pas un verdict](../modele/passe-interrompue.md) —
+Voir [Une passe interrompue n'est pas un verdict](../model/interrupted-pass.md) —
 c'est le point le plus subtil de la validation, et celui qui a le plus régressé.
 
 ## Différer une validation
