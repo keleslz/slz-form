@@ -2,14 +2,14 @@
 id: repeatable-fields
 title: Champs répétables
 sidebar_position: 4
-description: Ajouter, retirer et valider des lignes — chacune étant un formulaire.
+description: Ajouter, déplacer et retirer des lignes, puis valider les valeurs de toute une liste.
 ---
 
 # Champs répétables
 
-Une liste se déclare avec `FieldArray<Row>` dans la map, et se pilote par
-`form.array(name)`. Les lignes sont **identifiées, jamais indexées** : ajouter,
-déplacer ou retirer ne renomme rien.
+Cette page montre comment ajouter, déplacer et retirer des lignes de facture avec le cœur. Vous écrirez aussi une règle qui vérifie toutes les lignes ensemble et lirez la validation et le chargement de la liste.
+
+`FieldArray<Row>` déclare une liste dans la map, le type qui associe les noms de champs à leurs valeurs. `Row` déclare les champs de chaque ligne. `form.array(name)` renvoie le contrôleur qui gère cette liste.
 
 ```ts
 type InvoiceFields = {
@@ -28,17 +28,17 @@ lines.remove(id);
 lines.values();
 ```
 
-`append()` rend l'identifiant de la nouvelle ligne ; `row(id)` rend la ligne, ou
-`null` si elle a été retirée entre-temps. Une ligne **est** un formulaire — même
-API, même validation, mêmes behaviors : `.field("qty")` la pilote exactement
-comme un champ du parent. Le pourquoi est dans
-[Une ligne est un formulaire](../model/a-row-is-a-form.md).
+`append()` renvoie un identifiant stable de ligne. `row(id)` renvoie un `FieldArrayRow`, ou `null` si la ligne n'est plus présente. Cet objet contient son `id` stable et son `FormController` dans `form`. Un `FormController` gère les champs et leurs règles. Le `.field("qty")` de la ligne délègue à ce formulaire pour créer ou retrouver son champ de quantité.
 
-## Une règle qui porte sur l'ensemble
+`move(from, to)` utilise des positions pour réordonner les lignes ; les identifiants restent inchangés. `remove(id)` retire une ligne par son identifiant, et `values()` lit les valeurs des lignes dans leur ordre actuel. Le déplacement de l'exemple ne change l'ordre que si les deux positions existent.
 
-« La somme fait 100 % » ne vit dans aucune ligne : c'est un validator du parent
-qui observe la liste. Il se pose sur un champ récapitulatif et déclare
-`validateWhenEmpty`, sinon il ne tournerait jamais tant que ce champ est vide.
+Créez et montez les champs des lignes pour les inclure dans la validation et les valeurs. Les hooks de champs React gèrent ce montage. Voir [Une ligne est un formulaire](../model/a-row-is-a-form.md) pour le cycle de vie et le modèle des dépendances.
+
+## Une règle pour toute la liste
+
+Un validator vérifie une valeur et signale des constats, des messages de gravité `error` ou `warning`. Pour vérifier que les parts d'une répartition totalisent 100, associez un validator à un champ récapitulatif du parent et faites-lui observer la liste. `watch` liste les dépendances dont les changements de valeur relancent la règle.
+
+`validateWhenEmpty` active la règle même quand le champ récapitulatif est vide. Sa propre valeur ne sert pas à ce calcul :
 
 ```ts
 type Allocation = {
@@ -61,9 +61,7 @@ const allocation = new FormController<Allocation>({ name: "allocation" });
 allocation.field("total", { validator: new SharesMustSumTo100() });
 ```
 
-`ctx.form.values()` est une vue de lecture typée `Record<string, unknown>` — le
-formulaire n'y ouvre aucun abonnement — donc les lignes reviennent brutes et on
-les rétrécit à la main, sans un seul `as` :
+`ctx.form.values()` renvoie un `Record<string, unknown>` en lecture seule. Il lit les valeurs actuelles sans s'abonner aux changements ; le `watch` déclaré déclenche la revalidation. Vérifiez le type de chaque ligne avant d'utiliser ses propriétés, par exemple avec cette fonction :
 
 ```ts
 function shareOf(row: unknown): number {
@@ -75,8 +73,7 @@ function shareOf(row: unknown): number {
 
 ## L'état d'une liste
 
-Une liste répond aux mêmes deux fonctions que le reste, et publie `valid` ·
-`error` — jamais `pristine` : c'est un agrégat, pas un champ qu'on touche.
+Un flag est un état nommé vérifié avec `hasFlag` ou `hasAny`. Le `ui` d'une liste rassemble l'état de ses lignes : `valid` si elles n'ont aucune erreur bloquante, `error` sinon, et `loading` lorsqu'une ligne a une opération en attente. Il n'a pas d'état de validité `pristine`, même si personne n'a interagi avec les lignes.
 
 ```ts
 lines.ui.hasFlag("error");     // au moins une ligne refuse
@@ -84,6 +81,6 @@ lines.errors;                  // les constats, à plat
 lines.ui.hasFlag("loading");   // une ligne a du travail en vol
 ```
 
-Côté React, le même état agrégé se lit par `useForm().snapshot.arrays` — et non
-par `useFieldArray`, qui ne s'abonne qu'à la **composition** de la liste (ajout,
-retrait, déplacement). Le détail des hooks est dans [Listes](../react/lists.md).
+`lines.errors` contient les messages bloquants de toutes les lignes dans un seul tableau. Il peut inclure des erreurs de champs sans interaction, alors que leur validité affichée reste `pristine` jusqu'à une interaction.
+
+Dans React, lisez cet état combiné via `useForm().snapshot.arrays`. Un snapshot est l'objet qui décrit l'état actuel du formulaire. `useFieldArray` s'abonne aux ajouts, retraits et déplacements de lignes ; il ne s'abonne ni à leur contenu ni à leurs flags. Voir [Listes répétables](../react/lists.md).

@@ -1,39 +1,37 @@
 ---
 id: interrupted-pass
-title: Une passe interrompue n'est pas un verdict
+title: Quand la validation ne peut pas aboutir
 sidebar_position: 3
-description: Ce que publie le moteur quand une règle casse, et pourquoi ce n'est ni « valide » ni l'ancien verdict.
+description: Gérer une vérification indisponible et comprendre la fin de l'état de chargement.
 ---
 
-# Une passe interrompue n'est pas un verdict
+# Quand la validation ne peut pas aboutir
 
-C'est la sémantique qui a le plus régressé au cours du développement, toujours
-par le même raccourci : *la passe s'est terminée, donc j'ai un verdict.* Faux
-dès qu'une règle casse.
+Cette page explique ce qui se passe quand une vérification de validation ne peut pas aboutir et comment traiter un service indisponible. Elle explique aussi comment un behavior personnalisé conserve ou libère son état de chargement.
 
-Trois cas, et un seul est correct :
+Un validator vérifie la valeur d'un champ et rassemble des constats dans un `ValidationReport`. Un constat est un message de gravité `error` ou `warning`, avec un code facultatif. Une exécution de validation correspond à une exécution de ces vérifications pour la valeur actuelle.
 
-| La passe | Ce qu'on publie |
+Une vérification de format d'email peut par exemple aboutir alors qu'une requête de disponibilité séparée échoue. Les messages de la vérification terminée restent utiles, mais il faut aussi tenir compte de la requête en échec.
+
+## Résultats après un échec asynchrone
+
+Quand la promesse d'un validator rejette, ou qu'un membre d'un validator composite lève une exception, le rapport est marqué comme interrompu. Un validator composite rassemble plusieurs validators sur un champ.
+
+| Résultat de l'exécution | Issues publiées |
 |---|---|
-| complète | le verdict, `valid` ou `error` |
-| interrompue, avec un refus | ce refus — il vient d'une règle qui a conclu |
-| interrompue, sans refus | **`unverified`, bloquant** |
+| toutes les vérifications aboutissent | constats collectés ; `valid` en l'absence d'erreur |
+| une vérification échoue et une autre a signalé une erreur | constats collectés, dont l'erreur bloquante |
+| une vérification échoue et aucune erreur n'a été signalée | constats collectés et un constat bloquant avec `code: "unverified"` |
 
-Un réseau tombé n'est pas un verdict. S'il n'y a aucun refus, le moteur publie
-un constat bloquant de `code: "unverified"` : la valeur n'a été jugée par
-personne, et la déclarer valide laisserait passer ce que la règle aurait
-peut-être refusé.
+`unverified` identifie un constat par sa propriété `code` dans `field.issues`. Son message est `Validation unavailable`. Il bloque la soumission parce que les vérifications n'ont pas pu établir que la valeur était acceptable. Ces chemins d'échec remplacent le résultat de validation précédent au lieu d'accepter la valeur sur la seule absence d'erreurs.
 
-Deux choses qu'on ne fait **jamais** :
+:::warning Validators synchrones isolés
+Une exception synchrone levée par un validator associé seul à un champ suit actuellement un autre chemin. Le champ l'intercepte, l'enregistre dans `form.engineErrors` avec `scope: "behavior"` et peut conserver l'état de validation précédent. Ce chemin ne garantit pas de constat `unverified`. Interceptez les échecs attendus dans la règle et signalez explicitement le résultat. Voir [Les erreurs du moteur](../guides/engine-errors.md).
+:::
 
-- **garder le dernier verdict connu** — il a été rendu sur une *autre* valeur ;
-- **conclure `valid` d'une absence de refus** quand une règle n'a pas pu se
-  prononcer.
+## Autoriser une vérification indisponible
 
-## Tolérer sa propre panne, en le disant
-
-Une règle qui préfère laisser passer quand sa vérification est indisponible
-l'attrape et le dit elle-même. Elle a alors **conclu**, et la soumission passe :
+Si un service indisponible doit produire un avertissement et autoriser la soumission, interceptez cet échec dans la règle. Ici, la vérification de disponibilité signale un avertissement quand le service échoue :
 
 ```ts
 protected async validate(value: string, report: ValidationReport) {
@@ -46,23 +44,17 @@ protected async validate(value: string, report: ValidationReport) {
 }
 ```
 
-La différence entre les deux comportements n'est pas dans le moteur : elle est
-dans le fait que la règle ait, ou non, pris position.
+Cette règle se termine normalement avec un avertissement non bloquant. La soumission peut réussir si les autres règles ne signalent pas d'erreur bloquante. Utilisez plutôt `report.error(...)` dans le catch si l'échec du service doit bloquer le formulaire.
 
-## Côté behavior : l'attente suit le travail en vol
+## Le chargement dans les behaviors personnalisés
 
-Le pendant, sur l'axe de l'activité. Un champ est `loading` si et seulement si
-une passe ouverte de l'un de ses behaviors attend encore — pas parce qu'une
-dernière écriture a dit `loading`.
+Un behavior réagit aux événements du champ et peut publier un état avec `ctx.push` ou renvoyer un `BehaviorState`. `BehaviorState` décrit l'activité et les flags de ce behavior, que le contrôleur combine avec les autres sources. Le flag `loading` indique une opération en attente ; le validator peut aussi le fournir.
 
-Deux conséquences utiles à connaître quand on écrit un behavior à la main :
+Une promesse renvoyée par un behavior ne publie pas automatiquement `loading`. Le behavior le demande avec `ctx.state.loading()`. Pour chaque appel de behavior, le contrôleur suit si cet appel contribue encore au chargement :
 
-- **une passe qui réussit n'éteint pas l'attente d'une autre.** `ctx.state` rend
-  la tranche fusionnée du behavior ; un hook qui retourne `ctx.state.idle()` ne
-  dit que « moi, j'ai fini » ;
-- **l'attente d'une passe dure jusqu'à sa dernière parole.** Un hook synchrone
-  parle une dernière fois en poussant, un hook asynchrone en retombant. Une
-  attente poussée en cours de route s'éteint donc quand la promesse retombe :
+- Un appel qui renvoie `ctx.state.idle()` libère sa propre attente. D'autres appels ou validators peuvent garder le champ `loading`.
+- Pour un hook asynchrone, le chargement publié pendant l'appel se termine avec sa promesse, sauf si sa valeur de retour demande explicitement `loading` de nouveau.
+- Un hook synchrone peut publier un chargement pour une opération qu'il lance en dehors de sa valeur de retour. Il doit ensuite publier idle quand cette opération se termine.
 
 ```ts
 onChange: async (ctx) => {
@@ -73,5 +65,4 @@ onChange: async (ctx) => {
 },
 ```
 
-Sans cette règle, une réponse périmée qui ne dit rien garderait le champ occupé
-à vie.
+Dans cet exemple, le `loading()` explicite de la valeur de retour maintient le chargement pour la tâche de fond. Cette tâche doit ensuite appeler `ctx.push(ctx.state.idle())` pour le libérer. `ctx.state` lit la contribution d'état actuelle de ce behavior, y compris après un `await`.

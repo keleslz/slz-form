@@ -1,23 +1,22 @@
 ---
 id: flags
-title: Les flags, et les deux fonctions
+title: Lire les flags
 sidebar_position: 1
-description: Deux natures de flags, deux fonctions de lecture, et aucun booléen d'état.
+description: Lire le chargement, la validité et les interactions des champs et du formulaire.
 ---
 
-# Les flags, et les deux fonctions
+# Lire les flags
 
-Ce qu'un champ **est** se lit en flags ; ce qu'il **contient** — valeur,
-options, messages — se lit en données. Pour l'état, deux fonctions, et rien
-d'autre :
+Utilisez les flags pour désactiver un input, afficher un indicateur de chargement ou montrer une erreur de validation. Cette page explique les flags disponibles, leur combinaison et la différence entre l'état d'un champ et celui du formulaire.
+
+Un flag est un état nommé, comme `loading` ou `locked`. Les valeurs, les options et les messages restent des propriétés de données. `hasFlag` vérifie que tous les flags demandés sont présents ; `hasAny` vérifie qu'au moins l'un d'eux est présent.
 
 ```ts
 field.hasFlag("loading", "invisible")   // ET  — toutes présentes
 field.hasAny("locked", "readonly")      // OU  — au moins une
 ```
 
-C'est ce qui supprime le `disabled={loading || submitting || !brand}` recomposé
-à la main dans chaque champ. Le bouton de soumission tient en un appel :
+Vous pouvez par exemple désactiver un bouton d'envoi selon les flags du formulaire :
 
 ```tsx
 <button disabled={!form.hasFlag("valid", "idle")}>Envoyer</button>
@@ -25,64 +24,53 @@ C'est ce qui supprime le `disabled={loading || submitting || !brand}` recomposé
 
 ## Le vocabulaire
 
-| Flag | Nature | Qui l'émet |
-|---|---|---|
-| `pristine` · `valid` · `error` | **s'excluent** | le Validator, seul |
-| `idle` · `loading` | **s'excluent** | Behaviors + Validator |
-| `locked` · `readonly` · `invisible` | s'additionnent | Behaviors + Controller + vue |
-| `required` · `touched` · `focused` · `mounted` · `submitting` | s'additionnent | le Controller |
-| *ceux de votre application* | s'additionnent | Behaviors — `ctx.state.mark("skeleton")` |
+Un validator vérifie les valeurs et signale des erreurs ou des avertissements. Un behavior réagit aux événements du champ et peut modifier ses valeurs, ses options ou sa disponibilité. Le contrôleur de champ stocke ces résultats et enregistre les interactions et le cycle de vie.
 
-Le formulaire répond aux mêmes deux fonctions, avec les mêmes mots : `valid` ·
-`error` (le verdict), `idle` · `submitting` · `submitted`, `loading`, `touched`.
+| Flag | Signification | Source |
+|---|---|---|
+| `pristine` · `valid` · `error` | un seul état de validité affichée à la fois ; `pristine` jusqu'à une interaction | résultat du validator, affiché selon l'état `touched` du contrôleur |
+| `idle` · `loading` | un seul état d'activité à la fois | behaviors et validator |
+| `locked` · `readonly` · `invisible` | input désactivé, en lecture seule, champ masqué ; peuvent coexister | behaviors ; le contrôleur ajoute aussi des verrouillages et la lecture seule demandée par la vue |
+| `required` · `touched` · `focused` · `mounted` · `submitting` | champ obligatoire, interaction utilisateur, focus, cycle de vie actif, soumission | contrôleur |
+| les flags de votre application | états supplémentaires comme `skeleton` | behaviors via `ctx.state.mark(...)` |
+
+Un formulaire propose aussi `hasFlag` et `hasAny`. Ses flags sont `valid` ou `error`, son statut de soumission (`idle`, `submitting` ou `submitted`), ainsi que les flags agrégés `loading` et `touched`.
 
 ```ts
 form.getSnapshot().hasFlag("valid", "idle");   // la soumission peut partir
 ```
 
-## Deux natures, une règle par nature
+Au niveau du formulaire, `idle` décrit le statut de soumission. Il peut coexister avec `loading`, qui indique qu'un champ monté ou une ligne a une opération en attente. `submit()` attend les opérations concernées et vérifie la validité avant de signaler un succès. Cette méthode n'envoie pas les valeurs à un serveur.
 
-Une union plate produirait des états impossibles — `pristine` **et** `error` à
-la fois. Les deux premiers groupes sont donc **exclusifs**, à vocabulaire
-fermé : y écrire une valeur en remplace une autre.
+## Comment les flags se combinent
 
-Tous les autres **s'additionnent**, et l'absence vaut défaut. Un seul `lock()`
-verrouille, même si trois behaviors parlent en même temps. C'est ce qui donne un
-sens précis au retrait d'un flag : on **remplace** dans un groupe exclusif, on
-**cesse d'émettre** ailleurs.
+Un champ possède exactement un flag de chaque groupe exclusif : validité affichée et activité. Il ne peut pas porter à la fois `pristine` et `error`, ni `idle` et `loading`.
 
-## Le vocabulaire s'étend sans toucher au moteur
+Les autres flags sont cumulatifs : chaque source fournit ses flags, et le contrôleur les rassemble. Si le chargement des modèles et la soumission verrouillent tous deux le champ du modèle, la fin du chargement retire uniquement le verrou de ce behavior. Le champ reste verrouillé jusqu'à ce que toutes les sources aient retiré leur verrou.
 
-Un behavior publie `mark("skeleton")`, la vue lit `hasFlag("skeleton")`, et le
-moteur n'a jamais eu à connaître le mot. Voir
-[Vos propres flags](../guides/your-own-flags.md).
+Dans un groupe exclusif, définir un nouvel état remplace le précédent. Pour un flag cumulatif, le retirer signifie qu'une source cesse de le fournir.
 
-Les mots du moteur, eux, sont **refusés** sur ce chemin — sans quoi on
-republierait l'état impossible qu'on vient d'écarter. `mark("error")` lève.
+## Ajouter un flag applicatif
 
-## Aucun booléen d'état dans la surface de lecture
+Un behavior peut publier `mark("skeleton")` pour que votre vue lise `hasFlag("skeleton")`. Vous ajoutez ainsi un état applicatif sans modifier le moteur. Voir [Vos propres flags](../guides/your-own-flags.md).
 
-Pas de `isVisible`, pas de `isLoading`, pas de `showError`. Un besoin de `isX`
-ne signale jamais un accesseur manquant : il signale **un flag manquant, ou un
-mot mal choisi**.
+Les flags réservés comme `error` ne peuvent pas être définis ainsi : `mark("error")` lève une exception. La validité et l'activité utilisent leurs propres API. Les flags de disponibilité comme `locked`, `readonly` et `invisible` sont autorisés.
 
-La raison est empirique. Une version antérieure a livré l'API par flags *et* ses
-sept booléens dérivés dans le même diff : l'échappatoire est devenue la norme,
-et l'API par flags est morte à l'usage.
+## Lire l'état dans les composants
 
-## Affiché contre vrai
+Utilisez `hasFlag` et `hasAny` pour les conditions d'affichage. L'API de lecture du champ ne fournit pas de helpers comme `isLoading` ou `showError`. Si votre application a besoin d'un autre état nommé, un flag personnalisé lui permet d'utiliser les mêmes fonctions de lecture.
 
-Une nuance structurelle, et la source d'à peu près toutes les confusions :
+Un snapshot est un objet qui contient les flags et les données actuels. Il conserve la même référence tant que l'état publié par le contrôleur ne change pas, ce qui permet aux composants de s'y abonner.
 
-- au **champ**, `error` est ce qu'on **affiche**, et il reste éteint tant qu'on
-  n'a pas touché — un préremplissage n'allume rien ;
-- au **formulaire**, `error` est ce qui est **vrai** : un formulaire prérempli
-  et faux ne part pas.
+## Afficher les erreurs et bloquer la soumission
 
-Le verdict d'un champ pris isolément, indépendamment de l'affichage, c'est
-`errors` non vide.
+Un champ sans interaction reste `pristine`, même si la validation a trouvé des erreurs. Un code postal prérempli peut donc porter une erreur bloquante sans afficher de message pour le moment. `change`, `blur` et la soumission du champ le marquent `touched`, ce qui permet à la validité affichée de devenir `valid` ou `error`.
+
+`field.errors` contient les messages bloquants indépendamment des interactions. Une fois la validation terminée, un tableau non vide indique que le champ a échoué à une vérification. Pendant une validation, lisez aussi `loading` : un tableau vide ne signifie pas à lui seul que la nouvelle vérification est terminée.
 
 ```ts
 field.hasFlag("error")       // faut-il montrer quelque chose à l'utilisateur ?
 field.errors.length > 0      // cette valeur est-elle refusée ?
 ```
+
+Le formulaire utilise les messages bloquants pour calculer sa validité, même avant une interaction. Les champs montés et visibles participent à ce calcul ; les champs masqués ne le bloquent pas. Les listes y ajoutent aussi les erreurs de leurs lignes. Un formulaire prérempli invalide peut donc être `error` alors que ses champs restent `pristine`.

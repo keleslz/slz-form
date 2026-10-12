@@ -2,18 +2,18 @@
 id: prefill
 title: Prefill a field
 sidebar_position: 1
-description: The same need written three ways, from the full class down to the three-line helper.
+description: Fetch an initial value on mount while keeping the field untouched.
 ---
 
 # Prefill a field
 
-Filling a field from an API on mount, written three ways — from the most
-explicit to the shortest. All three produce **exactly** the same behavior.
+This page shows how to fetch a customer reference when a field mounts, lock the input during the request and validate the result. You can write the behavior yourself or use the typed `prefill` helper.
+
+A prefill is a value set by your application before the user enters it. A behavior reacts to field events and can write that field's value. A validator checks the value and reports errors or warnings. Flags are named states, such as `loading`, that your view reads to decide what to display.
 
 ## 1. A behavior class, no validator
 
-The case where you write everything yourself. Useful to understand what the
-engine does, and necessary as soon as a behavior goes off the beaten path.
+The class version shows the lifecycle hook and intermediate state explicitly. `BehaviorContext` supplies access to the field; `BehaviorState` describes this behavior's contribution to its activity and availability. `onMount` runs when the field mounts.
 
 ```ts
 import { Behavior, type BehaviorContext, type BehaviorState } from "slz-form";
@@ -28,7 +28,7 @@ class PrefillCustomerReference extends Behavior<string> {
             }
         } catch {
             // a prefill that fails leaves the field empty:
-            // it is not an input error, and the Validator remains the only judge
+            // validation reports any issue with the field value
         }
         return ctx.state.idle().unlock();
     }
@@ -42,28 +42,22 @@ const field = form.field("customerReference", {
 field.mount();
 ```
 
-What happens, in order:
+With an initially empty, untouched field, the flags change as follows:
 
 ```
 during the call   pristine, loading, locked
 after the call    pristine, idle          ← value set, field still pristine
 ```
 
-Three points are worth remembering:
+- `ctx.setValue` writes the value and triggers validation without marking the field `touched`. The displayed validity therefore stays `pristine` until interaction.
+- `ctx.push` publishes `loading` and `locked` before the `await`, so the view can show a spinner and disable the input while the request runs. Returning a promise from a behavior does not publish these flags by itself.
+- `ctx.signal` is aborted on unmount. The check after the `await` avoids a late write; pass the signal to your network call too if you want it to cancel the request.
 
-- **the field stays `pristine`**: `ctx.setValue` does not mark the field as
-  touched, because a value that came from an API is not a user interaction;
-- **`ctx.push` publishes the wait before the `await`** — without it, `loading`
-  would never be visible, since nothing is returned until the promise has
-  resolved;
-- **`ctx.signal` is aborted on unmount**: that is what stops a late response
-  from writing into a field that no longer exists.
+This catch deliberately ignores a failed prefill. The initially empty field stays empty, and the behavior releases its loading and lock flags. For a field that already had a value, this failure would leave that value in place.
 
 ## 2. The same behavior, with a validator
 
-We add a rule. Nothing changes on the behavior side: the two do not step on
-each other, because they do not act on the same axis — the behavior **writes**
-a value, the validator **judges** it.
+Add a validator to check the fetched reference's format. `ValidationReport` collects the errors and warnings from one validation run.
 
 ```ts
 class ReferenceValidator extends IValidator<string> {
@@ -79,20 +73,21 @@ const field = form.field("customerReference", {
 });
 ```
 
+The display can follow this sequence when the user enters an invalid reference and then corrects it:
+
 ```
-after the prefill   pristine, idle     ← the validator has not ruled
+after the prefill   pristine, idle     ← validated, but no error displayed yet
 the user types      error, idle        ← "Expected format: CUST-42-9013"
 they fix it         valid, idle
 ```
 
-**A prefilled value does not trigger an error.** The field has not been
-touched, so it stays `pristine` and displays nothing. The validator only rules
-from the first input — or from submission, which touches every field.
+Validation runs on mount and when `ctx.setValue` changes the value. An invalid prefilled value can therefore appear in `field.errors` and block form submission immediately. The untouched field still stays `pristine`, so an error message guarded by `hasFlag("error")` stays hidden.
 
-## 3. The helper, fully typed
+`change` and `blur` mark the field touched. Submission also touches the mounted fields and validates them. These interactions allow the field to display its validation result. Reading `field.errors` directly gives the blocking messages regardless of display state.
 
-The common case, in three lines. `prefill` comes from `behaviorsFor(form)`, so
-everything is inferred from the form's field map.
+## 3. The typed helper
+
+`behaviorsFor(form)` returns helpers that check names and values against the field map, the type associating each field name with its value. Use its `prefill` helper for this common mount-and-fetch operation:
 
 ```ts
 const { prefill } = behaviorsFor(form);
@@ -109,18 +104,16 @@ const field = form.field("customerReference", {
 });
 ```
 
-Same behavior as the first example — `loading` + `locked` during the call,
-value set, field still `pristine`.
+The helper publishes `loading` and `locked` while it fetches, writes a returned value and leaves an untouched field `pristine`. It catches a fetch failure and leaves the existing value in place. A return value of `undefined` also leaves the value in place.
 
-What is checked at compile time:
+TypeScript checks the field name:
 
 ```ts
 prefill({ field: "reference", fetch: async () => "x" });
 //              ~~~~~~~~~~~ '"reference"' is not assignable to '"customerReference"'
 ```
 
-And on a form that declares `{ customerReference: string; mileage: number }`,
-a fetch of the wrong type does not compile either:
+It also checks the returned value. On a form declaring `{ customerReference: string; mileage: number }`, this fetch has the wrong result type:
 
 ```ts
 prefill({ field: "mileage", fetch: async () => "not a number" });
@@ -128,5 +121,4 @@ prefill({ field: "mileage", fetch: async () => "not a number" });
 //                                 assignable to 'number'
 ```
 
-A misspelled field name and a fetch of the wrong type are **compile errors**,
-not runtime surprises.
+These errors are caught at compile time when using the typed helper.
