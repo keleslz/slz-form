@@ -2,13 +2,16 @@
 id: lists
 title: Repeatable lists
 sidebar_position: 3
-description: useFieldArray, useFieldOn, and why the list does not publish its rows' flags.
+description: Render rows with stable keys and connect each input to its row form.
 ---
 
 # Repeatable lists
 
-A list is declared as `FieldArray<Row>` in the field map. `useFieldArray(name)`
-returns its composition; each row is a form in its own right.
+This page shows how to render an editable list of invoice lines in React. You will add and remove rows, connect their fields and find the list's combined validation state.
+
+`FieldArray<Row>` declares a list whose rows have the fields described by `Row`. Each row has its own `FormController`, the object that manages fields and runs their configured behaviors and validators. A behavior reacts to field events; a validator checks values and reports messages.
+
+Start by declaring the list in the form's field map, the type associating names with value types:
 
 ```ts
 // src/form/invoice-form.ts
@@ -21,6 +24,8 @@ type InvoiceFields = { lines: FieldArray<InvoiceLine> };
 export const invoiceForm = new FormController<InvoiceFields>({ name: "invoice" });
 export const { useFieldArray, useForm } = hooksFor(invoiceForm);
 ```
+
+`useFieldArray("lines")` returns the rows in display order and operations for changing the list:
 
 ```tsx
 function InvoiceLines() {
@@ -40,7 +45,7 @@ function InvoiceLines() {
 }
 ```
 
-A row field is wired with `useFieldOn`, by passing it the row's form:
+Connect a row field with `useFieldOn`, passing the row's form. `FieldArrayRow` and `useFieldOn` are exported by `slz-form` and `slz-react-form`, respectively:
 
 ```tsx
 function LineLabel({ row }: { row: FieldArrayRow<InvoiceLine> }) {
@@ -56,24 +61,16 @@ function LineLabel({ row }: { row: FieldArrayRow<InvoiceLine> }) {
 }
 ```
 
-`useFieldOn` takes any form: the row's field map is erased at this generic
-bridge, so the value type is given by hand — `<string, never>` here (`never`:
-this field carries no options meta).
+`useFieldOn` accepts a form without using its field map to constrain the parameters. Supply the value type explicitly and make sure the name matches a row field: `<string, never>` here. The second type parameter describes metadata attached to options; `never` means this field has none.
 
-`row.id` is **stable**: it changes neither when another row is removed nor on
-reordering. It is a reliable React key, and it is what keeps a move from
-breaking declared dependencies.
+`row.id` stays the same when you remove another row or reorder the list. Use it as the React key so the component stays associated with the same row form.
 
-## Where to read the aggregate state
+The hook also provides `move(from, to)` and `clear()`. Moving uses positions to change the display order; removing uses the stable identifier.
 
-The aggregate state of a list — its validity, its errors, its work in flight —
-is read through `useForm().snapshot.arrays`, **not** through `useFieldArray`.
+## Reading the combined state
 
-`useFieldArray` subscribes only to the **composition** of the list (append,
-remove, move), so that a keystroke in one row does not re-render the others.
-Exposing flags there would make them stale as of the next keystroke — a wrong
-state displayed with confidence, which is worse than no state at all.
+A snapshot is an object describing current form state. Read the list's validation, blocking errors and loading state through the list entry in `useForm().snapshot.arrays`. Its `ui` provides flags, named states such as `error` and `loading`, which you read with `hasFlag` or `hasAny`.
 
-The why — a row is an identified `FormController`, never indexed — is in
-[A row is a form](../model/a-row-is-a-form.md); the engine side, in
-[Repeatable fields](../guides/repeatable-fields.md).
+`useFieldArray` subscribes only to additions, removals and moves. Editing a value in an existing row does not notify that list subscription. Each field has its own subscription, while `useForm` subscribes to the combined form state. This lets a summary react to row errors without requiring the list component to subscribe to every keystroke.
+
+React parent renders and declared dependencies can still update other components. See [Hooks](./hooks.md) for subscription scope, [A row is a form](../model/a-row-is-a-form.md) for the row model, and [Repeatable fields](../guides/repeatable-fields.md) for the core API.

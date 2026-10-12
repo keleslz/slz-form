@@ -2,19 +2,18 @@
 id: prefill
 title: Préremplir un champ
 sidebar_position: 1
-description: Le même besoin écrit de trois façons, de la classe entière à l'utilitaire en trois lignes.
+description: Charger une valeur initiale au montage tout en conservant le champ sans interaction.
 ---
 
 # Préremplir un champ
 
-Remplir un champ depuis une API au montage, écrit de trois manières — de la plus
-explicite à la plus courte. Les trois produisent **exactement** le même
-comportement.
+Cette page montre comment charger une référence client au montage d'un champ, verrouiller l'input pendant la requête et valider le résultat. Vous pouvez écrire le behavior vous-même ou utiliser le helper typé `prefill`.
+
+Un prefill est une valeur définie par votre application avant la saisie utilisateur. Un behavior réagit aux événements d'un champ et peut modifier sa valeur. Un validator vérifie la valeur et signale des erreurs ou des avertissements. Les flags sont des états nommés, comme `loading`, que votre vue lit pour choisir son affichage.
 
 ## 1. Une classe de behavior, sans validator
 
-Le cas où l'on écrit tout soi-même. Utile pour comprendre ce que fait le moteur,
-et nécessaire dès qu'un comportement sort de l'ordinaire.
+La version sous forme de classe montre explicitement le hook du cycle de vie et l'état intermédiaire. `BehaviorContext` donne accès au champ ; `BehaviorState` décrit la contribution de ce behavior à son activité et à sa disponibilité. `onMount` s'exécute au montage du champ.
 
 ```ts
 import { Behavior, type BehaviorContext, type BehaviorState } from "slz-form";
@@ -29,7 +28,7 @@ class PrefillCustomerReference extends Behavior<string> {
             }
         } catch {
             // un prefill qui échoue laisse le champ vide :
-            // ce n'est pas une erreur de saisie, et le Validator reste seul juge
+            // la validation signale les problèmes de valeur du champ
         }
         return ctx.state.idle().unlock();
     }
@@ -43,28 +42,22 @@ const field = form.field("customerReference", {
 field.mount();
 ```
 
-Ce qui se passe, dans l'ordre :
+Pour un champ initialement vide et sans interaction, les flags évoluent ainsi :
 
 ```
 pendant l'appel   pristine, loading, locked
 après l'appel     pristine, idle          ← valeur posée, champ toujours pristine
 ```
 
-Trois points méritent d'être retenus :
+- `ctx.setValue` écrit la valeur et déclenche la validation sans marquer le champ `touched`. La validité affichée reste donc `pristine` jusqu'à une interaction.
+- `ctx.push` publie `loading` et `locked` avant l'`await`, pour que la vue affiche un indicateur et désactive l'input pendant la requête. Renvoyer une promesse depuis un behavior ne publie pas ces flags à lui seul.
+- `ctx.signal` est annulé au démontage. La vérification après l'`await` évite une écriture tardive ; transmettez aussi ce signal à votre appel réseau si vous souhaitez annuler la requête.
 
-- **le champ reste `pristine`** : `ctx.setValue` ne marque pas le champ touché,
-  parce qu'une valeur venue d'une API n'est pas une interaction utilisateur ;
-- **`ctx.push` publie l'attente avant l'`await`** — sans lui, `loading` ne
-  serait jamais visible, puisque rien n'est retourné tant que la promesse n'a
-  pas résolu ;
-- **`ctx.signal` est avorté au démontage** : c'est ce qui empêche une réponse
-  tardive d'écrire dans un champ qui n'existe plus.
+Ce catch ignore volontairement un échec de préremplissage. Le champ initialement vide reste vide, et le behavior libère ses flags de chargement et de verrouillage. Pour un champ qui avait déjà une valeur, cet échec la laisserait en place.
 
 ## 2. Le même behavior, avec un validator
 
-On ajoute une règle. Rien ne change du côté du behavior : les deux ne se
-marchent pas dessus, parce qu'ils n'agissent pas sur le même axe — le behavior
-**écrit** une valeur, le validator la **juge**.
+Ajoutez un validator pour vérifier le format de la référence chargée. `ValidationReport` rassemble les erreurs et les avertissements d'une exécution de validation.
 
 ```ts
 class ReferenceValidator extends IValidator<string> {
@@ -80,20 +73,21 @@ const field = form.field("customerReference", {
 });
 ```
 
+L'affichage peut suivre cette séquence quand l'utilisateur saisit une référence invalide, puis la corrige :
+
 ```
-après le prefill        pristine, idle     ← le validator ne s'est pas prononcé
+après le prefill        pristine, idle     ← valeur validée, erreur encore masquée
 l'utilisateur saisit    error, idle        ← « Format attendu : CUST-42-9013 »
 il corrige              valid, idle
 ```
 
-**Une valeur préremplie ne déclenche pas d'erreur.** Le champ n'ayant pas été
-touché reste `pristine` et n'affiche rien. Le validator ne tranche qu'à partir
-de la première saisie — ou de la soumission, qui touche tous les champs.
+La validation s'exécute au montage et quand `ctx.setValue` change la valeur. Une valeur préremplie invalide peut donc figurer dans `field.errors` et bloquer immédiatement la soumission du formulaire. Le champ sans interaction reste `pristine`, donc un message conditionné par `hasFlag("error")` reste masqué.
 
-## 3. L'utilitaire, entièrement typé
+`change` et `blur` marquent le champ comme touché. La soumission touche aussi les champs montés et les valide. Ces interactions permettent au champ d'afficher son résultat de validation. Lire directement `field.errors` donne les messages bloquants indépendamment de l'état d'affichage.
 
-Le cas courant, en trois lignes. `prefill` vient de `behaviorsFor(form)`, donc
-tout est inféré depuis la map du formulaire.
+## 3. Le helper typé
+
+`behaviorsFor(form)` renvoie des helpers qui vérifient les noms et les valeurs à partir de la map, le type qui associe chaque nom de champ à sa valeur. Utilisez son helper `prefill` pour ce chargement au montage :
 
 ```ts
 const { prefill } = behaviorsFor(form);
@@ -110,18 +104,16 @@ const field = form.field("customerReference", {
 });
 ```
 
-Comportement identique au premier exemple — `loading` + `locked` pendant
-l'appel, valeur posée, champ toujours `pristine`.
+Le helper publie `loading` et `locked` pendant le chargement, écrit la valeur renvoyée et laisse un champ sans interaction `pristine`. Il intercepte un échec du chargement et conserve la valeur existante. Un retour `undefined` conserve également la valeur.
 
-Ce qui est vérifié à la compilation :
+TypeScript vérifie le nom du champ :
 
 ```ts
 prefill({ field: "reference", fetch: async () => "x" });
 //              ~~~~~~~~~~~ '"reference"' is not assignable to '"customerReference"'
 ```
 
-Et sur un formulaire qui déclare `{ customerReference: string; mileage: number }`,
-un fetch au mauvais type ne compile pas davantage :
+Il vérifie aussi la valeur renvoyée. Sur un formulaire déclarant `{ customerReference: string; mileage: number }`, ce fetch renvoie un type incompatible :
 
 ```ts
 prefill({ field: "mileage", fetch: async () => "pas un nombre" });
@@ -129,5 +121,4 @@ prefill({ field: "mileage", fetch: async () => "pas un nombre" });
 //                                 assignable to 'number'
 ```
 
-Un nom de champ fautif et un fetch au mauvais type sont des **erreurs de
-compilation**, pas des surprises à l'exécution.
+Ces erreurs sont détectées à la compilation lorsque vous utilisez le helper typé.

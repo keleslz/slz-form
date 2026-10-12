@@ -2,22 +2,24 @@
 id: installation
 title: Wiring up React
 sidebar_position: 1
-description: A form module, derived hooks, no mandatory provider.
+description: Connect a form to React hooks and render its field state.
 ---
 
 # Wiring up React
 
-The adapter is **a provider and three hooks**. No business logic: it lives
-entirely in the core.
+This page shows how to connect a form to React and render a validated input. You will create hooks bound to a form and wire an input's change and blur events to its field controller.
+
+`slz-react-form` connects the core's controllers to React subscriptions and lifecycle effects. A controller stores form or field state and runs its configured rules. Your components choose the markup and styles.
 
 ```bash
 npm install slz-form slz-react-form
 ```
 
+The adapter requires React ≥ 18. For pre-release setup and the local demo, see [Installation](../getting-started/installation.md).
+
 ## The form module
 
-Declare the form and its field map in a module, then derive its hooks from it —
-the same split as a slice:
+The field map is the type associating each field name with its value type. Declare it with the form in a module, then call `hooksFor` to create hooks for that form:
 
 ```ts
 // src/form/signup-form.ts
@@ -31,14 +33,15 @@ export const signupForm = new FormController<SignupFields>({ name: "signup" });
 export const { useField, useFieldArray, useForm } = hooksFor(signupForm);
 ```
 
-`name` is then constrained to the declared fields, and the value is inferred.
-There is **no provider to mount and no form to name** on each field.
+The derived `useField` checks that `name` belongs to `SignupFields` and infers the value type. It already knows which form to use, so these hooks work without a provider.
 
-`FormProvider` and `useFormRegister` exist for cross-cutting access to the
-`FormRegister` — useful when a very distant component must reach a form —, not
-for the common case.
+`FormRegister` stores forms by name for access elsewhere in an application. If distant components need that register, `FormProvider` makes it available through React context, and `useFormRegister` retrieves it. This is optional for hooks created with `hooksFor`.
 
 ## A field
+
+`useField` creates or retrieves the field controller and mounts it in an effect. A validator checks its value and reports errors or warnings; define `EmailValidator` as in [First form](../getting-started/first-form.md). `Spinner` is a component supplied by your application.
+
+A flag is a named state such as `locked` or `loading`. Read flags with `hasFlag` to decide how the input and messages should render:
 
 ```tsx
 function EmailField() {
@@ -66,15 +69,12 @@ function EmailField() {
 }
 ```
 
-**Adding a field to the form means mounting this component.** Nothing to declare
-upfront.
+The field name must first exist in the TypeScript map. The controller is created on the first `useField` call for that name and mounted by the hook's effect; the map itself creates no runtime fields. Unmounting the component unmounts the field.
 
-The two read functions — `hasFlag` / `hasAny` — and render isolation are
-detailed in [Hooks](./hooks.md); lists, in
-[Repeatable lists](./lists.md).
+The validator, behaviors and initial configuration are read when the controller is created. Recreating a validator in a render does not replace the existing controller's validator. Use the hook's supported update props, such as `required`, `locked` and `readOnly`, for settings that change with the view.
 
-## No server rendering, for now
+See [Hooks](./hooks.md) for subscriptions and state reads, and [Repeatable lists](./lists.md) for rows.
 
-`useField`, `useFieldArray` and `useForm` read their state through
-`useSyncExternalStore` **without** `getServerSnapshot`: a `renderToString`
-throws `Missing getServerSnapshot`. Mount on the client only.
+## Client rendering
+
+`useField`, `useFieldArray` and `useForm` call `useSyncExternalStore` without `getServerSnapshot`. Server rendering with `renderToString` throws `Missing getServerSnapshot`. Mount components using these hooks on the client.

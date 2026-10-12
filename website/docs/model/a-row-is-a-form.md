@@ -2,14 +2,16 @@
 id: a-row-is-a-form
 title: A row is a form
 sidebar_position: 4
-description: Why repeatable fields have no path-based naming.
+description: Use stable row identifiers and reuse form validation for repeatable fields.
 ---
 
 # A row is a form
 
-Repeatable fields have **no** path-based naming — neither `lines[0].qty` nor
-`lines.0.qty`. A row **is** a `FormController`: same API, same validation, same
-behaviors.
+This page explains how repeatable rows are represented and where to put rules that apply to a whole list. You will see how row identifiers let fields keep their names when rows move.
+
+Each row has a `FormController`, the object that manages its fields, validation and behaviors. A behavior reacts to field events; a validator checks values and reports errors or warnings. Rows use those APIs in the same way as any other form.
+
+The list is declared with `FieldArray<Row>`, which associates a list field with the row's field types. You access a row by its identifier and then access its fields by name:
 
 ```ts
 type InvoiceFields = { customer: string; lines: FieldArray<{ label: string; qty: number }> };
@@ -25,24 +27,21 @@ qty.change(3);
 lines.remove(id);
 ```
 
-## What it avoids
+## Stable identifiers
 
-Rows are **identified**, never indexed. Removing or moving a row therefore
-renames nothing, and no `watch` ever starts pointing into the void.
+Each row has an identifier that stays the same when you remove or reorder other rows. Field names such as `qty` are local to that row's form. You do not need paths such as `lines[0].qty` or `lines.0.qty`.
 
-With index-based naming, deleting row 0 turns the former row 1 into the new
-row 0: any dependency declared on `lines[1].qty` silently observes another row.
-The bug is invisible when reading the code and painful to reproduce.
+For example, deleting the first invoice line does not rename the quantity field on the next line. A dependency declared within that row still refers to the same field. `watch` is the list of fields whose changes trigger a behavior or validator; the row's form manages its own dependencies.
 
-## The accepted price
+## Row lifecycle
 
-A row is mounted and unmounted like a form. In exchange, nothing was reworked
-to accommodate them — not `FieldsShape`, not `FieldNameOf`, not the dependency
-graph.
+Row fields need to be created and mounted, just like fields in another form. Removing a row unmounts its form and fields. The React hooks handle field mounting and unmounting for you; when using the core directly, manage that lifecycle in your application.
 
-## A rule that applies to the whole
+The engine uses the same field types and dependency graph for parent forms and row forms. See [Repeatable fields](../guides/repeatable-fields.md) for list operations.
 
-It is declared on the **parent**, not on the row:
+## A rule for the whole list
+
+A rule such as “the shares must add up to 100” belongs on a field in the parent form. It watches the list and reads all row values:
 
 ```ts
 class SharesMakeAHundred extends IValidator<string> {
@@ -58,8 +57,8 @@ class SharesMakeAHundred extends IValidator<string> {
 }
 ```
 
-`validateWhenEmpty` is required: rules do not run on an empty value, and this
-rule does not judge the value of the field carrying it but the sum of the rows.
+The field carrying this validator may be empty because its own value is not used in the calculation. `validateWhenEmpty` tells the validator to run its custom rule even on an empty value. Declare it for rules like this; otherwise the custom check is skipped on that value.
 
-The validity of a list follows the same logic as the form's: `valid` · `error`,
-never `pristine`. A list is an aggregate, not a field you touch.
+`ctx.form.values()` reads the current values. It does not establish a subscription; `watch = ["parts"]` is what reruns the rule when the list values change. The example focuses on the calculation; add parameter types and narrow unknown row values as shown in [Repeatable fields](../guides/repeatable-fields.md).
+
+The list's validity is based on its rows' blocking errors. It publishes the flags `valid` or `error`, including before a user interacts with a row. A flag is a named state read with `hasFlag` or `hasAny`. The list has no `pristine` validity state.

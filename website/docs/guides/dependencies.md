@@ -2,13 +2,16 @@
 id: dependencies
 title: Declared dependencies
 sidebar_position: 3
-description: Watch a neighbor — its value, or its state — without ever writing to it.
+description: React to another field changing its value, validity or loading state.
 ---
 
 # Declared dependencies
 
-A behavior lists the fields it watches. The graph is built at wiring time: a
-**cycle is rejected there**, not discovered as an infinite loop at runtime.
+This page shows how to rerun field logic when another field changes. You will be able to choose whether that reaction depends on the other field's value, validity or activity.
+
+A dependency is a field named in `watch` so its changes trigger a reaction. A behavior reacts to field events and can update its own field. A validator checks values and reports errors or warnings. Both can declare dependencies; the form records them in a graph and rejects cycles when fields are registered.
+
+For example, you can lock the city input while the postcode has blocking errors:
 
 ```ts
 const { lockUntilValid } = behaviorsFor(form);
@@ -16,17 +19,17 @@ const { lockUntilValid } = behaviorsFor(form);
 lockUntilValid({ watch: ["postcode"] });
 ```
 
-## Which axis wakes you up
+`lockUntilValid` is a helper from `behaviorsFor(form)`. It watches validity and locks if a watched field is unavailable or has errors. It does not require a field to have been touched first.
 
-A bare name is triggered by the **value**:
+## Choosing which changes trigger a behavior
+
+For a behavior, a bare field name watches value changes:
 
 ```ts
 { watch: ["postcode"] }                                   // ≡ on: ["value"]
 ```
 
-That is the default, and it keeps a revalidation from replaying the network
-calls of the behaviors that watch the field. To react to something else, you
-name the axis:
+This default means a postcode revalidation does not by itself reload city options. For other reactions, name the kind of change in `on`:
 
 ```ts
 { watch: [{ field: "postcode", on: ["value"] }] }      // default — the value changes
@@ -34,25 +37,27 @@ name the axis:
 { watch: [{ field: "postcode", on: ["activity"] }] }   // loading / idle
 ```
 
-`onDependencyChanged(ctx, dependency)` then receives the view of the watched
-field — `dependency.value`, `dependency.errors`, `dependency.hasFlag(...)` —
-read-only.
+`value` follows value changes. `validity` follows changes to validation and its displayed state. `activity` follows `loading` and `idle`. These names select the state changes that trigger `onDependencyChanged(ctx, dependency)`.
 
-## Read, never write
+That hook receives a read-only view of the watched field, including `dependency.value`, `dependency.errors` and `dependency.hasFlag(...)`. A flag is a named state such as `loading`; `hasFlag` checks its presence.
 
-A field can read the others; it can **never** write one. Cross-field locking,
-hiding and reloading all go through that read, with no mutation.
+Validators declare field names in `watch` and rerun when those values change. They do not use the behavior's `on` entries.
 
-That is what makes the graph reliable: if writing to a neighbor were possible,
-the execution order would become observable, and two behaviors could
-contradict each other without either being wrong.
+## Updating the dependent field
 
-## Reading an undeclared field throws
+The context gives a behavior mutation methods for its own field and read-only views of the others. If a brand change requires new model options, put the loading behavior on the model field: it reads the brand and writes its own options.
+
+Declaring both “model watches brand” and “brand watches model” creates a cycle. The graph rejects it during registration, before it can cause repeated propagation.
+
+## Declaring reads explicitly
+
+Use `ctx.watched` for the fields listed in `watch`:
 
 ```ts
 ctx.watched("postcode")   // ✓ declared
 ctx.watched("city")       // ✗ throws — reads "city" without declaring it in `watch`
 ```
 
-The error is immediate and named. An implicit dependency is precisely what you
-do not want to be able to set up by inattention.
+An undeclared name throws with a message identifying the field and missing declaration. A declared field can still be unavailable; in that case the result is `null`.
+
+`ctx.form` also offers general read-only access, including `values()`. Reading it does not add a dependency or subscribe to changes. Declare the fields in `watch` whenever their changes should rerun your logic.

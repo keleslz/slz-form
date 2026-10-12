@@ -2,14 +2,14 @@
 id: the-problem
 title: Le problème
 sidebar_position: 1
-description: Ce qu'un select dépendant coûte réellement quand on l'écrit à la main.
+description: Gérer un select dépendant sans répéter sa logique d'état dans chaque composant.
 ---
 
 # Le problème
 
-Chaque input d'une application réelle réclame la même dizaine de mécanismes.
-Pris un par un, aucun n'est difficile. Assemblés, ils produisent ceci — un
-simple select dont les options dépendent d'un autre champ :
+Cette page utilise un select de modèles de voiture pour montrer quelle logique slz-form prend en charge. Vous verrez comment sortir le chargement des options et l'état du champ d'un composant React.
+
+Quand la marque change, vous devez charger les modèles disponibles. Le select a aussi besoin d'une valeur, de messages de validation et d'un état désactivé pendant le chargement ou la soumission. Un composant peut gérer ces besoins ainsi :
 
 ```tsx
 const [value, setValue] = useState("");
@@ -39,64 +39,43 @@ useEffect(() => {
 {touched && error && <p className="error">{error}</p>}
 ```
 
-Ce qui coûte cher n'est pas la longueur, c'est ce que ce code installe :
+Cette approche fonctionne, mais vous laisse plusieurs éléments à coordonner :
 
-- **L'état métier vit dans le composant.** Le parent devient propriétaire de la
-  valeur, du `touched`, des options ; il n'est plus déplaçable ni testable seul.
-- **Les règles d'affichage sont recalculées à la main.**
-  `disabled={loading || submitting || !brand}` est réécrit, légèrement
-  différemment, dans chaque champ. Une règle qui change se corrige à N endroits.
-- **Les dépendances entre champs sont implicites.** Rien ne dit que ce champ
-  dépend de `brand`, sinon un tableau de `useEffect` qu'il faut lire pour le
-  découvrir.
-- **Les états impossibles sont représentables.** Rien n'empêche `touched=false`
-  avec un `error` affiché, ou un spinner pendant que le champ est déjà en erreur.
-- **Le rendu déborde.** Remonter la valeur au parent pour le bouton submit fait
-  re-rendre tous les autres champs à chaque frappe.
-- **La logique est prisonnière de React.** La même règle métier devra être
-  réécrite en Angular ou en Vue.
+- Le composant possède la valeur, l'état d'interaction et les options. Pour tester cette logique séparément, vous devez l'extraire de React.
+- Chaque input répète des conditions de chargement, de soumission et de dépendance. Modifier une règle commune peut demander de changer plusieurs composants.
+- La dépendance à `brand` est déclarée dans l'effet. Vous devez lire les effets pour retrouver toutes les relations entre champs.
+- Des mises à jour indépendantes peuvent laisser des options, des messages ou un état de chargement périmés si vous ne les coordonnez pas, notamment quand les réponses arrivent dans le désordre.
+- Si un parent contient toutes les valeurs, en modifier une peut provoquer un nouveau rendu du parent et de ses enfants.
+- Les effets dépendent de React. Un autre framework demande sa propre intégration pour cette logique.
 
 ## Le même champ, avec le moteur
 
-Le behavior est déclaré une fois, dans le module du formulaire :
+Un behavior est un objet qui réagit aux événements d'un champ. Ici, `loadOptions` crée un behavior qui charge les options du modèle quand la marque observée change. `watch` liste les champs dont les changements déclenchent le behavior. Cet exemple utilise le helper renvoyé par `behaviorsFor(form)`, qui vérifie les noms de champs et les types des callbacks à partir de votre déclaration de formulaire.
 
 ```ts
 const modelOptions = loadOptions({
     field: "model",
     watch: ["brand"],
-    fetch: ({ brand }) => fetchModels(brand),   // brand: string, sans cast
+    fetch: ({ brand }) => fetchModels(brand),   // brand: string | undefined, sans cast
 });
 ```
+
+Associez-le à votre composant de select :
 
 ```tsx
 <SelectField name="model" label="Modèle" required behaviors={[modelOptions]} />
 ```
 
-Plus de `useState`, plus de `useEffect`, plus de spinner câblé à la main, plus
-de `disabled` composé de trois booléens. Ce n'est pas seulement plus court —
-c'est ce que ça rend **impossible** qui compte.
+`SelectField` est un composant de votre application, comme ceux de la démo. Il affiche toujours le select, l'indicateur de chargement et les messages, mais lit leur état dans le moteur. Un flag est un état nommé, comme `loading` ou `locked` ; le composant vérifie les flags au lieu de conserver des booléens séparés pour chaque règle.
 
-## Ce que le système garantit
+## Ce que le système vérifie
 
-**La validité a une autorité unique.** Seul le Validator la produit. Aucun
-behavior ne peut le contredire, donc il n'y a jamais d'arbitrage entre deux
-sources en désaccord. `IValidator<T>` est générique : le même contrat couvre
-texte, nombre, booléen, liste d'options, fichier, date, heure et datetime —
-chaque validateur juge son propre type, sans un seul cast.
+Les validators vérifient les valeurs et signalent des erreurs ou des avertissements. `IValidator<T>` permet d'écrire une règle pour le type utilisé : chaînes, nombres, booléens, tableaux d'options, fichiers ou dates. Les behaviors peuvent modifier la valeur, les options et les flags de leur propre champ ; leur résultat ne contient pas de réglage de validité.
 
-**Les dépendances sont déclarées, et vérifiées.** Un behavior ou un validator
-liste les champs qu'il observe dans `watch`. Lire un champ non déclaré **lève**,
-et un cycle est rejeté au câblage plutôt que découvert en boucle infinie. Un
-champ peut lire les autres ; il ne peut jamais en écrire un.
+Les behaviors et les validators déclarent leurs dépendances dans `watch`. `ctx.watched(...)` lève une exception pour un nom non déclaré, et le graphe des dépendances rejette les cycles lors de l'enregistrement des champs. Le contexte donne accès aux autres champs en lecture et fournit au behavior des méthodes pour modifier son propre champ. Les lectures générales via `ctx.form` ne créent pas automatiquement de dépendance.
 
-**Un champ qui change ne re-rend pas les autres.** Chaque champ a son propre
-abonnement et un snapshot stable par référence. S'abonner au formulaire entier
-est un choix explicite, réservé à ce qui en a besoin — un bouton submit, un
-récapitulatif.
+Chaque champ possède son abonnement et son snapshot, un objet qui décrit son état actuel. Le snapshot conserve la même référence tant que cet état ne change pas. La modification d'un champ indépendant ne notifie pas cet abonnement. Les dépendances déclarées et les rendus des parents React peuvent tout de même mettre à jour d'autres composants. Utilisez l'abonnement au formulaire entier pour les composants qui en ont besoin, comme un bouton d'envoi ou un récapitulatif.
 
-**Rien n'est typé à la main, et rien de faux ne compile.** Le formulaire déclare
-ce que vaut chaque champ ; behaviors et hooks en dérivent. Voir
-[Premier formulaire](first-form.md).
+Votre map de champs déclare les noms et les types de valeurs. Les helpers dérivés vérifient ces types : TypeScript détecte un nom mal orthographié ou une valeur incompatible. Les props de vos propres composants doivent également conserver ces contraintes. Voir [Premier formulaire](first-form.md).
 
-**La logique s'écrit une fois, pour tous les frameworks.** Le cœur ne connaît ni
-React, ni Angular, ni Vue. La règle métier ne sera pas réécrite trois fois.
+Le cœur ne dépend d'aucun framework. Vous pouvez réutiliser les behaviors et les validators avec un autre framework en reliant sa vue aux contrôleurs.

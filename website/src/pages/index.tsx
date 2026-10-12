@@ -32,7 +32,7 @@ const ARGUMENTS: readonly { key: string; title: ReactNode; body: ReactNode }[] =
         key: "impossible",
         title: (
             <Translate id="home.arguments.impossible.title">
-                Impossible states cannot be represented
+                Field flags stay consistent
             </Translate>
         ),
         body: (
@@ -46,7 +46,7 @@ const ARGUMENTS: readonly { key: string; title: ReactNode; body: ReactNode }[] =
                 }}
             >
                 {
-                    "{pristine} and {error} are mutually exclusive, like {idle} and {loading}. A flat union would let them coexist; two kinds of flags prevent it."
+                    "A field has one displayed validity state, such as {pristine} or {error}, and one activity state, {idle} or {loading}. Locks and other flags can be combined."
                 }
             </Translate>
         ),
@@ -54,12 +54,12 @@ const ARGUMENTS: readonly { key: string; title: ReactNode; body: ReactNode }[] =
     {
         key: "authority",
         title: (
-            <Translate id="home.arguments.authority.title">Validity has a single authority</Translate>
+            <Translate id="home.arguments.authority.title">Validators check your values</Translate>
         ),
         body: (
             <Translate id="home.arguments.authority.body">
-                Only the Validator produces it. No behavior can contradict it, so there is never a
-                tie to break between two sources that disagree.
+                A validator checks a value and reports errors or warnings. A behavior reacts to field
+                events, for example by fetching model options when the car brand changes.
             </Translate>
         ),
     },
@@ -67,23 +67,23 @@ const ARGUMENTS: readonly { key: string; title: ReactNode; body: ReactNode }[] =
         key: "renders",
         title: (
             <Translate id="home.arguments.renders.title">
-                A field that changes does not re-render the others
+                Each field has its own subscription
             </Translate>
         ),
         body: (
             <Translate id="home.arguments.renders.body">
-                Each field has its own subscription and a referentially stable snapshot. Subscribing
-                to the whole form is an explicit choice, not the default.
+                Each field reads a snapshot of its current state. Unrelated fields do not notify that
+                subscription. Dependencies and React parent renders can still update other components.
             </Translate>
         ),
     },
     {
         key: "types",
-        title: <Translate id="home.arguments.types.title">Nothing wrong compiles</Translate>,
+        title: <Translate id="home.arguments.types.title">TypeScript checks field names and values</Translate>,
         body: (
             <Translate id="home.arguments.types.body" values={{ as: code("as") }}>
                 {
-                    "The form declares what each field holds; behaviors and hooks derive from it. A wrong name or a wrong type is a compile error — and no {as} on the consumer side."
+                    "Declare each field name and value type once. The derived helpers check names and values, so ordinary use does not need {as} casts."
                 }
             </Translate>
         ),
@@ -93,14 +93,14 @@ const ARGUMENTS: readonly { key: string; title: ReactNode; body: ReactNode }[] =
 export default function Home(): ReactNode {
     const tagline = translate({
         id: "home.tagline",
-        message: "A flag-driven, framework-agnostic form engine",
+        message: "Manage form state in any UI framework",
     });
 
     return (
         <Layout
             title={translate({
                 id: "home.title",
-                message: "A flag-driven form engine",
+                message: "Form values, validation and loading state",
             })}
             description={tagline}
         >
@@ -115,12 +115,12 @@ export default function Home(): ReactNode {
                                 values={{
                                     is: (
                                         <em>
-                                            <Translate id="home.view.reads.is">is</Translate>
+                                            <Translate id="home.view.reads.is">state</Translate>
                                         </em>
                                     ),
                                     holds: (
                                         <em>
-                                            <Translate id="home.view.reads.holds">holds</Translate>
+                                            <Translate id="home.view.reads.holds">value</Translate>
                                         </em>
                                     ),
                                     hasFlag: code("hasFlag"),
@@ -128,16 +128,16 @@ export default function Home(): ReactNode {
                                 }}
                             >
                                 {
-                                    "It reads and renders. What a field {is} is read as flags; what it {holds} is read as data. Two functions: {hasFlag} is AND, {hasAny} is OR."
+                                    "Read a field’s {is} through named flags such as loading or locked, and read its {holds} separately. {hasFlag} checks all supplied flags; {hasAny} checks at least one. Use them to render inputs and messages."
                                 }
                             </Translate>
                         </p>
                         <div className={styles.actions}>
                             <Link className="button button--primary button--lg" to="/docs/getting-started/first-form">
-                                <Translate id="home.actions.firstForm">First form</Translate>
+                                <Translate id="home.actions.firstForm">Build your first form</Translate>
                             </Link>
                             <Link className={`button button--lg ${styles.ghost}`} to="/docs/getting-started/the-problem">
-                                <Translate id="home.actions.problem">The problem it solves</Translate>
+                                <Translate id="home.actions.problem">See a dependent select</Translate>
                             </Link>
                         </div>
                     </div>
@@ -161,14 +161,14 @@ export default function Home(): ReactNode {
             <main className={`container ${styles.main}`}>
                 <section className={styles.statement}>
                     <h2>
-                        <Translate id="home.view.title">The component decides nothing</Translate>
+                        <Translate id="home.view.title">Keep field rules on the controller</Translate>
                     </h2>
                     <p>
                         <Translate
                             id="home.view.removes"
                             values={{ disabled: code("disabled={loading || submitting || !brand}") }}
                         >
-                            {"That is what removes the {disabled} recomposed by hand in every field."}
+                            {"For a car model select, configure when to load options and lock the input. The controller combines those rules so your component can read a flag instead of repeating {disabled}."}
                         </Translate>
                     </p>
                 </section>
@@ -188,8 +188,8 @@ export default function Home(): ReactNode {
                         <Translate id="home.note.label">Pre-release.</Translate>
                     </span>{" "}
                     <Translate id="home.note.body">
-                        The packages are built and ready, nothing is on npm yet, and the API may still
-                        change.
+                        The API may still change. Follow the repository setup in the documentation to try
+                        the packages and the React demo during development.
                     </Translate>
                 </p>
             </main>

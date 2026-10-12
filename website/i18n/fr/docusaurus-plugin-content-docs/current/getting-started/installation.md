@@ -2,43 +2,40 @@
 id: installation
 title: Installation
 sidebar_position: 2
-description: Installer les packages, ou lancer la démo depuis le dépôt.
+description: Installer les packages dans une application ou lancer la démo depuis le dépôt.
 ---
 
 # Installation
 
-**Prérequis :** Node.js ≥ 20.19, npm. TypeScript en `strict: true` — le
-narrowing des noms de champ et des valeurs en dépend.
+Cette page explique comment préparer votre application, lancer la démo React et démarrer le site de documentation. Vous y trouverez aussi les commandes de vérification du dépôt.
+
+Vous avez besoin de Node.js ≥ 20.19 et de npm. Activez `strict: true` dans TypeScript pour vérifier les noms de champs et les valeurs avec les types prévus.
 
 ## Dans votre application
+
+La commande d'installation dans une application est :
 
 ```bash
 npm install slz-form slz-react-form
 ```
 
 :::warning Pré-publication
-Rien n'est encore sur npm. Les noms `slz-form`, `slz-react-form`,
-`slz-angular-form` et `slz-vue-form` sont libres, et l'API peut encore bouger.
+L'API peut encore changer. Pour essayer le code actuel pendant le développement, suivez les instructions pour le dépôt ci-dessous. Les commandes d'installation utilisent les noms `slz-form` et `slz-react-form` ; leur disponibilité sur npm dépend de leur publication. Les noms `slz-angular-form` et `slz-vue-form` ne signifient pas que ces adaptateurs sont inclus dans ce dépôt.
 :::
 
-Le moteur seul suffit si vous n'utilisez pas React :
+Si vous utilisez le cœur sans React, seul ce package est nécessaire :
 
 ```bash
 npm install slz-form
 ```
 
-`slz-form` n'a **aucune dépendance de production** et n'expose que de l'**ESM** —
-pas de build CommonJS.
+`slz-form` n'a aucune dépendance à l'exécution. Il fournit de l'ESM, sans build CommonJS.
 
 ### Une seule copie de chaque
 
-De l'adapter React, `slz-form` et `react` sont des **peer dependencies** : votre
-application doit résoudre une seule copie de chacun.
+L'adaptateur React déclare `slz-form` et React ≥ 18 comme peer dependencies : votre application les fournit. Assurez-vous qu'elle résout une seule copie de chacun.
 
-Deux copies de React cassent les hooks. Deux copies de `slz-form` cassent le
-test `instanceof BehaviorState` du moteur — les flags sont alors
-**silencieusement** ignorés, ce qui est bien pire qu'une erreur. Si un behavior
-semble n'avoir aucun effet, vérifiez ce point d'abord.
+Plusieurs copies de React peuvent casser les hooks. Le moteur vérifie aussi les résultats des behaviors avec `instanceof BehaviorState`. `BehaviorState` est l'objet qu'un behavior renvoie pour décrire son état de chargement et ses flags. Un résultat créé par une autre copie de `slz-form` échoue à cette vérification et peut être ignoré sans erreur. Vérifiez la résolution des dépendances si un behavior semble sans effet.
 
 ## Depuis le dépôt
 
@@ -49,14 +46,9 @@ npm install     # workspaces npm : tout est lié localement
 npm run dev     # ouvre la démo React
 ```
 
-La démo monte **tous les types de champ dans une seule vue** — texte, email,
-textarea, nombre, select, select dépendant, multi-select, radio, checkbox,
-fichier, date, heure, datetime, champ conditionnel, champ prérempli. Un onglet
-montre l'implémentation avec le moteur, l'autre la même vue écrite en `useState`,
-et un compteur de rendus par champ rend l'écart visible.
+Les workspaces npm relient les packages localement. La démo rassemble dans une vue les champs texte, email, textarea, nombre, select, select dépendant, multi-select, radio, checkbox, fichier, date, heure, datetime, conditionnels et préremplis.
 
-En développement, la démo pointe vers les **sources** des packages : modifier le
-moteur recharge la démo à chaud, sans rebuild.
+Un onglet utilise le moteur ; un autre implémente la même vue avec `useState`. Un compteur à côté de chaque champ indique le nombre de rendus. En développement, la démo importe les sources des packages : les modifications du moteur apparaissent par rechargement à chaud, sans reconstruire les packages.
 
 ### Les vérifications
 
@@ -68,13 +60,13 @@ npm run test:e2e       # la démo dans un vrai navigateur
 npm run build          # packages (tsup) puis démo (vite)
 ```
 
-La CI rejoue tout cela sur chaque PR, plus le contenu réellement publié
-(`npm pack --dry-run`).
+La CI exécute ces vérifications sur les pull requests. Elle vérifie aussi le contenu des packages avec `npm pack --dry-run`.
 
 ## Le site de documentation
 
-Il vit dans `website/`, **hors** des workspaces npm : Docusaurus tire beaucoup
-de dépendances, et les jobs de CI du moteur n'ont pas à les payer.
+Le site Docusaurus se trouve dans `website/`, en dehors des workspaces npm. Ses dépendances sont installées séparément ; les vérifications des packages ne demandent donc pas d'installer le site.
+
+Installez d'abord les dépendances à la racine : TypeDoc en a besoin pour résoudre les imports lors de la génération de la référence API depuis les sources.
 
 ```bash
 npm install            # à la racine d'abord : TypeDoc lit les sources par ce chemin

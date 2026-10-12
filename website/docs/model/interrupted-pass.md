@@ -1,40 +1,37 @@
 ---
 id: interrupted-pass
-title: An interrupted pass is not a verdict
+title: When validation cannot finish
 sidebar_position: 3
-description: What the engine publishes when a rule breaks, and why it is neither "valid" nor the previous verdict.
+description: Handle unavailable validation checks and understand when loading ends.
 ---
 
-# An interrupted pass is not a verdict
+# When validation cannot finish
 
-This is the semantics that regressed the most during development, always through
-the same shortcut: *the pass finished, so I have a verdict.* False as soon as a
-rule breaks.
+This page explains what happens when a validation check fails to finish and how to handle an unavailable service. It also explains how a custom behavior keeps or releases its loading state.
 
-Three cases, and only one is correct:
+A validator checks a field value and collects issues in a `ValidationReport`. An issue is a message with severity `error` or `warning` and an optional code. A validation run is one execution of those checks for the current value.
 
-| The pass | What gets published |
+For example, an email format check may finish while a separate availability request fails. The completed check's messages remain useful, but the failed request still needs to be accounted for.
+
+## Results after an asynchronous failure
+
+When a validator promise rejects, or a member of a composite validator throws, the report is marked interrupted. A composite validator combines several validators on one field.
+
+| Result of the run | Published issues |
 |---|---|
-| complete | the verdict, `valid` or `error` |
-| interrupted, with a refusal | that refusal — it comes from a rule that concluded |
-| interrupted, with no refusal | **`unverified`, blocking** |
+| all checks finish | collected issues; `valid` if there are no errors |
+| a check fails and another has reported an error | collected issues, including the blocking error |
+| a check fails and no error has been reported | collected issues plus a blocking issue with `code: "unverified"` |
 
-A network that went down is not a verdict. If there is no refusal, the engine
-publishes a blocking issue with `code: "unverified"`: the value was judged by
-no one, and declaring it valid would let through what the rule might have
-refused.
+`unverified` identifies an issue through its `code` property in `field.issues`. Its message is `Validation unavailable`. It blocks submission because the checks could not establish that the value was acceptable. These failure paths replace the previous validation result rather than accepting the value on the basis of missing errors.
 
-Two things that are **never** done:
+:::warning Direct synchronous validators
+A synchronous exception thrown by a validator attached on its own currently follows a different path. The field catches it, records it in `form.engineErrors` with `scope: "behavior"`, and may leave the previous validation state in place. This path does not guarantee an `unverified` issue. Catch expected failures inside the rule and report the result explicitly. See [Engine errors](../guides/engine-errors.md).
+:::
 
-- **keeping the last known verdict** — it was given on *another* value;
-- **concluding `valid` from an absence of refusal** when a rule could not
-  rule.
+## Allowing an unavailable check
 
-## Tolerating your own failure, and saying so
-
-A rule that prefers to let things through when its check is unavailable catches
-the failure and says so itself. It has then **concluded**, and the submission
-goes through:
+If an unavailable service should produce a warning and allow submission, catch that failure in the rule. Here the availability check reports a warning when the service fails:
 
 ```ts
 protected async validate(value: string, report: ValidationReport) {
@@ -47,23 +44,17 @@ protected async validate(value: string, report: ValidationReport) {
 }
 ```
 
-The difference between the two outcomes is not in the engine: it lies in
-whether or not the rule took a position.
+This rule completes normally with a non-blocking warning. Submission can succeed if the other rules have no blocking errors. Use `report.error(...)` in the catch instead if the service failure should block the form.
 
-## On the behavior side: waiting follows the work in flight
+## Loading in custom behaviors
 
-The counterpart, on the activity axis. A field is `loading` if and only if an
-open pass of one of its behaviors is still waiting — not because a last write
-said `loading`.
+A behavior reacts to field events and can publish state with `ctx.push` or return a `BehaviorState`. `BehaviorState` describes that behavior's activity and flags, which the controller combines with the other sources. The `loading` flag indicates waiting work; the validator can also contribute it.
 
-Two consequences worth knowing when you write a behavior by hand:
+A promise returned by a behavior does not automatically publish `loading`. The behavior requests it with `ctx.state.loading()`. For each behavior call, the controller tracks whether that call still contributes loading:
 
-- **a pass that succeeds does not turn off another pass's waiting.** `ctx.state`
-  returns the behavior's merged slice; a hook that returns `ctx.state.idle()`
-  only says "I, for one, am done";
-- **a pass's waiting lasts until its last word.** A synchronous hook speaks one
-  last time by pushing, an asynchronous hook by settling. A waiting state pushed
-  along the way therefore turns off when the promise settles:
+- A call returning `ctx.state.idle()` releases its own wait. Other calls or validators can keep the field `loading`.
+- For an asynchronous hook, loading pushed during the call ends when its promise settles, unless its return value explicitly requests `loading` again.
+- A synchronous hook can publish loading for work it starts outside its return value. It must later publish idle when that work ends.
 
 ```ts
 onChange: async (ctx) => {
@@ -74,5 +65,4 @@ onChange: async (ctx) => {
 },
 ```
 
-Without this rule, a stale response that says nothing would keep the field busy
-forever.
+In this example, the explicit `loading()` in the return value keeps loading active for the background work. That work must later call `ctx.push(ctx.state.idle())` to release it. `ctx.state` reads the current state contribution of this behavior, including after an `await`.

@@ -1,73 +1,62 @@
 ---
 id: behavior-and-validator
-title: Behavior or Validator?
+title: Behaviors and validators
 sidebar_position: 2
-description: The judge has eyes and a bell; the reactor reacts, it never decides validity.
+description: Choose where to put value updates, availability rules and validation checks.
 ---
 
-# Behavior or Validator?
+# Behaviors and validators
 
-The central bet: **nothing you can do with `useState` and a `useEffect` should
-be impossible here**, and nothing should force you to modify the engine.
+This page explains where to put loading, locking and validation rules. You will be able to choose a behavior or a validator for each part of a form.
 
-The division of roles is clear-cut. The **behavior** reacts — it writes a value,
-publishes options, emits `loading`, `locked`, `readonly`, `invisible`. The
-**validator** judges — it is the single authority on validity.
+A behavior reacts to a field event and can update that field's value, options or flags. A flag is a named state such as `loading` or `locked`. A validator checks a value and reports issues: messages with a severity and an optional code.
+
+In a car form, fetching models after a brand change belongs in a behavior. Checking that a postcode has the required format belongs in a validator.
 
 | | Validator | Behavior |
 |---|---|---|
-| Semantics | "is this value acceptable?" | "what happens when…?" |
-| Output | issues: `severity`, `message`, `code` | a state slice: activity, availability |
-| Writes the value | no | yes, **its own** |
-| Impact on submission | direct — a blocking issue prevents it | indirect — `submit()` waits for its async work |
+| Purpose | check a value | react to an event |
+| Output | issues with `severity`, `message`, `code` | a `BehaviorState` describing activity and availability |
+| Updates the value | no mutation API in its context | can update its own field |
+| Submission | error issues block it | `submit()` waits for relevant pending work |
 
-A simple rule: if the question is "**is it valid?**", it is a validator. If it
-is "**what should happen?**", it is a behavior.
+`BehaviorState` contains one behavior's contribution to the field state. The controller stores and combines these contributions; a behavior result has no setting for validity.
 
-## Why the authority is not shared
+## Validation that depends on other data
 
-If a behavior could write validity, you would have to arbitrate between two
-sources that disagree — and that trade-off has no right answer. That is what
-makes the flags trustworthy: `valid` means a judge has ruled, not that a
-component decreed it.
+A validator can read other fields by declaring them in `watch` and calling `ctx.watched(...)`. `watch` records the dependency so a change triggers another validation. For example, postcode rules might depend on the selected country.
 
-For the separation to hold without making anything impossible, the judge gets
-what it needs to work — never what it needs to write. **Eyes**: it declares
-`watch` and reads `ctx.watched(...)`. A **bell**: `requestRevalidation()`, which
-it rings to re-judge when its verdict can change without the value moving.
+A validator can also call the protected `requestRevalidation()` method when its rules need to run again even though the input value has not changed. `ExternalValidator` uses this when new server issues arrive.
 
-| Need | How |
+| Need | API |
 |---|---|
-| Confirm a password, order two dates | the validator declares `watch` and reads `ctx.watched(...)` |
-| `required` only in some cases | the validator decides, with `validateWhenEmpty` |
-| An error returned by the server | `ExternalValidator`, composed with the business rules |
-| Re-judge after the fact, with no new keystroke | `requestRevalidation()`, the validator's bell |
-| A warning that does not block | `report.warn(...)` |
-| Route a message to a snackbar | `report.error(msg, { code })`, and the view reads `code` |
-| Lock until another field is valid | `lockUntilValid({ watch })` |
-| Invoice lines, dynamic lists | `form.array("lines")` — a row is a form |
+| Confirm a password or compare dates | declare `watch`, then read `ctx.watched(...)` |
+| Require a value only under a condition | check the condition in a validator with `validateWhenEmpty` |
+| Show a server validation error | compose `ExternalValidator` with local validators |
+| Recheck without a value change | call `requestRevalidation()` in a validator |
+| Report a non-blocking warning | `report.warn(...)` |
+| Display a message in a snackbar | attach a `code` with `report.error(msg, { code })`, then read it in the view |
+| Lock until another field has no blocking errors | `lockUntilValid({ watch })` |
+| Manage invoice lines | `form.array("lines")`, where each row has its own form |
 
-This criterion is verified, not asserted: `packages/form/test/parity.test.ts`
-takes each case and writes it with a behavior or a validator, **without ever
-capturing the `FormController`**. A case that could only be done by capturing
-the form would not be covered — it would be worked around.
+`validateWhenEmpty` allows your rule to run when the field has no value. Without it, the base validator handles `required` and skips your custom rule on empty values.
 
-## A behavior carries no state
+## Keeping behavior state on the controller
 
-It *returns* its state slice; the controller stores it. An instance carries
-**configuration** — a URL, a debounce —, never state, otherwise sharing it
-between two fields would couple them.
+Return a state contribution, or publish it with `ctx.push`, and let the controller store it. Keep field-specific state out of the behavior instance if you want to share it. Otherwise, two fields using that instance could change each other's state.
 
 ```ts
-// ✓ shareable: carries only its configuration, no field state
+// Each field stores its own prefilled value.
 const prefillFromProfile = prefill(fetchProfileDefault);
 
 form.field("shipTo", { behaviors: [prefillFromProfile] });
 form.field("billTo", { behaviors: [prefillFromProfile] });
 ```
 
-## A field reads, it never writes to its neighbor
+The built-in prefill helper keeps the returned value on each field controller. It can therefore be reused for shipping and billing without sharing those field values. `prefill` is a behavior that fetches a value when the field mounts.
 
-A field is the source of truth for itself and for nothing else. Cross-field
-locking, hiding and reloading all go through a declared **read**, with no
-mutation. See [Declared dependencies](../guides/dependencies.md).
+## Reading other fields
+
+The context gives a behavior methods to update its own field and read-only views of other fields. For example, the model field can read the brand and reload its own options. It does not receive a method for changing the brand.
+
+Use `watch` for changes that should trigger a reaction. Reading the whole form through `ctx.form` does not subscribe to changes automatically. See [Declared dependencies](../guides/dependencies.md).

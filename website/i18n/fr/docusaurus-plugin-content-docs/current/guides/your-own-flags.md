@@ -2,53 +2,52 @@
 id: your-own-flags
 title: Vos propres flags
 sidebar_position: 5
-description: Étendre le vocabulaire sans toucher au moteur — et pourquoi ses mots à lui sont refusés.
+description: Publier un état applicatif depuis un behavior et le lire dans vos composants.
 ---
 
 # Vos propres flags
 
-Un behavior publie un mot, la vue le lit. Le moteur n'a jamais eu à le
-connaître.
+Cette page montre comment ajouter un flag applicatif, comme `skeleton`, sans modifier le moteur. Vous verrez comment le retirer et quels noms sont réservés.
+
+Un flag est un état nommé que votre composant vérifie avec `hasFlag` ou `hasAny`. Un behavior réagit aux événements de champ et renvoie ou publie un `BehaviorState`, sa contribution à l'activité et aux flags du champ. Utilisez `mark` pour ajouter un flag personnalisé à cette contribution.
+
+Un champ peut par exemple afficher un squelette pendant le chargement de ses données initiales :
 
 ```ts
 onMount: (ctx) => ctx.state.mark("skeleton"),
 ```
 
-Puis, quand les données arrivent, le behavior le retire :
+Quand les données arrivent, le même behavior retire sa contribution avec `unmark` et publie l'état mis à jour :
 
 ```ts
 ctx.push(ctx.state.unmark("skeleton"));
 ```
 
+Votre vue peut alors choisir entre le squelette et l'input :
+
 ```tsx
 {field.hasFlag("skeleton") ? <Skeleton /> : <input … />}
 ```
 
-C'est ce qui rend exprimables les besoins qu'on n'avait pas prévus — un
-squelette de chargement, une vérification métier en cours, un badge — sans
-ajouter quoi que ce soit au cœur.
+Le moteur conserve ce flag personnalisé comme les autres flags cumulatifs. Votre application définit sa signification et son affichage. Vous pouvez utiliser le même mécanisme pour une vérification métier ou un badge.
 
-## Pourquoi c'est sans risque
+## Combiner les contributions
 
-Les flags de l'application rejoignent la nature **cumulative** : ils
-s'additionnent, et l'union ne peut pas se contredire. Deux behaviors qui posent
-`skeleton` en même temps posent `skeleton` ; l'un qui le retire cesse simplement
-de l'émettre.
+Les flags personnalisés des différents behaviors sont rassemblés. Si deux behaviors publient `skeleton`, il reste présent jusqu'à ce que les deux cessent de le publier. `unmark("skeleton")` le retire uniquement de l'état propre au behavior.
 
-## Les mots du moteur sont refusés
+`BehaviorState` est immuable : `mark` et `unmark` renvoient un nouvel objet. Renvoyez cet objet depuis le hook ou transmettez-le à `ctx.push` ; appeler une méthode sans publier son résultat ne modifie pas l'état du contrôleur.
+
+## Les noms réservés
+
+Certains flags du moteur utilisent des API dédiées ou sont gérés par le contrôleur. Ils ne peuvent pas être ajoutés comme marqueurs personnalisés :
 
 ```ts
 ctx.state.mark("error");     // lève
 ctx.state.mark("loading");   // lève
 ```
 
-Poser `error` à côté de `pristine` publierait un état qui n'existe pas, et poser
-`loading` par ce chemin allumerait une activité que rien ne pourrait éteindre —
-l'union des flags cumulés ne se soustrait pas.
+Les flags de validité comme `error` viennent de la validation, et l'activité est définie avec `loading()` ou `idle()`. Cela conserve un seul état de validité affichée et un seul état d'activité sur un champ. Les flags d'interaction comme `touched` sont aussi réservés.
 
-La garde est dans `mark`, dans `unmark` **et** dans le constructeur de
-`BehaviorState` : un behavior qui retourne une tranche construite à la main ne
-la contourne pas.
+La vérification s'applique dans `mark`, `unmark` et le constructeur de `BehaviorState`. Elle lève une `EngineGuardError` pour un marqueur réservé, y compris dans un objet d'état construit à la main.
 
-La liste exacte est exportée — `RESERVED_FLAGS`, et `isReservedFlag(flag)` pour
-la tester.
+`RESERVED_FLAGS` exporte la liste exacte ; `isReservedFlag(flag)` vérifie un nom. Les flags de disponibilité `locked`, `readonly` et `invisible` sont autorisés via `mark` et disposent aussi de méthodes dédiées comme `lock()` et `hide()`.

@@ -3,31 +3,25 @@ id: index
 title: slz-form
 sidebar_label: Overview
 sidebar_position: 0
-description: A framework-agnostic form engine, where the UI is driven by flags.
+description: Manage field values, validation and loading state independently of your UI.
 ---
 
 # slz-form
 
+slz-form manages field values, validation and asynchronous work for your forms. This overview explains how your components read that state and points you to a working example.
+
 :::warning Pre-release
-The packages are built and ready, **nothing is on npm yet**. The API may still
-move.
+The API may still change. Use the [repository setup](getting-started/installation.md#from-the-repository) to try the packages and the demo during development.
 :::
 
-A form is rarely hard because of its values. It is hard because of everything
-around them: a field locked while a request is in flight, another hidden until
-a checkbox is ticked, an error that only shows after the user leaves the field
-but never on a prefill, a button greyed out while the form is invalid or
-submitting. That logic usually ends up scattered across the view, as booleans
-recomputed by hand:
+In a car form, the model select needs new options when the brand changes. You also need to disable it while those options load, show errors after interaction and check the form before submission. When each component manages these rules, you often end up repeating conditions like these:
 
 ```tsx
 <input disabled={loading || submitting || !brand || readOnly} />
 {touched && error && <p>{error}</p>}
 ```
 
-slz-form moves it into the engine. **What a field *is* is read as flags; what
-it *contains* is read as data.** The component decides nothing — it reads a
-state and renders:
+slz-form keeps this state in field controllers. A controller is the object that stores a field's value, handles interactions and runs its configured rules. A flag is a named state, such as `loading` or `locked`, that your component can check to choose what to render. Values, options and error messages are available separately.
 
 ```tsx
 if (field.hasFlag("invisible")) return null;
@@ -37,42 +31,34 @@ if (field.hasFlag("invisible")) return null;
 {field.hasFlag("error") && <p>{field.error}</p>}
 ```
 
-Two functions read every state, at the field and at the form: `hasFlag(...)` is
-the **AND** — all present; `hasAny(...)` is the **OR** — at least one. That is
-the whole read surface, and it is what dissolves the
-`loading || submitting || !brand` above.
+A behavior is a function or object that reacts to field events, for example by fetching models when the brand changes. A validator checks a value and reports errors or warnings. You configure them on the controller; your component uses the resulting flags and data to render an input.
+
+`hasFlag(...)` returns `true` when all the supplied flags are present. `hasAny(...)` returns `true` when at least one is present. Both fields and forms provide these functions.
 
 ```tsx
 <button disabled={!form.hasFlag("valid", "idle")}>Submit</button>
 ```
 
+Here, `valid` means the form has no blocking errors, and `idle` means it is outside a submission and has not reached `submitted`. A form can be `idle` while a field is `loading`; `submit()` waits for the relevant work and validates before returning its result. It does not send an HTTP request for you.
+
 ## Where to start
 
 | You want to… | Go to |
 |---|---|
-| see what it replaces | [The problem](getting-started/the-problem.md) |
-| install it, run the demo | [Installation](getting-started/installation.md) |
-| write your first form | [First form](getting-started/first-form.md) |
-| understand the model before coding | [Flags, and the two functions](model/flags.md) |
-| wire up a specific need | [Guides](guides/prefill.md) |
-| the exact signature of a function | [API reference](reference/slz-form/index.md) |
-| know **why** it is built this way | [The design notes](/conception/MODEL) |
+| understand the component code this replaces | [The problem](getting-started/the-problem.md) |
+| set up the packages or run the demo | [Installation](getting-started/installation.md) |
+| create your first form | [First form](getting-started/first-form.md) |
+| read field and form state | [Flags](model/flags.md) |
+| prefill a field from an API | [Prefill a field](guides/prefill.md) |
+| look up a function signature | [API reference](reference/slz-form/index.md) |
+| read the design decisions | [Design notes](/conception/MODEL) |
 
-## What it is not
+## What you provide
 
-- **Not a component library.** No styling, no design system, no imposed markup:
-  the engine produces a state, the rendering stays yours. The demo's components
-  are examples, not the API.
-- **Not a schema validator.** It replaces neither Zod nor Yup and invents no
-  rule language: it orchestrates the validators you write — and can wrap one.
-- **Not a general-purpose state manager.** It manages the state of your forms,
-  not of your application, and plugs into no store.
-- **Not an HTTP layer.** It makes no network call; it orchestrates yours — when
-  to fire them, what to lock meanwhile, what to do with the result.
-- **Not a form generator.** No rendering from JSON, no declarative schema
-  producing a page. You write your view.
-- **No server rendering yet.** The React adapter reads its state via
-  `useSyncExternalStore` without `getServerSnapshot`: server-side rendering
-  throws.
-- **Not an abstraction over React.** The core does not know React exists; the
-  adapter is thin and replaceable, not a compatibility layer.
+- Your components, markup and styles. The demo components show one way to render the state; the packages do not supply a design system or generate a page from JSON.
+- Your validation rules. You can write validators directly or call a schema validator such as Zod or Yup from one.
+- Your network calls. Behaviors control when your functions run and can publish a loading or locked state while they wait.
+- Your application state outside forms. The engine manages forms without requiring a global application store.
+- Your framework integration. The core has no React dependency. The React adapter connects controllers to hooks, and another adapter can use the same form logic.
+
+The React adapter currently supports client rendering only. Its hooks call `useSyncExternalStore` without `getServerSnapshot`, so server rendering throws. See [Wiring up React](react/installation.md).

@@ -2,15 +2,18 @@
 id: first-form
 title: First form
 sidebar_position: 3
-description: Declare the field map, derive the typed helpers, mount a field.
+description: Create a field, validate its value and derive helpers from a typed form declaration.
 ---
 
 # First form
 
+This page shows how to create and validate a field with the core, then derive typed behaviors and React hooks for a car form. You will also see how field names and value types are checked.
+
 ## The engine, alone
 
-No framework required: this code runs as is in a browser, under Node, Deno or
-Bun.
+`FormController` manages a form and creates its field controllers. A field controller stores one field's value and runs its validation and behaviors. A validator checks the value and reports errors through a `ValidationReport`, which collects the messages from one validation run.
+
+This example uses the core without a UI framework. It can run in a browser or a JavaScript runtime such as Node, Deno or Bun, once the package is available to that environment.
 
 ```ts
 import { FormController, IValidator, type ValidationReport } from "slz-form";
@@ -31,22 +34,19 @@ const unsubscribe = email.listen(() => console.log(email.snapshot.flags));
 email.mount();
 email.change("ada@lovelace.dev");
 
-email.hasFlag("valid");   // true — change() marked the field touched, the rule judged
+email.hasFlag("valid");   // true — change() marked the field touched and validated the value
 ```
 
-The map passed to `FormController` declares what each field holds; everything
-else is inferred from it — the name passed to `field()`, the value, the
-options' meta. A repeated `field()` returns the same instance: the field is
-created on the first call.
+The type passed to `FormController` is the field map: it associates each name with a value type. `field("email", ...)` creates the controller on its first call. Later calls with that name return the same instance; they do not replace its initial configuration.
+
+`listen` subscribes to state changes and returns an unsubscribe function. `mount` starts the field's lifecycle and validates its initial value. `change` records a user interaction and validates the new value. A flag is a named state such as `valid`; `hasFlag` checks whether it is present. A snapshot is the object containing the current value, messages and flags.
 
 ## The map, and what it buys you
 
-The form is declared once, in its own contextualized module — the counterpart
-of a slice. Behaviors and hooks are derived from it, hence fully typed on the
-map:
+Keep the form declaration in a module that your components can import. A behavior reacts to events, for example by loading model options after the brand changes. `behaviorsFor` creates helpers with names and values typed from the map. `hooksFor` creates React hooks bound to that same form.
 
 ```ts
-// src/form/car-configuration-form.ts        (≈ a slice)
+// src/form/car-configuration-form.ts
 import { behaviorsFor, FormController } from "slz-form";
 import { hooksFor } from "slz-react-form";
 
@@ -64,11 +64,9 @@ export const { lookup, loadOptions, suggest, prefill, lockWhile, lockUntilValid,
 export const { useField, useForm, useFieldArray } = hooksFor(carForm);
 ```
 
-`CarFields` is a `type`, not an `interface`: only the former carries the
-implicit index signature that the engine's `FieldsShape` constraint requires.
+Use a `type` alias for `CarFields`. With this object shape, TypeScript supplies the implicit index signature needed by `FieldsShape`, the engine's `Record<string, unknown>` constraint. An equivalent interface does not satisfy that constraint.
 
-There is no longer a form to name on every field, and `name` is checked —
-including against the field's **type**:
+The derived hooks already know which form to use. They check the field name and infer its value type. Application components such as `NumberField` and `TextField` must constrain their `name` props to the matching field types for these examples to be checked as shown:
 
 ```tsx
 <NumberField name="mileage" label="Mileage" />       // ✓
@@ -76,54 +74,50 @@ including against the field's **type**:
 <TextField   name="typo" label="Unknown" />          // ✗ unknown field, does not compile
 ```
 
-That is the accepted price of narrowing: adding a field costs one line in the
-map on top of the one in the view. In exchange, **no `as`** in consumer code.
+When you add a field, add its name and type to the map as well as its component to the view. The helpers then infer values and option metadata without requiring casts in the usual typed path. Option metadata is extra data attached to an option, such as a brand logo; declare it with `Field<Value, Meta>` if you need it.
 
 ## The ready-made behaviors
 
-`behaviorsFor(carForm)` returns seven helpers, all bound to the map. What a
-field watches in `watch` is what the callback receives, narrowed to the map:
+`behaviorsFor(carForm)` returns seven helpers. `watch` declares which other fields a behavior observes. Their values are supplied to the callback and can be `undefined` before those fields have a value. `debounce: 400` delays the request until the configured 400 ms waiting period has elapsed.
 
 ```ts
 lookup({
     field: "model",
     watch: ["brand"],
     debounce: 400,
-    fetch: ({ brand }) => fetchDefaultModel(brand),   // brand: string
+    fetch: ({ brand }) => fetchDefaultModel(brand),   // brand: string | undefined
 });
 ```
 
-Two lists, and the distinction matters:
+The form-bound helpers and the direct exports have different signatures:
 
-| From `behaviorsFor(form)` — typed on the map | Bare exports — the field name is on you |
+| From `behaviorsFor(form)` — typed from the map | Direct exports — configure names and types yourself |
 |---|---|
 | `lookup`, `loadOptions`, `suggest`, `prefill`, `lockWhile`, `lockUntilValid`, `hideWhen` | `lookup`, `loadOptions`, `prefill`, `lockWhile`, `hideWhen`, `dependsOn`, `createBehavior` |
 
-`suggest` has no `watch`: it reads no other field. If it only exists through
-`behaviorsFor`, it is because the options it produces are typed on its own
-field. `lockUntilValid`, for its part, is the only one that reads other
-fields — it watches their **validity**, not their value (`on: ["validity"]`).
+`lookup` fetches a value for its field. `loadOptions` fetches its choices. `suggest` reloads choices when the user types in that field; it has no `watch` parameter. `prefill` loads an initial value on mount. `lockWhile` locks the field while a condition holds, and `hideWhen` hides it while a condition holds.
 
-When the need is out of the ordinary, the same behavior is written by hand:
-[the three forms of the same prefill](../guides/prefill.md) show the path
-from the fully hand-written class to the three-line utility.
+`lockUntilValid` locks while a watched field is missing or has blocking errors. It is the only helper here that watches validity changes (`on: ["validity"]`). Other helpers can watch value changes. A field that is still `pristine`, meaning untouched, can satisfy `lockUntilValid` if it has no errors.
 
-## The model in thirty seconds
+For a custom behavior, see [Prefill a field](../guides/prefill.md), which develops the same example as a class and as a helper.
+
+## The objects involved
+
+`FormRegister` stores named forms so you can retrieve them elsewhere in an application. A `DependencyGraph` records which fields observe which other fields and rejects cycles. `IBehavior` is the contract for event reactions, and `FieldSnapshot` is the state your component reads.
 
 ```
-FormRegister              every form in the app                  (≈ root reducer)
-  └── FormController      one form, orchestrates its Fields      (≈ slice)
+FormRegister              forms registered by the application
+  └── FormController      one form, orchestrates its Fields
         ├── DependencyGraph   cross-field reactivity, cycles rejected at wiring time
         └── FieldController   one input: value, interactions, flags, validity
-              ├── IBehavior[]     reactions → return a state slice
-              ├── IValidator<T>   validity authority
+              ├── IBehavior[]     reactions → return a state contribution
+              ├── IValidator<T>   value checks
               └── FieldSnapshot   what the component renders
 ```
 
 ## Field names that are not identifiers
 
-A field can be called `Toto-1`, `2-champ` or `champ avec espaces`: the map
-accepts any key, and the narrowing holds in full.
+The field map accepts keys such as `Toto-1`, `2-champ` or `champ avec espaces`. Their value types are inferred in the same way as other keys.
 
 ```ts
 const form = new FormController<{ "Toto-1": string; "2-champ": number }>({ name: "f" });
@@ -131,20 +125,18 @@ const form = new FormController<{ "Toto-1": string; "2-champ": number }>({ name:
 form.field("Toto-1").snapshot.value   // string | undefined
 ```
 
-Only the **way you write** the callback changes, because JavaScript cannot
-destructure a name that is not an identifier:
+For destructuring, quote the property name and give it a local variable name. You can also use bracket access:
 
 ```ts
-fetch: async ({ "Toto-1": toto1, "2-champ": deux }) => { … }   // string, number
+fetch: async ({ "Toto-1": toto1, "2-champ": deux }) => { … }   // string | undefined, number | undefined
 fetch: async (deps) => deps["Toto-1"]                          // string | undefined
 ```
 
-This, however, is not valid JavaScript:
+Leaving the name unquoted in this destructuring produces a syntax error:
 
 ```ts
 fetch: async ({ Toto-1 }) => …
 //                  ~ error TS1005: ',' expected
 ```
 
-`Toto-1` reads as `Toto` minus `1`: it is a syntax error, not a type error —
-the compiler fails at parsing before it even looks at the types.
+The parser reads the hyphen as an operator. It fails before TypeScript can check the field's type.

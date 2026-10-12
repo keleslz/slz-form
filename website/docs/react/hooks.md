@@ -2,30 +2,40 @@
 id: hooks
 title: Hooks
 sidebar_position: 2
-description: useField, useForm, and why no useState copies the engine's state.
+description: Read field and form state through React subscriptions.
 ---
 
 # Hooks
 
-| Export | Role |
-|---|---|
-| `hooksFor(form)` | returns `useField`, `useFieldArray` and `useForm` bound to a form, typed by its field map |
-| `useField` | a field: value, issues, flags, handlers |
-| `useForm` | the whole form: `snapshot`, `values`, `errors`, flags, `submit`, `reset` |
-| `useFieldArray` | the rows of a list: `rows`, `append`, `remove`, `move`, `clear` |
-| `useFieldOn(form, params)` | `useField` bound to a given form — used to wire a row field |
-| `useFieldArrayOn(form, name)` | `useFieldArray` bound to a given form — a list nested in a row |
-| `FormProvider` | publishes the `FormRegister` in the tree, for cross-cutting access |
-| `useFormRegister` | direct access to the register |
+This page explains which React hook to use for a field, a form or a list. You will learn how to read flags and messages and keep subscriptions scoped to the state a component needs.
 
-## Reading state: two functions
+A field controller manages one field; a form controller manages its fields and lists. A snapshot is an object describing the current state. The hooks read snapshots through `useSyncExternalStore` and connect field and list mounting to React effects.
+
+`useField`, `useForm` and `useFieldArray` below are the hooks returned by `hooksFor(form)`. `useFieldOn` and `useFieldArrayOn` are direct exports for supplying a controller yourself.
+
+| API | Role |
+|---|---|
+| `hooksFor(form)` | creates `useField`, `useFieldArray` and `useForm` bound to a form and typed from its field map |
+| `useField` | subscribes to a field; returns value, issues, flags and interaction handlers |
+| `useForm` | subscribes to the whole form; returns `snapshot`, `values`, `errors`, flags, `submit` and `reset` |
+| `useFieldArray` | subscribes to row composition; returns `rows`, `append`, `remove`, `move` and `clear` |
+| `useFieldOn(form, params)` | connects a field to the supplied form, including a row's form |
+| `useFieldArrayOn(form, name)` | connects a list to the supplied form, including a nested list |
+| `FormProvider` | makes a `FormRegister` available through React context |
+| `useFormRegister` | retrieves that register |
+
+The field map associates names with value types. `FormRegister` stores named form controllers for components that need access to several forms. Hooks bound with `hooksFor` do not require its provider.
+
+## Reading flags
+
+A flag is a named state such as `locked` or `loading`. `hasFlag` requires every supplied flag; `hasAny` requires at least one:
 
 ```tsx
 field.hasFlag("locked", "required")   // AND — all present
 field.hasAny("loading", "invisible")  // OR  — at least one
 ```
 
-The form answers the same two functions, with the same words:
+`useForm` provides the same functions for form flags:
 
 ```tsx
 const { hasFlag, submit } = useForm();
@@ -35,37 +45,32 @@ const { hasFlag, submit } = useForm();
 </button>
 ```
 
-The words themselves — `valid`, `idle`, `locked`, `loading`… —, their nature and
-who emits them: [Flags](../model/flags.md).
+`valid` means the form has no blocking errors. At the form level, `idle` describes submission status and can coexist with `loading`. `submit()` validates and waits for relevant pending work before returning a boolean; your application handles sending the values. See [Reading flags](../model/flags.md) for the vocabulary and combination rules.
 
-:::note `error` at the field and at the form do not say the same thing
-At the field, `error` is what you **display** — off until the field is touched,
-so that a prefill lights nothing. At the form, `error` is what is **true**: a
-prefilled, invalid form does not submit. The verdict of a field taken in
-isolation is a non-empty `field.errors`.
+:::note Error display after interaction
+A validator checks values and reports errors or warnings. The field's `error` flag is gated by interaction: an untouched prefilled field stays `pristine`, even when validation has found errors. `field.errors` contains the blocking messages regardless of interaction. The form uses those messages to calculate validity, so an invalid prefilled form can block submission before showing field errors.
 :::
 
-## Routing messages
+## Choosing where to display messages
 
-`field.issues` carries each issue with its `severity` and its `code`, which lets
-you route without the engine getting involved:
+An issue is a validation message with a `severity` and optional `code`. Read `field.issues` to choose which messages belong under an input, in a toast or elsewhere:
 
 ```tsx
 const toasts = field.issues.filter((issue) => issue.code === "toast");
 ```
 
-## `locked` and `readonly` are distinct
+Warnings are non-blocking and also appear in `field.warnings`. The engine supplies the messages; your view chooses the presentation.
 
-`readonly` is readable and selectable, but not modifiable — and does not imply
-`locked`. The view can drive both:
-`useField({ name, locked, readOnly })`.
+## Input availability
 
-## No `useState` copies the engine's state
+Use `locked` to drive an input's disabled state and `readonly` for read-only presentation that can still allow reading and selecting its text. `readonly` does not imply `locked`.
 
-`useField` only wires the React lifecycle onto the controller and reads its
-snapshot via `useSyncExternalStore`. A field that changes **does not re-render
-the others** — subscribing to the whole form is an explicit choice, reserved for
-what needs it: a submit button, a summary.
+The view can supply both with `useField({ name, locked, readOnly })`. A behavior, which reacts to field events and can update availability, can also contribute those flags. Removing the view's lock does not remove a behavior's lock. Match the flags to HTML attributes supported by your input.
 
-This is measured, not asserted: the demo counts renders per field and shows the
-gap with the same view written with `useState`.
+## Subscription scope and renders
+
+`useField` subscribes to the field's snapshot without copying it into `useState`. An unrelated field change does not notify that subscription. Fields watching each other can update through those dependencies, and a React parent render can still render its children.
+
+Use `useForm` for a submit button or summary that needs form-wide state. A component using it receives updates when the whole-form snapshot changes. Keeping that subscription out of ordinary field components avoids unnecessary updates from unrelated inputs.
+
+The demo's per-field counters let you inspect the renders for the engine version and the same view implemented with `useState`.

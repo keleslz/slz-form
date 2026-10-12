@@ -1,60 +1,60 @@
 {
   "home.tagline": {
-    "message": "Un moteur de formulaires piloté par des flags, indépendant du framework"
+    "message": "Gérez l’état de vos formulaires avec votre framework"
   },
   "home.title": {
-    "message": "Un moteur de formulaires piloté par des flags"
+    "message": "Valeurs, validation et chargement des formulaires"
   },
   "home.actions.problem": {
-    "message": "Le problème qu'il résout"
+    "message": "Voir un select dépendant"
   },
   "home.actions.firstForm": {
-    "message": "Premier formulaire"
+    "message": "Créer votre premier formulaire"
   },
   "home.view.title": {
-    "message": "Le composant ne décide de rien"
+    "message": "Configurer les règles sur le contrôleur"
   },
   "home.view.reads": {
-    "message": "Il lit et se rend. Ce qu'un champ {is} se lit en flags ; ce qu'il {holds} se lit en données. Deux fonctions : {hasFlag} est le ET, {hasAny} le OU."
+    "message": "Lisez l’{is} d’un champ via des flags nommés comme loading ou locked, et sa {holds} séparément. {hasFlag} vérifie tous les flags demandés ; {hasAny} en vérifie au moins un. Utilisez-les pour afficher les inputs et les messages."
   },
   "home.view.reads.is": {
-    "message": "est"
+    "message": "état"
   },
   "home.view.reads.holds": {
-    "message": "contient"
+    "message": "valeur"
   },
   "home.view.removes": {
-    "message": "C'est ce qui supprime le {disabled} recomposé à la main dans chaque champ."
+    "message": "Pour un select de modèles de voiture, configurez quand charger les options et verrouiller l’input. Le contrôleur combine ces règles pour que votre composant lise un flag au lieu de répéter {disabled}."
   },
   "home.arguments.impossible.title": {
-    "message": "Les états impossibles ne sont pas représentables"
+    "message": "Des flags cohérents pour chaque champ"
   },
   "home.arguments.impossible.body": {
-    "message": "{pristine} et {error} s'excluent, comme {idle} et {loading}. Une union plate les laisserait coexister ; deux natures de flags les en empêchent."
+    "message": "Un champ possède un seul état de validité affichée, comme {pristine} ou {error}, et un seul état d’activité, {idle} ou {loading}. Les verrouillages et les autres flags peuvent se combiner."
   },
   "home.arguments.authority.title": {
-    "message": "La validité a une autorité unique"
+    "message": "Les validators vérifient vos valeurs"
   },
   "home.arguments.authority.body": {
-    "message": "Seul le Validator la produit. Aucun behavior ne peut le contredire, donc il n'y a jamais d'arbitrage entre deux sources qui ne sont pas d'accord."
+    "message": "Un validator vérifie une valeur et signale des erreurs ou des avertissements. Un behavior réagit aux événements du champ, par exemple en chargeant les modèles quand la marque de voiture change."
   },
   "home.arguments.renders.title": {
-    "message": "Un champ qui change ne re-rend pas les autres"
+    "message": "Chaque champ a son propre abonnement"
   },
   "home.arguments.renders.body": {
-    "message": "Chaque champ a son abonnement et un snapshot stable par référence. S'abonner au formulaire entier est un choix explicite, pas le défaut."
+    "message": "Chaque champ lit un snapshot de son état actuel. Les champs indépendants ne notifient pas cet abonnement. Les dépendances et les rendus des parents React peuvent encore mettre à jour d’autres composants."
   },
   "home.arguments.types.title": {
-    "message": "Rien de faux ne compile"
+    "message": "TypeScript vérifie les noms et les valeurs"
   },
   "home.arguments.types.body": {
-    "message": "Le formulaire déclare ce que vaut chaque champ ; behaviors et hooks en dérivent. Un nom fautif ou un mauvais type est une erreur de compilation — et aucun {as} côté consommateur."
+    "message": "Déclarez une fois chaque nom de champ et son type de valeur. Les helpers dérivés vérifient les noms et les valeurs ; leur usage courant ne demande donc pas de casts {as}."
   },
   "home.note.label": {
     "message": "Pré-publication."
   },
   "home.note.body": {
-    "message": "Les packages sont construits et prêts, rien n'est encore sur npm, et l'API peut encore bouger."
+    "message": "L’API peut encore changer. Suivez les instructions pour le dépôt dans la documentation afin d’essayer les packages et la démo React pendant le développement."
   },
   "theme.SearchBar.label": {
     "message": "Rechercher"

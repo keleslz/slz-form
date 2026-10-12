@@ -2,14 +2,14 @@
 id: the-problem
 title: The problem
 sidebar_position: 1
-description: What a dependent select really costs when you write it by hand.
+description: Manage a dependent select without repeating its state logic in each component.
 ---
 
 # The problem
 
-Every input in a real application calls for the same dozen mechanisms. Taken
-one by one, none is hard. Put together, they produce this — a plain select
-whose options depend on another field:
+This page uses a car model select to show which parts of form logic slz-form manages. You will see how to move option loading and field state out of a React component.
+
+When the brand changes, you need to fetch the available models. The select also needs a value, validation messages and a disabled state during loading or submission. A component might implement these requirements like this:
 
 ```tsx
 const [value, setValue] = useState("");
@@ -39,64 +39,43 @@ useEffect(() => {
 {touched && error && <p className="error">{error}</p>}
 ```
 
-What costs you is not the length, it is what this code puts in place:
+This approach works, but leaves several things for you to coordinate:
 
-- **Business state lives in the component.** The parent becomes the owner of
-  the value, of `touched`, of the options; it can no longer be moved or tested
-  on its own.
-- **Display rules are recomputed by hand.**
-  `disabled={loading || submitting || !brand}` is rewritten, slightly
-  differently, in every field. A rule that changes gets fixed in N places.
-- **Dependencies between fields are implicit.** Nothing says this field depends
-  on `brand`, except a `useEffect` array you have to read to find out.
-- **Impossible states are representable.** Nothing prevents `touched=false`
-  with a displayed `error`, or a spinner while the field is already in error.
-- **Rendering spills over.** Lifting the value to the parent for the submit
-  button re-renders every other field on each keystroke.
-- **The logic is trapped in React.** The same business rule will have to be
-  rewritten in Angular or in Vue.
+- The component owns the value, interaction state and options. Testing that logic separately requires extracting it from React.
+- Each input repeats conditions for loading, submission and dependencies. A change to a shared rule can require editing several components.
+- The dependency on `brand` is recorded in the effect. You have to inspect effects to find all the relationships between fields.
+- Independent state updates can leave stale options, messages or loading state unless you coordinate them, including responses arriving out of order.
+- If a parent holds all values, updating one can render the parent and its children again.
+- The effects depend on React. A different framework needs its own integration for that logic.
 
 ## The same field, with the engine
 
-The behavior is declared once, in the form's module:
+A behavior is an object that reacts to field events. Here, `loadOptions` creates a behavior that fetches the model options when the watched brand changes. `watch` lists the fields whose changes trigger the behavior. This example uses the helper returned by `behaviorsFor(form)`, which checks field names and callback types against your form declaration.
 
 ```ts
 const modelOptions = loadOptions({
     field: "model",
     watch: ["brand"],
-    fetch: ({ brand }) => fetchModels(brand),   // brand: string, no cast
+    fetch: ({ brand }) => fetchModels(brand),   // brand: string | undefined, no cast
 });
 ```
+
+Attach it to your select component:
 
 ```tsx
 <SelectField name="model" label="Model" required behaviors={[modelOptions]} />
 ```
 
-No more `useState`, no more `useEffect`, no more hand-wired spinner, no more
-`disabled` made of three booleans. It is not just shorter — what matters is
-what it makes **impossible**.
+`SelectField` is an application component, like the ones in the demo. It still renders the select, spinner and messages, but reads their state from the engine. A flag is a named state such as `loading` or `locked`; the component checks flags instead of maintaining separate booleans for each rule.
 
-## What the system guarantees
+## What the system checks
 
-**Validity has a single authority.** Only the Validator produces it. No
-behavior can contradict it, so there is never an arbitration between two
-disagreeing sources. `IValidator<T>` is generic: the same contract covers text,
-number, boolean, option list, file, date, time and datetime — each validator
-judges its own type, without a single cast.
+Validators check values and report errors or warnings. `IValidator<T>` lets you write a rule for the value type you use, including strings, numbers, booleans, option arrays, files and dates. Behaviors can update their own field's value, options and flags; their result does not contain a validity setting.
 
-**Dependencies are declared, and checked.** A behavior or a validator lists the
-fields it watches in `watch`. Reading an undeclared field **throws**, and a
-cycle is rejected at wiring time rather than discovered as an infinite loop. A
-field can read the others; it can never write one.
+Behaviors and validators declare dependencies in `watch`. `ctx.watched(...)` throws if you request an undeclared name, and the dependency graph rejects cycles when fields are registered. The context gives read access to other fields and mutation methods for the behavior's own field. General form reads through `ctx.form` do not create a dependency automatically.
 
-**A field that changes does not re-render the others.** Each field has its own
-subscription and a referentially stable snapshot. Subscribing to the whole form
-is an explicit choice, reserved for what needs it — a submit button, a summary.
+Each field has its own subscription and snapshot, an object describing its current state. The snapshot keeps the same reference until that state changes. An unrelated field update does not notify this subscription. Declared dependencies and React parent renders can still update other components. Use the whole-form subscription for components that need it, such as a submit button or summary.
 
-**Nothing is typed by hand, and nothing wrong compiles.** The form declares
-what each field holds; behaviors and hooks derive from it. See
-[First form](first-form.md).
+Your field map declares the names and value types. The derived helpers check these types, so a misspelled name or an incompatible value is caught by TypeScript. Your own component props must preserve those constraints too. See [First form](first-form.md).
 
-**The logic is written once, for every framework.** The core knows neither
-React, nor Angular, nor Vue. The business rule will not be rewritten three
-times.
+The core has no framework dependency. You can reuse behaviors and validators with another framework by connecting that framework's view to the controllers.
