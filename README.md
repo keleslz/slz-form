@@ -6,8 +6,8 @@
 Declare your fields, behaviors, and validation rules, and let the engine own
 the state, the UI states, and the interactions between fields.
 
-[Documentation](https://keleslz.github.io/slz-form-event/) ·
-[The model](https://keleslz.github.io/slz-form-event/conception/MODEL) ·
+[Documentation](https://keleslz.github.io/slz-form/) ·
+[The model](https://keleslz.github.io/slz-form/conception/MODEL) ·
 [Live demo](./examples/react)
 
 </div>

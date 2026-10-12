@@ -14,7 +14,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/keleslz/slz-form-event.git",
+    "url": "git+https://github.com/keleslz/slz-form.git",
     "directory": "packages/react-form"
   },
   "type": "module",
