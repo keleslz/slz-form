@@ -9,6 +9,9 @@
     --valid: #4ade80;
     --loading: #fbbf24;
     --locked: #c084fc;
+    --focused: #6ea8fe;
+    --required: #f472b6;
+    --touched: #a5b4fc;
 }
 
 body {
@@ -136,6 +139,7 @@ body:has(.overlay.is-open) .page {
     display: flex;
     flex-wrap: wrap;
     gap: .25rem;
+    flex-direction:row
 }
 
 .field__control {
@@ -243,6 +247,20 @@ body:has(.overlay.is-open) .page {
 .chip--invisible{ color: #94a3b8; }
 .chip--idle     { display: none; }
 .chip--renders  { color: var(--accent); border-color: transparent; }
+
+/* Les marqueurs cumulés — sans couleur propre, ils se lisaient comme éteints. */
+.chip--mounted  { color: var(--valid);    border-color: color-mix(in srgb, var(--valid) 40%, transparent); }
+.chip--required { color: var(--required); border-color: color-mix(in srgb, var(--required) 40%, transparent); }
+.chip--touched  { color: var(--touched);  border-color: color-mix(in srgb, var(--touched) 40%, transparent); }
+.chip--readonly { color: var(--locked);   border-color: color-mix(in srgb, var(--locked) 40%, transparent); }
+.chip--submitting { color: var(--loading); border-color: color-mix(in srgb, var(--loading) 40%, transparent); }
+
+/* `focused` va et vient sous le curseur : rempli, pour qu'on le voie passer. */
+.chip--focused {
+    color: var(--focused);
+    border-color: color-mix(in srgb, var(--focused) 55%, transparent);
+    background: color-mix(in srgb, var(--focused) 16%, transparent);
+}
 
 /* ── actions ─────────────────────────────────────────────────────────── */
 .actions {

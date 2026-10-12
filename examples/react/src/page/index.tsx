@@ -15,7 +15,8 @@ const TABS: readonly TabDefinition[] = [
  * one tab to the next.
  */
 export function Page() {
-    const [active, setActive] = useState<string>("slz");
+    const params = new URLSearchParams(window.location.search);
+    const [active, setActive] = useState<string>(params.get('tab') === "useState" ? "usestate" : "slz");
 
     return (
         <div className="page">
