@@ -7,7 +7,7 @@ validators, orchestration asynchrone, réactivité entre champs — et n'a
 connaissance d'aucun framework. Les adapters (`slz-react-form`,
 `slz-angular-form`, `slz-vue-form`) se limitent au pont framework ↔ core.
 
-📖 **[Documentation complète](https://keleslz.github.io/slz-form-event/)** —
+📖 **[Documentation complète](https://keleslz.github.io/slz-form/fr/)** —
 guides, modèle, et référence d'API générée depuis les sources.
 
 ```bash
@@ -61,18 +61,18 @@ connaître.
 
 | | |
 |---|---|
-| Les flags, et les deux fonctions | [modèle](https://keleslz.github.io/slz-form-event/docs/modele/flags) |
-| Behavior ou validator ? | [modèle](https://keleslz.github.io/slz-form-event/docs/modele/behavior-et-validator) |
-| Préremplir, valider, dépendances, listes | [guides](https://keleslz.github.io/slz-form-event/docs/guides/preremplir) |
-| Signatures exactes | [référence API](https://keleslz.github.io/slz-form-event/docs/reference/slz-form) |
-| Arbitrages et invariants d'architecture | [`docs/MODEL.md`](https://github.com/keleslz/slz-form-event/blob/master/docs/MODEL.md) |
+| Les flags, et les deux fonctions | [modèle](https://keleslz.github.io/slz-form/fr/docs/model/flags) |
+| Behavior ou validator ? | [modèle](https://keleslz.github.io/slz-form/fr/docs/model/behavior-and-validator) |
+| Préremplir, valider, dépendances, listes | [guides](https://keleslz.github.io/slz-form/fr/docs/guides/prefill) |
+| Signatures exactes | [référence API](https://keleslz.github.io/slz-form/fr/docs/reference/slz-form) |
+| Arbitrages et invariants d'architecture | [`docs/MODEL.md`](https://github.com/keleslz/slz-form/blob/master/docs/MODEL.md) |
 
 ## Portée
 
 **ESM uniquement** : le package n'expose pas de build CommonJS.
 
 Ce que le moteur ne couvre pas — masques de saisie, rendu serveur — est listé
-dans [« ce que ce n'est pas »](https://keleslz.github.io/slz-form-event/docs/).
+dans [« ce que ce n'est pas »](https://keleslz.github.io/slz-form/fr/docs/).
 
 ## Licence
 

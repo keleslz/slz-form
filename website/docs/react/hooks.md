@@ -1,66 +1,71 @@
 ---
 id: hooks
-title: Les hooks
+title: Hooks
 sidebar_position: 2
-description: useField, useForm, et pourquoi aucun useState ne recopie l'état du moteur.
+description: useField, useForm, and why no useState copies the engine's state.
 ---
 
-# Les hooks
+# Hooks
 
-| Export | Rôle |
+| Export | Role |
 |---|---|
-| `hooksFor(form)` | rend `useField`, `useFieldArray` et `useForm` liés à un formulaire, typés par sa map |
-| `useField` | un champ : valeur, constats, flags, handlers |
-| `useFieldArray` | les lignes d'une liste : `rows`, `append`, `remove`, `move`, `clear` |
-| `useFieldOn(form, params)` | `useField` lié à un formulaire donné — sert à câbler un champ de ligne |
-| `FormProvider` | publie le `FormRegister` dans l'arbre, pour l'accès transverse |
-| `useFormRegister` | accès direct au register |
+| `hooksFor(form)` | returns `useField`, `useFieldArray` and `useForm` bound to a form, typed by its field map |
+| `useField` | a field: value, issues, flags, handlers |
+| `useForm` | the whole form: `snapshot`, `values`, `errors`, flags, `submit`, `reset` |
+| `useFieldArray` | the rows of a list: `rows`, `append`, `remove`, `move`, `clear` |
+| `useFieldOn(form, params)` | `useField` bound to a given form — used to wire a row field |
+| `useFieldArrayOn(form, name)` | `useFieldArray` bound to a given form — a list nested in a row |
+| `FormProvider` | publishes the `FormRegister` in the tree, for cross-cutting access |
+| `useFormRegister` | direct access to the register |
 
-## Lire l'état : deux fonctions
+## Reading state: two functions
 
 ```tsx
-field.hasFlag("locked", "required")   // ET  — toutes présentes
-field.hasAny("loading", "invisible")  // OU  — au moins une
+field.hasFlag("locked", "required")   // AND — all present
+field.hasAny("loading", "invisible")  // OR  — at least one
 ```
 
-Le formulaire répond aux mêmes deux fonctions, avec les mêmes mots :
+The form answers the same two functions, with the same words:
 
 ```tsx
 const { hasFlag, submit } = useForm();
 
 <button disabled={!hasFlag("valid", "idle")} onClick={() => void submit()}>
-    Envoyer
+    Submit
 </button>
 ```
 
-:::note `error` au champ et au formulaire ne disent pas la même chose
-Au champ, `error` est ce qu'on **affiche** — éteint tant qu'on n'a pas touché,
-pour qu'un préremplissage n'allume rien. Au formulaire, `error` est ce qui est
-**vrai** : un formulaire prérempli et faux ne part pas. Le verdict d'un champ
-pris isolément, c'est `field.errors` non vide.
+The words themselves — `valid`, `idle`, `locked`, `loading`… —, their nature and
+who emits them: [Flags](../model/flags.md).
+
+:::note `error` at the field and at the form do not say the same thing
+At the field, `error` is what you **display** — off until the field is touched,
+so that a prefill lights nothing. At the form, `error` is what is **true**: a
+prefilled, invalid form does not submit. The verdict of a field taken in
+isolation is a non-empty `field.errors`.
 :::
 
-## Router les messages
+## Routing messages
 
-`field.issues` porte chaque constat avec sa `severity` et son `code`, ce qui
-permet de router sans que le moteur s'en mêle :
+`field.issues` carries each issue with its `severity` and its `code`, which lets
+you route without the engine getting involved:
 
 ```tsx
 const toasts = field.issues.filter((issue) => issue.code === "toast");
 ```
 
-## `locked` et `readonly` sont distincts
+## `locked` and `readonly` are distinct
 
-`readonly` est lisible et sélectionnable, mais non modifiable — et n'implique
-pas `locked`. La vue peut piloter les deux :
+`readonly` is readable and selectable, but not modifiable — and does not imply
+`locked`. The view can drive both:
 `useField({ name, locked, readOnly })`.
 
-## Aucun `useState` ne recopie l'état du moteur
+## No `useState` copies the engine's state
 
-`useField` ne fait que brancher le cycle de vie React sur le controller et lire
-son snapshot via `useSyncExternalStore`. Un champ qui change **ne re-rend pas
-les autres** — s'abonner au formulaire entier est un choix explicite, réservé à
-ce qui en a besoin : un bouton submit, un récapitulatif.
+`useField` only wires the React lifecycle onto the controller and reads its
+snapshot via `useSyncExternalStore`. A field that changes **does not re-render
+the others** — subscribing to the whole form is an explicit choice, reserved for
+what needs it: a submit button, a summary.
 
-C'est mesuré, pas affirmé : la démo compte les rendus par champ et affiche
-l'écart avec la même vue écrite en `useState`.
+This is measured, not asserted: the demo counts renders per field and shows the
+gap with the same view written with `useState`.

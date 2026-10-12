@@ -1,0 +1,14 @@
+{
+  "sidebar.guide.category.Getting started": {
+    "message": "Démarrer"
+  },
+  "sidebar.guide.category.The model": {
+    "message": "Le modèle"
+  },
+  "sidebar.guide.category.Guides": {
+    "message": "Guides"
+  },
+  "sidebar.guide.category.React": {
+    "message": "React"
+  }
+}

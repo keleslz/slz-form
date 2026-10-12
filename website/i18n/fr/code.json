@@ -1,0 +1,89 @@
+{
+  "home.tagline": {
+    "message": "Un moteur de formulaires piloté par des flags, indépendant du framework"
+  },
+  "home.title": {
+    "message": "Un moteur de formulaires piloté par des flags"
+  },
+  "home.actions.problem": {
+    "message": "Le problème qu'il résout"
+  },
+  "home.actions.firstForm": {
+    "message": "Premier formulaire"
+  },
+  "home.view.title": {
+    "message": "Le composant ne décide de rien"
+  },
+  "home.view.reads": {
+    "message": "Il lit et se rend. Ce qu'un champ {is} se lit en flags ; ce qu'il {holds} se lit en données. Deux fonctions : {hasFlag} est le ET, {hasAny} le OU."
+  },
+  "home.view.reads.is": {
+    "message": "est"
+  },
+  "home.view.reads.holds": {
+    "message": "contient"
+  },
+  "home.view.removes": {
+    "message": "C'est ce qui supprime le {disabled} recomposé à la main dans chaque champ."
+  },
+  "home.arguments.impossible.title": {
+    "message": "Les états impossibles ne sont pas représentables"
+  },
+  "home.arguments.impossible.body": {
+    "message": "{pristine} et {error} s'excluent, comme {idle} et {loading}. Une union plate les laisserait coexister ; deux natures de flags les en empêchent."
+  },
+  "home.arguments.authority.title": {
+    "message": "La validité a une autorité unique"
+  },
+  "home.arguments.authority.body": {
+    "message": "Seul le Validator la produit. Aucun behavior ne peut le contredire, donc il n'y a jamais d'arbitrage entre deux sources qui ne sont pas d'accord."
+  },
+  "home.arguments.renders.title": {
+    "message": "Un champ qui change ne re-rend pas les autres"
+  },
+  "home.arguments.renders.body": {
+    "message": "Chaque champ a son abonnement et un snapshot stable par référence. S'abonner au formulaire entier est un choix explicite, pas le défaut."
+  },
+  "home.arguments.types.title": {
+    "message": "Rien de faux ne compile"
+  },
+  "home.arguments.types.body": {
+    "message": "Le formulaire déclare ce que vaut chaque champ ; behaviors et hooks en dérivent. Un nom fautif ou un mauvais type est une erreur de compilation — et aucun {as} côté consommateur."
+  },
+  "home.note.label": {
+    "message": "Pré-publication."
+  },
+  "home.note.body": {
+    "message": "Les packages sont construits et prêts, rien n'est encore sur npm, et l'API peut encore bouger."
+  },
+  "theme.SearchBar.label": {
+    "message": "Rechercher"
+  },
+  "theme.SearchBar.noResultsText": {
+    "message": "Aucun résultat"
+  },
+  "theme.SearchBar.seeAll": {
+    "message": "Voir tous les résultats"
+  },
+  "theme.SearchBar.seeAllOutsideContext": {
+    "message": "Voir tous les résultats hors de « {context} »"
+  },
+  "theme.SearchBar.searchInContext": {
+    "message": "Voir tous les résultats dans « {context} »"
+  },
+  "theme.SearchPage.existingResultsTitle": {
+    "message": "Résultats pour « {query} »"
+  },
+  "theme.SearchPage.emptyResultsTitle": {
+    "message": "Rechercher dans la documentation"
+  },
+  "theme.SearchPage.searchContext.everywhere": {
+    "message": "Partout"
+  },
+  "theme.SearchPage.documentsFound.plurals": {
+    "message": "1 document trouvé|{count} documents trouvés"
+  },
+  "theme.SearchPage.noResultsText": {
+    "message": "Aucun document trouvé"
+  }
+}

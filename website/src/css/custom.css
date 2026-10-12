@@ -1,39 +1,520 @@
 /**
  * Le thème du site.
  *
- * Sobre à dessein : le contenu est dense — des tableaux d'invariants, du code
- * long — et tout ce qui décore lui prend de la place.
+ * Le contenu est dense — des tableaux d'invariants, du code long. Le thème lui
+ * laisse la place : des neutres ardoise, un seul accent, des filets d'un pixel
+ * plutôt que des ombres, et le code sur fond sombre dans les deux modes pour
+ * qu'il se détache du texte sans encadré.
  */
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
 :root {
-    --ifm-color-primary: #2a5db0;
-    --ifm-color-primary-dark: #26549e;
-    --ifm-color-primary-darker: #244f95;
-    --ifm-color-primary-darkest: #1d417b;
-    --ifm-color-primary-light: #2e66c2;
-    --ifm-color-primary-lighter: #316bcb;
-    --ifm-color-primary-lightest: #4a7ed4;
-    --ifm-code-font-size: 92%;
-    --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+    /* Les neutres et l'accent. Tout le reste en dérive. */
+    --slz-bg: #ffffff;
+    --slz-surface: #f8fafc;
+    --slz-border: #e2e8f0;
+    --slz-text: #334155;
+    --slz-heading: #0f172a;
+    --slz-muted: #64748b;
+    --slz-code-bg: #0f172a;
+    --slz-code-border: #0f172a;
+    --slz-inline-code-bg: #f1f5f9;
+    --slz-accent-soft: rgba(14, 165, 233, 0.1);
+    --slz-veil: rgba(15, 23, 42, 0.55);
+
+    /* Les flags du moteur, dans les couleurs de la démo. */
+    --slz-flag-valid: #16a34a;
+    --slz-flag-error: #dc2626;
+    --slz-flag-loading: #d97706;
+    --slz-flag-locked: #9333ea;
+    --slz-flag-neutral: #64748b;
+
+    --ifm-color-primary: #0284c7;
+    --ifm-color-primary-dark: #0277b3;
+    --ifm-color-primary-darker: #0270a9;
+    --ifm-color-primary-darkest: #025c8b;
+    --ifm-color-primary-light: #0291db;
+    --ifm-color-primary-lighter: #0398e5;
+    --ifm-color-primary-lightest: #1cabf8;
+
+    --ifm-background-color: var(--slz-bg);
+    --ifm-background-surface-color: var(--slz-bg);
+    --ifm-font-color-base: var(--slz-text);
+    --ifm-heading-color: var(--slz-heading);
+    --ifm-color-emphasis-300: var(--slz-border);
+    --ifm-toc-border-color: var(--slz-border);
+    --ifm-hr-background-color: var(--slz-border);
+
+    --ifm-font-family-base: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --ifm-font-family-monospace: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --ifm-font-size-base: 100%;
+    --ifm-line-height-base: 1.7;
+    --ifm-heading-font-weight: 650;
+    --ifm-h1-font-size: 2.25rem;
+    --ifm-h2-font-size: 1.5rem;
+    --ifm-h3-font-size: 1.125rem;
+    --ifm-code-font-size: 0.85em;
+    --ifm-global-radius: 0.5rem;
+    --ifm-code-border-radius: 0.375rem;
+    --ifm-pre-border-radius: 0.75rem;
+    --ifm-pre-padding: 1.125rem;
+
+    --ifm-navbar-height: 3.75rem;
+    --ifm-navbar-background-color: rgba(255, 255, 255, 0.8);
+    --ifm-navbar-shadow: none;
+    --ifm-navbar-link-color: var(--slz-text);
+    --ifm-navbar-padding-horizontal: 1.5rem;
+
+    --ifm-menu-color: var(--slz-muted);
+    --ifm-menu-color-active: var(--ifm-color-primary);
+    --ifm-menu-color-background-active: transparent;
+    --ifm-menu-color-background-hover: transparent;
+    --ifm-menu-link-padding-vertical: 0.3rem;
+    --ifm-menu-link-padding-horizontal: 1rem;
+
+    --ifm-table-border-color: var(--slz-border);
+    --ifm-table-head-background: transparent;
+    --ifm-table-stripe-background: transparent;
+    --ifm-table-cell-padding: 0.75rem 1rem;
+
+    --ifm-alert-border-left-width: 0;
+    --ifm-alert-border-radius: 0.75rem;
+    --ifm-alert-padding-vertical: 1rem;
+    --ifm-alert-padding-horizontal: 1.25rem;
+
+    --ifm-footer-background-color: var(--slz-bg);
+    --ifm-footer-color: var(--slz-muted);
+    --ifm-footer-link-color: var(--slz-text);
+    --ifm-footer-title-color: var(--slz-heading);
+
+    --ifm-code-background: var(--slz-inline-code-bg);
+    --docusaurus-highlighted-code-line-bg: rgba(148, 163, 184, 0.18);
+    --doc-sidebar-width: 18rem !important;
 }
 
-[data-theme="dark"] {
-    --ifm-color-primary: #7ba7e8;
-    --ifm-color-primary-dark: #5e93e2;
-    --ifm-color-primary-darker: #4f89df;
-    --ifm-color-primary-darkest: #2a6bd3;
-    --ifm-color-primary-light: #98bbee;
-    --ifm-color-primary-lighter: #a7c5f1;
-    --ifm-color-primary-lightest: #d3e1f8;
-    --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.1);
+/* `html` en tête : Infima écrit son thème sombre sous `html[data-theme]`, et
+   un sélecteur moins spécifique perdrait contre lui. */
+html[data-theme="dark"] {
+    --slz-bg: #0b1120;
+    --slz-surface: #111a2e;
+    --slz-border: #1e293b;
+    --slz-text: #cbd5e1;
+    --slz-heading: #f8fafc;
+    --slz-muted: #94a3b8;
+    --slz-code-bg: #0f1a30;
+    --slz-code-border: #1e293b;
+    --slz-inline-code-bg: #1e293b;
+    --slz-accent-soft: rgba(56, 189, 248, 0.12);
+    --slz-veil: rgba(0, 0, 0, 0.7);
+
+    --slz-flag-valid: #4ade80;
+    --slz-flag-error: #f87171;
+    --slz-flag-loading: #fbbf24;
+    --slz-flag-locked: #c084fc;
+    --slz-flag-neutral: #94a3b8;
+
+    --ifm-color-primary: #38bdf8;
+    --ifm-color-primary-dark: #1ab3f7;
+    --ifm-color-primary-darker: #0baef6;
+    --ifm-color-primary-darkest: #0890cc;
+    --ifm-color-primary-light: #56c7f9;
+    --ifm-color-primary-lighter: #65ccfa;
+    --ifm-color-primary-lightest: #93dcfb;
+
+    /* Le thème sombre d'Infima repose ses propres fonds : les redire ici, sinon
+       la page reste en gris neutre sous une barre de navigation ardoise. */
+    --ifm-background-color: var(--slz-bg);
+    --ifm-background-surface-color: var(--slz-bg);
+    --ifm-footer-background-color: var(--slz-bg);
+    --ifm-navbar-background-color: rgba(11, 17, 32, 0.8);
+    --ifm-code-background: var(--slz-inline-code-bg);
+    --ifm-color-emphasis-300: var(--slz-border);
+    --ifm-table-head-background: transparent;
+    --ifm-table-stripe-background: transparent;
 }
 
+body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
+}
+
+/* ── barre de navigation ──────────────────────────────────────────────── */
+.navbar {
+    border-bottom: 1px solid var(--slz-border);
+    backdrop-filter: saturate(180%) blur(12px);
+}
+
+.navbar__title {
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    color: var(--slz-heading);
+}
+
+.navbar__link {
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.navbar__link--active {
+    color: var(--ifm-color-primary);
+}
+
+/* ── barre latérale ───────────────────────────────────────────────────── */
+.theme-doc-sidebar-container {
+    border-right: 1px solid var(--slz-border) !important;
+}
+
+.theme-doc-sidebar-menu {
+    padding: 1.5rem 1rem 2rem 1.5rem !important;
+    font-size: 0.875rem;
+}
+
+.menu__link {
+    border-radius: 0;
+    font-weight: 400;
+}
+
+.menu__link:hover {
+    color: var(--slz-heading);
+}
+
+/* Une catégorie de premier niveau est un intertitre, pas un lien de plus. */
+.theme-doc-sidebar-item-category-level-1 {
+    margin-top: 1.5rem !important;
+}
+
+.theme-doc-sidebar-item-category-level-1 > .menu__list-item-collapsible > .menu__link {
+    padding-left: 0;
+    font-family: var(--ifm-font-family-monospace);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--slz-heading);
+}
+
+.theme-doc-sidebar-item-link-level-1 > .menu__link {
+    padding-left: 0;
+    font-weight: 500;
+    color: var(--slz-heading);
+}
+
+.theme-doc-sidebar-item-link-level-1 > .menu__link--active {
+    color: var(--ifm-color-primary);
+}
+
+/* Les pages d'une catégorie pendent à un filet : la page courante le colore. */
+.theme-doc-sidebar-item-category-level-1 > .menu__list {
+    margin-top: 0.375rem;
+    padding-left: 0;
+    border-left: 1px solid var(--slz-border);
+}
+
+.theme-doc-sidebar-item-category-level-1 > .menu__list .menu__link {
+    margin-left: -1px;
+    border-left: 1px solid transparent;
+}
+
+.theme-doc-sidebar-item-category-level-1 > .menu__list .menu__link:hover {
+    border-left-color: var(--slz-muted);
+}
+
+.theme-doc-sidebar-item-category-level-1 > .menu__list .menu__link--active:not(.menu__link--sublist) {
+    border-left-color: var(--ifm-color-primary);
+    font-weight: 500;
+}
+
+.menu__caret::before,
+.menu__link--sublist-caret::after {
+    background-size: 1.25rem 1.25rem;
+    opacity: 0.5;
+}
+
+/* ── contenu ──────────────────────────────────────────────────────────── */
+@media (min-width: 997px) {
+    .theme-doc-sidebar-container + main > .container {
+        padding: 2.5rem 3rem 4rem !important;
+    }
+}
+
+.theme-doc-markdown,
+.markdown {
+    --ifm-leading: 1.5rem;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+    letter-spacing: -0.02em;
+}
+
+.markdown h1:first-child {
+    margin-bottom: 1.5rem;
+}
+
+.markdown h2 {
+    margin-top: 3.5rem;
+    margin-bottom: 1rem;
+}
+
+.markdown h3 {
+    margin-top: 2.5rem;
+}
+
+.markdown strong {
+    font-weight: 600;
+    color: var(--slz-heading);
+}
+
+.markdown a {
+    font-weight: 500;
+    text-decoration: underline;
+    text-decoration-color: var(--slz-accent-soft);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+}
+
+.markdown a:hover {
+    text-decoration-color: currentColor;
+}
+
+.breadcrumbs {
+    font-family: var(--ifm-font-family-monospace);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+}
+
+.breadcrumbs__link {
+    border-radius: 0.375rem;
+    color: var(--slz-muted);
+}
+
+.breadcrumbs__item--active .breadcrumbs__link {
+    background: transparent;
+    color: var(--ifm-color-primary);
+}
+
+/* ── code ─────────────────────────────────────────────────────────────── */
+code {
+    border: 0;
+    padding: 0.15em 0.4em;
+    color: var(--slz-heading);
+    font-weight: 500;
+}
+
+/* Le thème Prism pose son fond en style en ligne : on le remplace, sinon le
+   mode clair retrouve un bloc gris sur fond blanc. */
+.theme-code-block,
+.theme-code-block pre.prism-code {
+    background-color: var(--slz-code-bg) !important;
+}
+
+.theme-code-block {
+    border: 1px solid var(--slz-code-border);
+    box-shadow: none !important;
+}
+
+.theme-code-block pre code {
+    font-size: 0.8125rem;
+    line-height: 1.7;
+    font-weight: 400;
+}
+
+/* ── tableaux ─────────────────────────────────────────────────────────── */
 /* Les tableaux d'arbitrages ont des cellules longues : sans ça, ils débordent
    au lieu de se replier. */
 .markdown table {
     display: table;
     width: 100%;
+    font-size: 0.875rem;
 }
 
+.markdown table th,
 .markdown table td {
+    border-width: 0 0 1px;
     vertical-align: top;
+}
+
+.markdown table th {
+    padding-top: 0;
+    font-weight: 600;
+    text-align: left;
+    color: var(--slz-heading);
+}
+
+.markdown table tr {
+    border-top: 0;
+}
+
+/* ── encadrés ─────────────────────────────────────────────────────────── */
+.theme-admonition {
+    border: 1px solid transparent;
+    box-shadow: none;
+    font-size: 0.9375rem;
+}
+
+.theme-admonition-note {
+    --ifm-alert-background-color: var(--slz-surface);
+    --ifm-alert-foreground-color: var(--slz-text);
+    border-color: var(--slz-border);
+}
+
+.theme-admonition-tip {
+    --ifm-alert-background-color: var(--slz-accent-soft);
+    --ifm-alert-foreground-color: var(--slz-text);
+    border-color: color-mix(in srgb, var(--ifm-color-primary) 25%, transparent);
+}
+
+.theme-admonition-tip [class*="admonitionHeading"] {
+    color: var(--ifm-color-primary);
+}
+
+.theme-admonition-warning {
+    --ifm-alert-background-color: color-mix(in srgb, var(--slz-flag-loading) 9%, transparent);
+    --ifm-alert-foreground-color: var(--slz-text);
+    border-color: color-mix(in srgb, var(--slz-flag-loading) 30%, transparent);
+}
+
+.theme-admonition-warning [class*="admonitionHeading"] {
+    color: var(--slz-flag-loading);
+}
+
+.theme-admonition [class*="admonitionHeading"] {
+    font-family: var(--ifm-font-family-monospace);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+}
+
+.theme-admonition code {
+    background: color-mix(in srgb, var(--slz-heading) 7%, transparent);
+}
+
+/* ── sommaire de page ─────────────────────────────────────────────────── */
+.table-of-contents {
+    font-size: 0.8125rem;
+}
+
+.table-of-contents__link {
+    color: var(--slz-muted);
+}
+
+.table-of-contents__link--active {
+    font-weight: 500;
+}
+
+/* ── page suivante / précédente ───────────────────────────────────────── */
+.pagination-nav__link {
+    border-color: var(--slz-border);
+    border-radius: 0.75rem;
+    transition: border-color 0.15s;
+}
+
+.pagination-nav__link:hover {
+    border-color: var(--ifm-color-primary);
+}
+
+.pagination-nav__sublabel {
+    font-family: var(--ifm-font-family-monospace);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+/* ── pied de page ─────────────────────────────────────────────────────── */
+.footer {
+    border-top: 1px solid var(--slz-border);
+    font-size: 0.875rem;
+}
+
+.footer__title {
+    font-family: var(--ifm-font-family-monospace);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.footer__copyright {
+    font-size: 0.8125rem;
+}
+
+/* ── boutons ──────────────────────────────────────────────────────────── */
+.button {
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+/* ── recherche ────────────────────────────────────────────────────────── */
+.navbar__search-input {
+    width: 14rem;
+    height: 2.25rem;
+    border: 1px solid var(--slz-border);
+    border-radius: 999px;
+    background-color: var(--slz-surface);
+    font-size: 0.875rem;
+    color: var(--slz-heading);
+}
+
+.navbar__search-input::placeholder {
+    color: var(--slz-muted);
+}
+
+/* Au focus — un clic ou ⌘K —, le champ quitte la barre et vient au milieu de
+   l'écran, sur un voile. Pas de `transform` pour le centrer : il ferait du
+   conteneur le repère de ses descendants fixes. Le voile est une ombre portée
+   étalée, donc il ne demande aucun élément de plus. */
+@media (min-width: 997px) {
+    .navbar__search:focus-within {
+        --slz-search-width: min(42rem, calc(100vw - 4rem));
+        position: fixed;
+        top: 14vh;
+        left: calc(50% - var(--slz-search-width) / 2);
+        z-index: 400;
+        width: var(--slz-search-width);
+        margin: 0;
+        border-radius: 0.875rem;
+        box-shadow: 0 0 0 100vmax var(--slz-veil);
+    }
+
+    .navbar__search:focus-within > span {
+        display: block !important;
+        width: 100%;
+    }
+
+    .navbar__search:focus-within .navbar__search-input {
+        width: 100%;
+        height: 3.5rem;
+        padding-left: 3rem;
+        border-color: var(--slz-border);
+        border-radius: 0.875rem;
+        background-color: var(--slz-bg);
+        background-position: 1rem center;
+        font-size: 1rem;
+        outline: none;
+    }
+
+    .navbar__search:focus-within [class*="dropdownMenu"] {
+        width: 100% !important;
+        max-height: 60vh;
+        margin-top: 0.5rem;
+        overflow-y: auto;
+        border: 1px solid var(--slz-border);
+        border-radius: 0.875rem;
+    }
+}
+
+.navbar__search {
+    --search-local-modal-background: var(--slz-bg);
+    --search-local-modal-shadow: 0 24px 60px -20px rgba(15, 23, 42, 0.5);
+    --search-local-hit-background: transparent;
+    --search-local-hit-shadow: none;
+    --search-local-hit-color: var(--slz-text);
+    --search-local-muted-color: var(--slz-muted);
+    --search-local-spacing: 0.5rem;
+}
+
+.navbar__search [class*="suggestion"] {
+    border-radius: 0.5rem !important;
 }

@@ -1,5 +1,5 @@
 ---
-id: premier-formulaire
+id: first-form
 title: Premier formulaire
 sidebar_position: 3
 description: Déclarer la map des champs, dériver les helpers typés, monter un champ.
@@ -105,7 +105,7 @@ propre champ. `lockUntilValid`, lui, est le seul qui lit d'autres champs — il
 observe leur **validité**, pas leur valeur (`on: ["validity"]`).
 
 Quand le besoin sort de l'ordinaire, le même comportement s'écrit à la main :
-[les trois formes du même prefill](../guides/preremplir.md) montrent le passage
+[les trois formes du même prefill](../guides/prefill.md) montrent le passage
 de la classe écrite entièrement à l'utilitaire en trois lignes.
 
 ## Le modèle en trente secondes

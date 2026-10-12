@@ -8,7 +8,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/keleslz/slz-form-event.git"
+    "url": "git+https://github.com/keleslz/slz-form.git"
   },
   "workspaces": [
     "packages/form",

@@ -1,5 +1,5 @@
 ---
-id: dependances
+id: dependencies
 title: Dépendances déclarées
 sidebar_position: 3
 description: Observer un voisin — sa valeur, ou son état — sans jamais écrire chez lui.
@@ -25,11 +25,17 @@ Un nom seul est déclenché par la **valeur** :
 ```
 
 C'est le défaut, et il évite qu'une revalidation rejoue les appels réseau des
-behaviors qui observent le champ. Pour réagir à autre chose, on le déclare :
+behaviors qui observent le champ. Pour réagir à autre chose, on nomme l'axe :
 
 ```ts
-{ watch: [{ field: "postcode", on: ["validity"] }], onDependencyChanged: … }
+{ watch: [{ field: "postcode", on: ["value"] }] }      // défaut — la valeur change
+{ watch: [{ field: "postcode", on: ["validity"] }] }   // le verdict — ce que fait lockUntilValid
+{ watch: [{ field: "postcode", on: ["activity"] }] }   // loading / idle
 ```
+
+`onDependencyChanged(ctx, dependency)` reçoit alors la vue du champ observé —
+`dependency.value`, `dependency.errors`, `dependency.hasFlag(...)` — en lecture
+seule.
 
 ## Lire, jamais écrire
 
@@ -45,7 +51,7 @@ contredire sans qu'aucun ait tort.
 
 ```ts
 ctx.watched("postcode")   // ✓ déclaré
-ctx.watched("city")       // ✗ Error: reads "city" without declaring it in `watch`
+ctx.watched("city")       // ✗ lève — reads "city" without declaring it in `watch`
 ```
 
 L'erreur est immédiate et nommée. Une dépendance implicite est précisément ce

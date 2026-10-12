@@ -1,5 +1,5 @@
 ---
-id: le-probleme
+id: the-problem
 title: Le problème
 sidebar_position: 1
 description: Ce qu'un select dépendant coûte réellement quand on l'écrit à la main.
@@ -96,7 +96,7 @@ récapitulatif.
 
 **Rien n'est typé à la main, et rien de faux ne compile.** Le formulaire déclare
 ce que vaut chaque champ ; behaviors et hooks en dérivent. Voir
-[Premier formulaire](premier-formulaire.md).
+[Premier formulaire](first-form.md).
 
 **La logique s'écrit une fois, pour tous les frameworks.** Le cœur ne connaît ni
 React, ni Angular, ni Vue. La règle métier ne sera pas réécrite trois fois.

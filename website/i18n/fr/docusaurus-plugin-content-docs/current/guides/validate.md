@@ -1,11 +1,16 @@
 ---
-id: valider
+id: validate
 title: Valider
 sidebar_position: 2
 description: Constats, gravité, codes, validators composés et erreurs serveur.
 ---
 
 # Valider
+
+Un validator **juge** une valeur : il est la seule autorité sur la validité. On
+étend `IValidator<T>` et on rapporte ses constats par `report` ; une règle
+asynchrone renvoie une promesse, et le champ porte `loading` le temps qu'elle
+retombe.
 
 ## Une règle
 
@@ -70,7 +75,7 @@ de corriger.
 
 ## Quand une règle casse
 
-Voir [Une passe interrompue n'est pas un verdict](../modele/passe-interrompue.md) —
+Voir [Une passe interrompue n'est pas un verdict](../model/interrupted-pass.md) —
 c'est le point le plus subtil de la validation, et celui qui a le plus régressé.
 
 ## Différer une validation

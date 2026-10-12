@@ -4,7 +4,7 @@ Adapter React de [`slz-form`](https://www.npmjs.com/package/slz-form) : un
 provider et trois hooks. Aucune logique métier — elle vit entièrement dans le
 core.
 
-📖 **[Documentation complète](https://keleslz.github.io/slz-form-event/docs/react/installation)**
+📖 **[Documentation complète](https://keleslz.github.io/slz-form/fr/docs/react/installation)**
 
 ```bash
 npm install slz-form slz-react-form
@@ -63,9 +63,9 @@ du moteur**, et un champ qui change ne re-rend pas les autres.
 
 | | |
 |---|---|
-| Les hooks en détail | [documentation](https://keleslz.github.io/slz-form-event/docs/react/hooks) |
-| Listes répétables | [documentation](https://keleslz.github.io/slz-form-event/docs/react/listes) |
-| Signatures exactes | [référence API](https://keleslz.github.io/slz-form-event/docs/reference/slz-react-form) |
+| Les hooks en détail | [documentation](https://keleslz.github.io/slz-form/fr/docs/react/hooks) |
+| Listes répétables | [documentation](https://keleslz.github.io/slz-form/fr/docs/react/lists) |
+| Signatures exactes | [référence API](https://keleslz.github.io/slz-form/fr/docs/reference/slz-react-form) |
 
 ## Ce que l'adapter ne fait pas encore
 

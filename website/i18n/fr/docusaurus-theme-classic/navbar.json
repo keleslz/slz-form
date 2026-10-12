@@ -1,0 +1,20 @@
+{
+  "title": {
+    "message": "slz-form"
+  },
+  "logo.alt": {
+    "message": "slz-form"
+  },
+  "item.label.Guide": {
+    "message": "Guide"
+  },
+  "item.label.Reference": {
+    "message": "Référence"
+  },
+  "item.label.Design": {
+    "message": "Conception"
+  },
+  "item.label.GitHub": {
+    "message": "GitHub"
+  }
+}

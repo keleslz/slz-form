@@ -1,26 +1,29 @@
 ---
 id: installation
-title: Brancher React
+title: Wiring up React
 sidebar_position: 1
-description: Un module de formulaire, des hooks dérivés, aucun provider obligatoire.
+description: A form module, derived hooks, no mandatory provider.
 ---
 
-# Brancher React
+# Wiring up React
 
-L'adapter est **un provider et trois hooks**. Aucune logique métier : elle vit
-entièrement dans le core.
+The adapter is **a provider and three hooks**. No business logic: it lives
+entirely in the core.
 
 ```bash
 npm install slz-form slz-react-form
 ```
 
-## Le module de formulaire
+## The form module
 
-Déclarez le formulaire et sa map dans un module, puis dérivez-en ses hooks — le
-même découpage qu'une slice :
+Declare the form and its field map in a module, then derive its hooks from it —
+the same split as a slice:
 
 ```ts
 // src/form/signup-form.ts
+import { FormController } from "slz-form";
+import { hooksFor } from "slz-react-form";
+
 export type SignupFields = { email: string; postcode: string; city: string };
 
 export const signupForm = new FormController<SignupFields>({ name: "signup" });
@@ -28,19 +31,19 @@ export const signupForm = new FormController<SignupFields>({ name: "signup" });
 export const { useField, useFieldArray, useForm } = hooksFor(signupForm);
 ```
 
-`name` est alors contraint aux champs déclarés, et la valeur est inférée. Il n'y
-a **ni provider à monter, ni formulaire à nommer** sur chaque champ.
+`name` is then constrained to the declared fields, and the value is inferred.
+There is **no provider to mount and no form to name** on each field.
 
-`FormProvider` et `useFormRegister` existent pour l'accès transverse au
-`FormRegister` — utile quand un composant très éloigné doit atteindre un
-formulaire —, pas pour le cas courant.
+`FormProvider` and `useFormRegister` exist for cross-cutting access to the
+`FormRegister` — useful when a very distant component must reach a form —, not
+for the common case.
 
-## Un champ
+## A field
 
 ```tsx
 function EmailField() {
     const field = useField({
-        name: "email",              // ← contraint à SignupFields
+        name: "email",              // ← constrained to SignupFields
         required: true,
         validator: new EmailValidator(),
     });
@@ -63,11 +66,15 @@ function EmailField() {
 }
 ```
 
-**Ajouter un champ au formulaire, c'est monter ce composant.** Rien à déclarer
-en amont.
+**Adding a field to the form means mounting this component.** Nothing to declare
+upfront.
 
-## Pas de rendu serveur, pour l'instant
+The two read functions — `hasFlag` / `hasAny` — and render isolation are
+detailed in [Hooks](./hooks.md); lists, in
+[Repeatable lists](./lists.md).
 
-`useField`, `useFieldArray` et `useForm` lisent leur état par
-`useSyncExternalStore` **sans** `getServerSnapshot` : un `renderToString` lève
-`Missing getServerSnapshot`. À monter côté client uniquement.
+## No server rendering, for now
+
+`useField`, `useFieldArray` and `useForm` read their state through
+`useSyncExternalStore` **without** `getServerSnapshot`: a `renderToString`
+throws `Missing getServerSnapshot`. Mount on the client only.

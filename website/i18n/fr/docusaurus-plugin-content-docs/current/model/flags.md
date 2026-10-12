@@ -55,7 +55,7 @@ sens précis au retrait d'un flag : on **remplace** dans un groupe exclusif, on
 
 Un behavior publie `mark("skeleton")`, la vue lit `hasFlag("skeleton")`, et le
 moteur n'a jamais eu à connaître le mot. Voir
-[Vos propres flags](../guides/vos-propres-flags.md).
+[Vos propres flags](../guides/your-own-flags.md).
 
 Les mots du moteur, eux, sont **refusés** sur ce chemin — sans quoi on
 republierait l'état impossible qu'on vient d'écarter. `mark("error")` lève.
