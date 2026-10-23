@@ -2,14 +2,16 @@
 id: the-problem
 title: Le problème
 sidebar_position: 1
-description: Ce qu'un select dépendant coûte réellement quand on l'écrit à la main.
+description: Ce que coûte vraiment un select dépendant écrit à la main, et ce que le moteur garantit à la place.
 ---
 
 # Le problème
 
-Chaque input d'une application réelle réclame la même dizaine de mécanismes.
-Pris un par un, aucun n'est difficile. Assemblés, ils produisent ceci — un
-simple select dont les options dépendent d'un autre champ :
+Chaque saisie d'une vraie application réclame la même poignée de mécanismes :
+une valeur, un état « touché », une erreur, parfois des options chargées depuis
+une API, un spinner, un état désactivé. Pris un par un, aucun n'est difficile.
+Mis ensemble, ils donnent ceci — un simple select dont les options dépendent
+d'un autre champ :
 
 ```tsx
 const [value, setValue] = useState("");
@@ -39,64 +41,72 @@ useEffect(() => {
 {touched && error && <p className="error">{error}</p>}
 ```
 
-Ce qui coûte cher n'est pas la longueur, c'est ce que ce code installe :
+Le coût n'est pas la longueur. C'est ce que ce code met en place :
 
-- **L'état métier vit dans le composant.** Le parent devient propriétaire de la
-  valeur, du `touched`, des options ; il n'est plus déplaçable ni testable seul.
-- **Les règles d'affichage sont recalculées à la main.**
-  `disabled={loading || submitting || !brand}` est réécrit, légèrement
-  différemment, dans chaque champ. Une règle qui change se corrige à N endroits.
-- **Les dépendances entre champs sont implicites.** Rien ne dit que ce champ
-  dépend de `brand`, sinon un tableau de `useEffect` qu'il faut lire pour le
-  découvrir.
-- **Les états impossibles sont représentables.** Rien n'empêche `touched=false`
-  avec un `error` affiché, ou un spinner pendant que le champ est déjà en erreur.
-- **Le rendu déborde.** Remonter la valeur au parent pour le bouton submit fait
-  re-rendre tous les autres champs à chaque frappe.
-- **La logique est prisonnière de React.** La même règle métier devra être
-  réécrite en Angular ou en Vue.
+- **Le composant porte l'état métier.** La valeur, `touched` et les options
+  vivent dans le composant. Impossible de déplacer ou de tester cette logique
+  seule.
+- **Les règles d'affichage sont réécrites partout.**
+  `disabled={loading || submitting || !brand}` revient, un peu différent, dans
+  chaque champ. Une règle qui change se corrige à N endroits.
+- **Les liens entre champs sont cachés.** Rien ne dit que ce champ dépend de
+  `brand`, sauf un tableau de dépendances de `useEffect` qu'il faut aller lire.
+- **Des états impossibles peuvent s'écrire.** Rien n'empêche une erreur
+  affichée sur un champ jamais touché, ou un spinner sur un champ déjà en
+  erreur.
+- **Les rendus débordent.** Remonter la valeur au parent pour le bouton de
+  soumission re-rend tous les autres champs à chaque frappe.
+- **La logique est prisonnière de React.** La même règle devra être réécrite
+  pour Angular ou Vue.
 
 ## Le même champ, avec le moteur
 
-Le behavior est déclaré une fois, dans le module du formulaire :
+La réaction se déclare une fois, dans le module qui déclare le formulaire.
+`loadOptions` est l'un des [behaviors](../index.md#vocabulary) prêts à l'emploi :
 
 ```ts
 const modelOptions = loadOptions({
     field: "model",
     watch: ["brand"],
-    fetch: ({ brand }) => fetchModels(brand),   // brand: string, sans cast
+    fetch: ({ brand }) => fetchModels(brand),   // brand: string | undefined, no cast
 });
 ```
 
+La vue dit seulement quel champ elle affiche et ce qu'on lui branche
+(`SelectField` est un composant de la démo, pas de la bibliothèque) :
+
 ```tsx
-<SelectField name="model" label="Modèle" required behaviors={[modelOptions]} />
+<SelectField name="model" label="Model" required behaviors={[modelOptions]} />
 ```
 
 Plus de `useState`, plus de `useEffect`, plus de spinner câblé à la main, plus
-de `disabled` composé de trois booléens. Ce n'est pas seulement plus court —
-c'est ce que ça rend **impossible** qui compte.
+de `disabled` fait de trois booléens. Pendant le chargement des options, le
+champ porte `loading` et `locked` ; quand `brand` change, la sélection est
+vidée et la liste se recharge.
 
-## Ce que le système garantit
+## Ce que le moteur garantit
 
-**La validité a une autorité unique.** Seul le Validator la produit. Aucun
-behavior ne peut le contredire, donc il n'y a jamais d'arbitrage entre deux
-sources en désaccord. `IValidator<T>` est générique : le même contrat couvre
-texte, nombre, booléen, liste d'options, fichier, date, heure et datetime —
-chaque validateur juge son propre type, sans un seul cast.
+**Une seule source de validité.** Seul un validator décide si une valeur est
+acceptée. Aucun behavior ne peut le contredire, il n'y a donc jamais de conflit
+à arbitrer. `IValidator<T>` est générique : le même contrat couvre texte,
+nombres, booléens, listes d'options, fichiers et dates, chaque validator jugeant
+son propre type.
 
-**Les dépendances sont déclarées, et vérifiées.** Un behavior ou un validator
-liste les champs qu'il observe dans `watch`. Lire un champ non déclaré **lève**,
-et un cycle est rejeté au câblage plutôt que découvert en boucle infinie. Un
-champ peut lire les autres ; il ne peut jamais en écrire un.
+**Des dépendances déclarées.** Un behavior ou un validator liste dans `watch`
+les champs qu'il lit, et il est relancé quand ils changent. Lire un champ par
+`ctx.watched()` sans l'avoir déclaré **lève une erreur**, et un cycle de
+dépendances est refusé à la création du champ, au lieu d'être découvert en
+boucle infinie. Un champ peut lire les autres ; il ne peut jamais en écrire un.
+Voir [Dépendances déclarées](../guides/dependencies.md).
 
 **Un champ qui change ne re-rend pas les autres.** Chaque champ a son propre
-abonnement et un snapshot stable par référence. S'abonner au formulaire entier
-est un choix explicite, réservé à ce qui en a besoin — un bouton submit, un
-récapitulatif.
+abonnement et un snapshot qui garde la même référence tant que rien ne change.
+S'abonner au formulaire entier est un choix explicite, pour ce qui en a besoin —
+un bouton de soumission, un récapitulatif.
 
-**Rien n'est typé à la main, et rien de faux ne compile.** Le formulaire déclare
-ce que vaut chaque champ ; behaviors et hooks en dérivent. Voir
-[Premier formulaire](first-form.md).
+**Typé depuis une seule déclaration.** Le formulaire déclare ce que vaut chaque
+champ ; behaviors et hooks en dérivent. Un nom mal orthographié ou une valeur du
+mauvais type ne compile pas. Voir [Premier formulaire](first-form.md).
 
-**La logique s'écrit une fois, pour tous les frameworks.** Le cœur ne connaît ni
-React, ni Angular, ni Vue. La règle métier ne sera pas réécrite trois fois.
+**Écrit une fois, pour tous les frameworks.** Le cœur ne connaît ni React, ni
+Angular, ni Vue. Voir [Sans framework](../guides/without-a-framework.md).

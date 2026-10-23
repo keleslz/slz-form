@@ -2,13 +2,13 @@
 id: lists
 title: Repeatable lists
 sidebar_position: 3
-description: useFieldArray, useFieldOn, and why the list does not publish its rows' flags.
+description: Render a list of rows with useFieldArray, wire each row's fields with useFieldOn, and read the list's state from useForm.
 ---
 
 # Repeatable lists
 
 A list is declared as `FieldArray<Row>` in the field map. `useFieldArray(name)`
-returns its composition; each row is a form in its own right.
+gives you its rows; each row is a small form of its own, with its own fields.
 
 ```ts
 // src/form/invoice-form.ts
@@ -40,9 +40,18 @@ function InvoiceLines() {
 }
 ```
 
-A row field is wired with `useFieldOn`, by passing it the row's form:
+`useFieldArray("lines")` only accepts names declared as `FieldArray` in the
+map. It returns `rows` (in display order) and `append()`, `remove(id)`,
+`move(from, to)`, `clear()`.
+
+## The fields of a row
+
+A row's field is wired with `useFieldOn`, giving it the row's form:
 
 ```tsx
+import type { FieldArrayRow } from "slz-form";
+import { useFieldOn } from "slz-react-form";
+
 function LineLabel({ row }: { row: FieldArrayRow<InvoiceLine> }) {
     const field = useFieldOn<string, never>(row.form, { name: "label", required: true });
 
@@ -56,24 +65,34 @@ function LineLabel({ row }: { row: FieldArrayRow<InvoiceLine> }) {
 }
 ```
 
-`useFieldOn` takes any form: the row's field map is erased at this generic
-bridge, so the value type is given by hand — `<string, never>` here (`never`:
-this field carries no options meta).
+`useFieldOn` accepts any form, so it cannot check `name` against the row's map:
+you give the value type yourself — `<string, never>` here, where `never` means
+the field's options carry no extra data. It returns exactly what `useField`
+returns.
 
-`row.id` is **stable**: it changes neither when another row is removed nor on
-reordering. It is a reliable React key, and it is what keeps a move from
-breaking declared dependencies.
+`row.id` is **stable**: it does not change when another row is removed or when
+rows are reordered. Use it as the React `key` — that is also what keeps a move
+from breaking declared dependencies.
 
-## Where to read the aggregate state
+A row contributes to the payload only through its mounted fields: a row whose
+components render no field adds `{}` and blocks nothing.
 
-The aggregate state of a list — its validity, its errors, its work in flight —
-is read through `useForm().snapshot.arrays`, **not** through `useFieldArray`.
+## Where to read the state of the list
 
-`useFieldArray` subscribes only to the **composition** of the list (append,
-remove, move), so that a keystroke in one row does not re-render the others.
-Exposing flags there would make them stale as of the next keystroke — a wrong
-state displayed with confidence, which is worse than no state at all.
+The state of a list — its verdict, its errors, its work in flight — is read
+from `useForm().snapshot.arrays`, **not** from `useFieldArray`:
 
-The why — a row is an identified `FormController`, never indexed — is in
-[A row is a form](../model/a-row-is-a-form.md); the engine side, in
-[Repeatable fields](../guides/repeatable-fields.md).
+```tsx
+function LinesStatus() {
+    const { snapshot } = useForm();
+    const linesSummary = snapshot.arrays.find((list) => list.name === "lines");
+    return <p>{linesSummary?.ui.hasFlag("error") ? "A line is incomplete" : null}</p>;
+}
+```
+
+`useFieldArray` re-renders only when rows are added, removed or moved, so that
+typing in one row does not re-render the others. If it exposed the list's
+flags, they would be out of date after the next keystroke.
+
+The reasons a row is a form are in [A row is a form](../model/a-row-is-a-form.md);
+the engine side is in [Repeatable fields](../guides/repeatable-fields.md).

@@ -2,16 +2,19 @@
 id: repeatable-fields
 title: Champs répétables
 sidebar_position: 4
-description: Ajouter, retirer et valider des lignes — chacune étant un formulaire.
+description: Ajouter, déplacer, retirer et valider les lignes d'une liste — chaque ligne étant un petit formulaire à part entière.
 ---
 
 # Champs répétables
 
-Une liste se déclare avec `FieldArray<Row>` dans la map, et se pilote par
-`form.array(name)`. Les lignes sont **identifiées, jamais indexées** : ajouter,
-déplacer ou retirer ne renomme rien.
+Une liste de lignes — lignes de facture, contacts — se déclare avec
+`FieldArray<Row>` dans la map de champs, et se pilote par `form.array(name)`.
+Les lignes sont **identifiées, jamais indexées** : ajouter, déplacer ou retirer
+une ligne ne renomme rien.
 
 ```ts
+import { FormController, type FieldArray } from "slz-form";
+
 type InvoiceFields = {
     customer: string;
     lines: FieldArray<{ label: string; qty: number }>;
@@ -20,25 +23,41 @@ type InvoiceFields = {
 const form = new FormController<InvoiceFields>({ name: "invoice" });
 const lines = form.array("lines");
 
-const id = lines.append();          // un identifiant stable, jamais un index
-lines.row(id)?.field("qty").change(3);
+const id = lines.append();          // a stable id, never an index
+const qty = lines.row(id)?.field("qty");
+qty?.mount();
+qty?.change(3);
 
-lines.move(0, 1);
+lines.move(0, 1);                   // reorder by position; ids do not change
 lines.remove(id);
-lines.values();
+lines.values();                     // [{ label, qty }, …] in display order
 ```
 
-`append()` rend l'identifiant de la nouvelle ligne ; `row(id)` rend la ligne, ou
-`null` si elle a été retirée entre-temps. Une ligne **est** un formulaire — même
-API, même validation, mêmes behaviors : `.field("qty")` la pilote exactement
-comme un champ du parent. Le pourquoi est dans
+| Méthode | Ce qu'elle fait |
+|---|---|
+| `append()` | ajoute une ligne vide et rend son identifiant |
+| `row(id)` | la ligne, ou `null` si elle a été retirée |
+| `remove(id)` | retire une ligne : ses valeurs quittent le payload |
+| `move(from, to)` | déplace la ligne de la position `from` à la position `to` |
+| `clear()` | retire toutes les lignes |
+| `rows` | les lignes, dans l'ordre d'affichage — chacune a un `id` et un `form` |
+| `values()` | les valeurs des lignes, dans l'ordre d'affichage |
+
+Une ligne **est** un formulaire : `row.field("qty")` crée et rend un champ
+exactement comme `form.field(...)`, et ce champ doit être monté pour compter.
+Une ligne neuve n'a aucun champ tant que vous ne les créez pas : elle apporte
+donc `{}` au payload et ne bloque rien. En React, `useFieldOn(row.form, …)` crée
+et monte le champ pour vous — voir [Listes répétables](../react/lists.md). Les
+raisons de ce choix sont dans
 [Une ligne est un formulaire](../model/a-row-is-a-form.md).
 
-## Une règle qui porte sur l'ensemble
+`form.reset()` retire toutes les lignes : une liste commence vide.
 
-« La somme fait 100 % » ne vit dans aucune ligne : c'est un validator du parent
-qui observe la liste. Il se pose sur un champ récapitulatif et déclare
-`validateWhenEmpty`, sinon il ne tournerait jamais tant que ce champ est vide.
+## Une règle qui porte sur toute la liste {#a-rule-about-the-whole-list}
+
+« Les parts font 100 au total » n'appartient à aucune ligne. Posez un validator
+sur un champ du formulaire **parent** — ici un champ `total` — qui observe la
+liste :
 
 ```ts
 type Allocation = {
@@ -51,19 +70,23 @@ class SharesMustSumTo100 extends IValidator<number> {
     readonly validateWhenEmpty = true;
 
     protected validate(_total: number | undefined, report: ValidationReport, ctx: ValidationContext): void {
-        const rows = ctx.form.values().parts;
+        const rows = ctx.watched("parts")?.value;
         const sum = (Array.isArray(rows) ? rows : []).reduce<number>((acc, row) => acc + shareOf(row), 0);
-        report.errorIf(sum !== 100, `la somme fait ${sum}, pas 100`, { code: "sum" });
+        report.errorIf(sum !== 100, `the sum is ${sum}, not 100`, { code: "sum" });
     }
 }
 
 const allocation = new FormController<Allocation>({ name: "allocation" });
-allocation.field("total", { validator: new SharesMustSumTo100() });
+allocation.field("total", { validator: new SharesMustSumTo100() }).mount();
 ```
 
-`ctx.form.values()` est une vue de lecture typée `Record<string, unknown>` — le
-formulaire n'y ouvre aucun abonnement — donc les lignes reviennent brutes et on
-les rétrécit à la main, sans un seul `as` :
+- `watch: ["parts"]` relance la règle dès que la valeur d'une ligne change, ou
+  qu'une ligne est ajoutée, déplacée ou retirée.
+- `validateWhenEmpty` est indispensable : la règle juge les lignes, pas la
+  valeur de `total`, qui peut très bien être vide.
+
+La valeur d'un champ observé est typée `unknown` : vous affinez les lignes
+vous-même — sans `as` :
 
 ```ts
 function shareOf(row: unknown): number {
@@ -73,17 +96,25 @@ function shareOf(row: unknown): number {
 }
 ```
 
+Deux choses à savoir sur le champ porteur :
+
+- c'est un vrai champ, il fait donc partie de `form.values()` (ici `total`) ;
+- comme tout champ, il n'affiche son erreur qu'une fois touché. Tant que
+  l'utilisateur ne l'a pas touché ou n'a pas soumis, lisez le message dans
+  `allocation.snapshot.errors.total`.
+
 ## L'état d'une liste
 
-Une liste répond aux mêmes deux fonctions que le reste, et publie `valid` ·
-`error` — jamais `pristine` : c'est un agrégat, pas un champ qu'on touche.
+Une liste répond aux deux mêmes fonctions qu'un champ, avec les mots d'un
+formulaire : `valid` ou `error` — jamais `pristine`, puisque personne ne
+« touche » une liste.
 
 ```ts
-lines.ui.hasFlag("error");     // au moins une ligne refuse
-lines.errors;                  // les constats, à plat
-lines.ui.hasFlag("loading");   // une ligne a du travail en vol
+lines.ui.hasFlag("error");     // at least one row has a blocking issue
+lines.errors;                  // the blocking messages of every row, flattened
+lines.ui.hasFlag("loading");   // a row has work in flight
 ```
 
-Côté React, le même état agrégé se lit par `useForm().snapshot.arrays` — et non
-par `useFieldArray`, qui ne s'abonne qu'à la **composition** de la liste (ajout,
-retrait, déplacement). Le détail des hooks est dans [Listes](../react/lists.md).
+En React, lisez cet état dans `useForm().snapshot.arrays`, pas dans
+`useFieldArray` — voir
+[Listes répétables](../react/lists.md#where-to-read-the-state-of-the-list).
