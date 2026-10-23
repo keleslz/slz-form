@@ -91,8 +91,9 @@ booleans, option lists, files and dates, each validator judging its own type.
 
 **Declared dependencies.** A behavior or a validator lists in `watch` the
 fields it reads, and is re-run when they change. Reading a field through
-`ctx.watched()` without declaring it **throws**, and a dependency cycle is
-rejected when the field is created, not discovered as an infinite loop. A field
+`ctx.watched()` without declaring it **throws** — the engine catches the error
+and records it in `form.engineErrors` —, and a dependency cycle is rejected
+when the field is created, not discovered as an infinite loop. A field
 can read the others; it can never write to one. See
 [Declared dependencies](../guides/dependencies.md).
 
@@ -101,9 +102,9 @@ subscription and a snapshot that keeps the same reference while nothing
 changes. Subscribing to the whole form is an explicit choice, for what needs it
 — a submit button, a summary.
 
-**Typed from one declaration.** The form declares what each field holds;
-the ready-made behaviors and the React hooks are derived from it. A misspelled name or a value of the
-wrong type does not compile. See [First form](first-form.md).
+**Typed from one declaration.** The form declares what each field holds; the
+ready-made behaviors and the React hooks are derived from it. A misspelled name
+or a value of the wrong type does not compile. See [First form](first-form.md).
 
 **Written once, for every framework.** The core knows neither React, nor
 Angular, nor Vue. See [Without a framework](../guides/without-a-framework.md).

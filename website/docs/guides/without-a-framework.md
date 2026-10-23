@@ -80,6 +80,10 @@ What to notice:
   error appear: on an untouched field, `error` stays off.
 - **The button reads the form, the input reads the field.** Each one
   subscribes only to what it renders.
+- **`submitting` only lasts while `submit()` runs.** During the `fetch` that
+  follows, the button is enabled again; if a second click must not send twice,
+  track the request yourself — see
+  [`submitting` covers the gate](submit.md#which-guard-for-the-button).
 
 When the form goes away, unsubscribe and unmount:
 
@@ -114,7 +118,7 @@ turn.
 |---|---|---|
 | `form.field(name, params)` | once per field | creates the field (later calls return the same field and ignore `params`) |
 | `field.mount()` | the input appears | the field joins the form: it counts in `form.values()` and in the verdict, its `onMount` hooks run, its validator runs |
-| `field.unmount()` | the input goes away | the field leaves the payload and the verdict; work in flight is cancelled (`ctx.signal` aborts) |
+| `field.unmount()` | the input goes away | the field leaves the payload and the verdict; work in flight is cancelled (`ctx.signal` aborts) — except the wait of a `DebouncedValidator`, whose rule still runs once, with the aborted signal |
 | `field.reset(value?)` | start the field over | restores `initialValue` — or the `value` you pass —, untouched, and runs `onMount` again |
 | `field.update({ … })` | your code changes a setting | see below |
 

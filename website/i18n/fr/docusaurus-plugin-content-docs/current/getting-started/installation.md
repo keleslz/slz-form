@@ -45,8 +45,8 @@ semble n'avoir aucun effet, vérifiez ce point d'abord.
 ```bash
 git clone https://github.com/keleslz/slz-form.git
 cd slz-form
-npm install     # workspaces npm : tout est lié localement
-npm run dev     # ouvre la démo React
+npm install     # npm workspaces: everything is linked locally
+npm run dev     # opens the React demo
 ```
 
 La démo monte **tous les types de champ dans une seule vue** — texte, email,
@@ -61,11 +61,11 @@ moteur recharge la démo à chaud, sans rebuild.
 ### Les vérifications
 
 ```bash
-npm run typecheck      # les 3 workspaces
+npm run typecheck      # all 3 workspaces
 npm run lint
-npm test               # tests unitaires du moteur
-npm run test:e2e       # la démo dans un vrai navigateur
-npm run build          # packages (tsup) puis démo (vite)
+npm test               # engine unit tests
+npm run test:e2e       # the demo in a real browser
+npm run build          # packages (tsup) then demo (vite)
 ```
 
 La CI rejoue tout cela sur chaque PR, plus le contenu réellement publié
@@ -77,7 +77,7 @@ Il vit dans `website/`, **hors** des workspaces npm : Docusaurus tire beaucoup
 de dépendances, et les jobs de CI du moteur n'ont pas à les payer.
 
 ```bash
-npm install            # à la racine d'abord : TypeDoc lit les sources par ce chemin
+npm install            # at the root first: TypeDoc reads the sources through this path
 cd website
 npm install
 npm start

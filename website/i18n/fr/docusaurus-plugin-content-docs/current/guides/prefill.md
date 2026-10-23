@@ -69,6 +69,8 @@ champ ne sont lus qu'à sa création, un second `form.field(...)` sur le même n
 les ignorerait.
 
 ```ts
+import { IValidator, type ValidationReport } from "slz-form";
+
 class ReferenceValidator extends IValidator<string> {
     protected validate(value: string, report: ValidationReport): void {
         report.errorIf(!/^CUST-\d{2}-\d{4}$/.test(value), "Expected format: CUST-42-9013");
@@ -100,6 +102,8 @@ nom du champ et le type de la valeur sont vérifiés contre la map de champs. L�
 encore, ceci remplace les déclarations précédentes du champ.
 
 ```ts
+import { behaviorsFor } from "slz-form";
+
 const { prefill } = behaviorsFor(form);
 
 const customerReferencePrefill = prefill({

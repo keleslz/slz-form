@@ -29,9 +29,11 @@ const field = useField({ name: "email", required: true, validator: new EmailVali
 |---|---|
 | `validator`, `behaviors`, `initialValue`, `requiredMessage`, `requiredTrue` | `required`, `locked`, `readOnly`, `options`, `value` |
 
-Passer `behaviors={[...]}` ou `validator={new X()}` en ligne dans un rendu est
-donc sans risque — ils ne sont pas recréés. Mais les changer ensuite n'a aucun
-effet : les behaviors et le validator d'un champ sont fixés pour toute sa vie.
+Écrire `useField({ name, behaviors: [...], validator: new X() })` en ligne dans
+un rendu est donc sans risque : une nouvelle instance est construite à chaque
+rendu, mais seules les valeurs du premier appel servent, et le champ n'est
+jamais reconstruit. Le revers : les changer ensuite n'a aucun effet — les
+behaviors et le validator d'un champ sont fixés pour toute sa vie.
 
 `value` rend le champ **contrôlé** par le parent : quand la clé `value` est
 présente, le champ la suit — `value: undefined` vide le champ. Omettez la clé
@@ -41,8 +43,10 @@ pour un champ que pilote l'utilisateur.
 
 | Membre | Ce que c'est |
 |---|---|
+| `name` | le nom du champ |
 | `value` | la valeur courante |
 | `hasFlag(...)` / `hasAny(...)` / `flags` | les [flags](../model/flags.md) du champ |
+| `ui` | les mêmes flags sous forme d'`UiState` (`validity`, `activity`, `markers`) |
 | `error` / `errors` / `warnings` / `issues` | les messages du validator — `issues` porte `severity` et `code` |
 | `options` | la liste d'options |
 | `onChange(value)` / `onBlur()` / `onFocus()` | à brancher sur la saisie |
@@ -99,8 +103,10 @@ pas. Pour savoir si la valeur d'un champ est refusée, lisez ses `errors`. Voir
 - Un composant qui appelle `useForm()` appelle `form.mount()` à son montage, et
   cela monte **tous** les champs créés jusque-là sur le formulaire — y compris un
   champ dont le composant a été démonté entre-temps, qui revient alors dans
-  `values()` et dans le verdict. Montez le composant qui appelle `useForm()` en
-  même temps que les champs, pas plus tard.
+  `values()` et dans le verdict. Cela se produit à chaque montage de ce
+  composant — un rendu conditionnel, un changement de route, une nouvelle
+  `key`. Gardez le composant qui appelle `useForm()` monté tant que le
+  formulaire est utilisé.
 :::
 
 ## Aucun `useState` ne recopie l'état du moteur
@@ -114,7 +120,7 @@ récapitulatif.
 C'est mesuré, pas seulement affirmé : la démo compte les rendus par champ et
 montre l'écart avec la même vue écrite avec `useState`.
 
-## `FormProvider` et `useFormRegister`
+## `FormProvider` et `useFormRegister` {#formprovider-and-useformregister}
 
 Dans le cas courant, vous n'en avez pas besoin : `hooksFor(form)` lie déjà les
 hooks au formulaire. Ils servent aux outils transverses — un panneau de

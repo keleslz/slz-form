@@ -45,8 +45,10 @@ Deux cas ne suivent pas encore ce tableau :
 - **Une règle dont la promesse ne se termine jamais retrouve son verdict
   précédent** dès que `submit()` cesse d'attendre (`settleTimeout`). La
   soumission est refusée, mais le champ affiche son ancien verdict jusqu'à
-  l'exécution suivante. Donnez un délai maximal à vos appels réseau —
-  `AbortSignal.timeout(ms)` — pour qu'ils se terminent toujours.
+  l'exécution suivante. Pire : à une étape, `submit()` ne cesse pas d'attendre
+  et ne rend jamais la main — voir [Réglages](../guides/submit.md#settings).
+  Donnez un délai maximal à vos appels réseau — `AbortSignal.timeout(ms)` — pour
+  qu'ils se terminent toujours.
 :::
 
 ## Choisir de tolérer une panne
@@ -90,9 +92,12 @@ règle qui décide, en signalant — ou non.
 
 ## Côté behavior : `loading` suit le travail en cours
 
-La même idée vaut pour le flag `loading` d'un behavior. Un champ est `loading`
-si et seulement si une passe de l'un de ses behaviors est encore ouverte et l'a
-demandé — pas parce qu'une écriture a dit `loading` en dernier.
+La même idée vaut pour le flag `loading` d'un behavior. Une passe est
+**ouverte** depuis l'appel de son hook jusqu'à ce qu'elle dise son dernier mot
+(voir plus bas). Un behavior apporte `loading` à son champ si et seulement si
+l'une de ses passes ouvertes l'a demandé — pas parce qu'une écriture a dit
+`loading` en dernier. (Le champ est aussi `loading` pendant que son validator
+exécute une règle `async`.)
 
 Deux conséquences quand vous écrivez un behavior à la main :
 
@@ -102,9 +107,8 @@ Deux conséquences quand vous écrivez un behavior à la main :
 - **le loading d'une passe s'éteint quand la passe dit son dernier mot.** Le
   dernier mot d'un hook synchrone est sa valeur de retour — ou, s'il ne renvoie
   rien, son dernier `ctx.push` ; celui d'un hook asynchrone est ce que résout sa
-  promesse. Un `loading` poussé pendant un
-  `await` s'éteint donc quand la promesse se termine — sauf si le hook renvoie à
-  nouveau `loading` :
+  promesse. Un `loading` poussé pendant un `await` s'éteint donc quand la
+  promesse se termine — sauf si le hook renvoie à nouveau `loading` :
 
 ```ts
 onChange: async (ctx) => {

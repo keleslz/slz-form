@@ -1,7 +1,7 @@
 ---
 id: dependencies
 title: Declared dependencies
-sidebar_position: 3
+sidebar_position: 4
 description: Make a field react to another one — its value, its verdict or its loading state — by declaring it in watch, without ever writing to it.
 ---
 
@@ -95,8 +95,11 @@ where it happens (see [Engine errors](engine-errors.md)):
 - in a validator that is one of an array of two or more: as a
   `guard-violation`, and the field gets the blocking `"unverified"` issue
   (or another member's refusal);
-- in any other validator: it is a rule that throws. If the rule is not `async`,
-  the field currently keeps its previous verdict — see
+- in any other validator: it is a rule that throws. If the rule is `async`, the
+  field gets `"unverified"` and the record has `scope: "validator"`,
+  `kind: "hook-error"` and the rule's name. If it is not, the field currently
+  keeps its previous verdict, and the record has `scope: "behavior"`,
+  `kind: "hook-error"` and no `rule` — see
   [the known gap](../model/interrupted-pass.md).
 
 :::caution `ctx.form` is not checked
@@ -111,3 +114,7 @@ stale. Use `ctx.watched()` for anything you depend on.
 `watch` only sees the fields of the same form. A field of another form, or —
 inside a [row](../model/a-row-is-a-form.md) — a field of the parent form,
 cannot be watched.
+
+A synchronous chain of more than 50 links (`a` → `b` → `c` → …) is cut: the
+engine throws out of the `change()` call that started it, and that error is not
+recorded in `form.engineErrors`.

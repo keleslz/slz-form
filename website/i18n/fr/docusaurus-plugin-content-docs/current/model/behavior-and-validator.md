@@ -24,10 +24,19 @@ Tout ce que vous branchez sur un champ est l'une de deux choses :
 Règle simple : si la question est « **est-ce valide ?** », écrivez un validator.
 Si c'est « **que doit-il se passer ?** », écrivez un behavior.
 
-L'objectif derrière ce partage : **tout ce que vous faites avec `useState` et
-`useEffect` doit être faisable ici** sans modifier le moteur. Le fichier de test
-`packages/form/test/parity.test.ts` réécrit chacun de ces cas avec un behavior
-ou un validator, et n'attrape jamais le `FormController` depuis l'un d'eux.
+L'objectif derrière ce partage : ce que vous feriez avec `useState` et
+`useEffect` devrait être faisable avec un behavior ou un validator, sans
+modifier le moteur. `packages/form/test/parity.test.ts` vérifie 11 de ces cas —
+validation croisée, `required` conditionnel, erreurs serveur, skeleton de
+chargement… — et n'attrape jamais le `FormController` depuis l'un d'eux.
+
+C'est un objectif, pas une garantie : certains besoins restent hors d'atteinte
+par ce chemin. Retirer un champ du payload depuis une règle, une ligne qui lit
+son formulaire parent, un flag propre à tout le formulaire, réagir à n'importe
+quel changement dans un ensemble de champs inconnu à l'avance, et être prévenu
+des erreurs du moteur au moment où elles arrivent demandent aujourd'hui du code
+dans la vue. Voir [Un formulaire, un graphe](../guides/dependencies.md#one-form-one-graph)
+et [Sur un champ, pas sur le formulaire](../guides/your-own-flags.md#on-a-field-not-on-the-form).
 
 ## Pourquoi la validité n'est pas partagée
 
@@ -90,6 +99,7 @@ const lockedWhileEmpty: IBehavior<string> = {
 
 | Membre | Ce que c'est |
 |---|---|
+| `ctx.name` | le nom du champ auquel le behavior est attaché |
 | `ctx.state` | les flags que **ce behavior** pose en ce moment, sous forme de `BehaviorState`. Ses méthodes rendent un nouvel état : `loading()`, `idle()`, `lock()`, `unlock()`, `readOnly()`, `writable()`, `hide()`, `show()`, `mark(word)`, `unmark(word)`, `clear()` |
 | `ctx.push(state)` | publie un état **tout de suite**, avant que le hook ne rende la main — la façon d'afficher `loading` pendant un `await` |
 | `ctx.getValue()` / `ctx.setValue(value)` | lit ou écrit la valeur de ce champ. `setValue` ne marque pas le champ touché |

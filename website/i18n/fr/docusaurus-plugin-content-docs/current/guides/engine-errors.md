@@ -1,14 +1,14 @@
 ---
 id: engine-errors
 title: Les erreurs du moteur
-sidebar_position: 6
+sidebar_position: 7
 description: Où va une erreur levée par le code de vos behaviors ou validators — form.engineErrors, hook-error et guard-violation.
 ---
 
 # Les erreurs du moteur
 
 Quand **votre code** lève une erreur à l'intérieur du moteur — un hook de
-behavior échoue, une règle de validation casse, une règle du moteur est
+behavior échoue, une règle de validation casse, une garde du moteur est
 enfreinte —, personne n'est là pour l'attraper : la promesse qui la porte n'est
 attendue par personne. Le moteur l'attrape, garde le formulaire en état de
 marche et l'enregistre sur le formulaire. Il **n'écrit jamais dans la
@@ -62,7 +62,7 @@ Une valeur refusée par une règle n'est pas une erreur du moteur : lisez-la ave
 | Propriété | Ce qu'elle dit |
 |---|---|
 | `scope` | où c'est arrivé : `"behavior"` ou `"validator"` |
-| `kind` | `"hook-error"` (votre code a levé) ou `"guard-violation"` (une règle du moteur a été enfreinte) |
+| `kind` | `"hook-error"` (votre code a levé) ou `"guard-violation"` (une garde du moteur a été enfreinte) |
 | `field` | le champ concerné |
 | `rule` | le nom de classe de la règle qui a échoué (`constructor.name`) — enregistrements de validator uniquement. Un minifieur peut renommer les classes dans un build de production |
 | `error` | la valeur levée, intacte |

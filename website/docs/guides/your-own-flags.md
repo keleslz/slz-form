@@ -1,7 +1,7 @@
 ---
 id: your-own-flags
 title: Your own flags
-sidebar_position: 5
+sidebar_position: 6
 description: Publish your own state words from a behavior — a skeleton, a badge — and read them in the view, without touching the engine.
 ---
 
@@ -64,5 +64,5 @@ test one.
 ## On a field, not on the form
 
 Your words live on the field whose behavior sets them. The form's vocabulary is
-closed — `form.snapshot.hasFlag("saving-draft")` does not compile — so for a form-wide
-state of your own, set the word on one field and read that field.
+closed — `form.snapshot.hasFlag("saving-draft")` does not compile — so for a
+form-wide state of your own, set the word on one field and read that field.

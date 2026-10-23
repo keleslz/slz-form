@@ -69,6 +69,8 @@ parameters are only read when it is created, so a second `form.field(...)` on
 the same name would ignore them.
 
 ```ts
+import { IValidator, type ValidationReport } from "slz-form";
+
 class ReferenceValidator extends IValidator<string> {
     protected validate(value: string, report: ValidationReport): void {
         report.errorIf(!/^CUST-\d{2}-\d{4}$/.test(value), "Expected format: CUST-42-9013");
@@ -100,6 +102,8 @@ the field name and the value type are checked against the field map. Again,
 this replaces the earlier declarations of the field.
 
 ```ts
+import { behaviorsFor } from "slz-form";
+
 const { prefill } = behaviorsFor(form);
 
 const customerReferencePrefill = prefill({

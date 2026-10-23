@@ -59,8 +59,8 @@ voir [Soumettre un formulaire](../guides/submit.md).
 
 ## La map de champs, et ce qu'elle apporte
 
-Dans une application, déclarez le formulaire une fois, dans son propre module —
-comme on déclare une slice de store. Les behaviors prêts à l'emploi et les hooks
+Dans une application, déclarez le formulaire une fois, dans un module à part que
+le reste de l'application importe. Les behaviors prêts à l'emploi et les hooks
 React en dérivent, donc ils sont typés par la map :
 
 ```ts
@@ -97,7 +97,15 @@ numériques :
 ```
 
 Le prix : ajouter un champ coûte une ligne dans la map en plus de celle dans la
-vue. En échange, le code consommateur n'a besoin d'**aucun `as`**.
+vue. En échange, noms de champs, valeurs et callbacks des helpers sont typés
+**sans aucun `as`**. Trois endroits ne sont pas typés par la map, et vous les
+affinez sans cast : `form.values()` est un `Record<string, unknown>` — lisez une
+valeur typée avec `form.get(name)`
+([Soumettre un formulaire](../guides/submit.md#what-you-send-formvalues)) ; un
+formulaire pris dans le `FormRegister` n'est pas typé — importez le module
+propre au formulaire ([Les hooks](../react/hooks.md#formprovider-and-useformregister)) ;
+et une valeur lue avec `ctx.watched()` est `unknown` — affinez-la
+([Champs répétables](../guides/repeatable-fields.md#a-rule-about-the-whole-list)).
 
 ## Les behaviors prêts à l'emploi {#the-ready-made-behaviors}
 
@@ -156,7 +164,7 @@ façons, de la classe complète jusqu'au helper.
 - **`FormRegister`** — tous les formulaires de l'application, réunis en un seul
   endroit (facultatif).
   - **`FormController`** — un formulaire : crée ses champs, rassemble leurs
-    valeurs, garde la soumission.
+    valeurs, contrôle la soumission.
     - **graphe de dépendances** — qui observe qui ; un cycle est refusé à la
       création d'un champ.
     - **`FieldController`** — une saisie : sa valeur, ses interactions, ses

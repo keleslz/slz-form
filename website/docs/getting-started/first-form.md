@@ -58,8 +58,8 @@ To use this field from plain DOM code, see
 
 ## The field map, and what it buys you
 
-In an application, declare the form once, in its own module — the way you would
-declare a store slice. The ready-made behaviors and the React hooks are derived
+In an application, declare the form once, in a module of its own that the rest
+of the app imports. The ready-made behaviors and the React hooks are derived
 from it, so they are typed by the field map:
 
 ```ts
@@ -95,7 +95,14 @@ handles. In the demo, `NumberField` only accepts number fields:
 ```
 
 The price: adding a field costs one line in the map on top of the one in the
-view. In exchange, consumer code needs **no `as`**.
+view. In exchange, field names, values and helper callbacks are typed with **no
+`as`**. Three places are not typed by the map, and you narrow them without a
+cast: `form.values()` is a `Record<string, unknown>` — read a typed value with
+`form.get(name)` ([Submit a form](../guides/submit.md#what-you-send-formvalues));
+a form taken from the `FormRegister` is untyped — import the form's own module
+([Hooks](../react/hooks.md#formprovider-and-useformregister)); and a value read
+with `ctx.watched()` is `unknown` — narrow it
+([Repeatable fields](../guides/repeatable-fields.md#a-rule-about-the-whole-list)).
 
 ## The ready-made behaviors
 

@@ -1,7 +1,7 @@
 ---
 id: submit
 title: Soumettre un formulaire
-sidebar_position: 7
+sidebar_position: 3
 description: form.submit() est une porte, pas un envoi — ce qu'il fait étape par étape, ce qu'il rend, comment garder le bouton, et comment afficher les erreurs du serveur.
 ---
 
@@ -9,12 +9,16 @@ description: form.submit() est une porte, pas un envoi — ce qu'il fait étape 
 
 `form.submit()` n'envoie rien. C'est une **porte** : il prépare le formulaire,
 le juge, et répond `true` ou `false`. L'envoi, c'est votre code, une fois la
-porte ouverte.
+porte ouverte. Les exemples de cette page utilisent ce `signupForm`.
 
 ```ts
-if (await form.submit()) {
-    await fetch("/api/signup", { method: "POST", body: JSON.stringify(form.values()) });
-    form.reset();
+type SignupFields = { email: string; password: string };
+
+export const signupForm = new FormController<SignupFields>({ name: "signup" });
+
+if (await signupForm.submit()) {
+    await fetch("/api/signup", { method: "POST", body: JSON.stringify(signupForm.values()) });
+    signupForm.reset();
 }
 ```
 
@@ -23,8 +27,8 @@ if (await form.submit()) {
 Dans l'ordre :
 
 1. **Refuse une seconde soumission.** Si une soumission est déjà en cours,
-   l'appel rend `false` tout de suite — un double clic pendant la porte rend
-   `false` la seconde fois.
+   l'appel rend `false` tout de suite — un double clic pendant l'exécution de
+   `submit()` rend `false` la seconde fois.
 2. **Verrouille le formulaire.** Son statut passe à `submitting`, et chaque champ
    monté reçoit les flags `submitting` et `locked`.
 3. **Touche chaque champ monté.** Chacun devient `touched` : un champ obligatoire
@@ -34,14 +38,18 @@ Dans l'ordre :
 4. **Attend le travail en cours.** Un prefill ou un lookup encore en cours doit
    aboutir avant que le formulaire soit jugé, sinon vous enverriez une valeur
    pas encore posée. Un champ dont la valeur a changé pendant l'attente est
-   revalidé. L'attente est bornée par `settleTimeout` (10 secondes par défaut).
+   revalidé. `settleTimeout` (10 secondes par défaut) borne l'étape 3 et cette
+   attente, chacune de son côté — donc jusqu'à environ deux fois
+   `settleTimeout` au total —, mais pas la seconde validation ; voir
+   [Réglages](#settings).
 5. **Juge.** Il rend `true` seulement si tout a abouti à temps et que le
    formulaire est `valid`. Le statut passe à `submitted` en cas de succès, à
    `idle` en cas d'échec, et les champs perdent le flag `submitting` et le
    verrou qui l'accompagnait.
 
 Seuls les champs **montés** participent. Un champ masqué par un behavior
-(`invisible`) n'est pas jugé, mais il est monté : sa valeur **est** dans
+(`invisible`) est quand même validé et peut afficher ses erreurs, mais il ne
+compte pas dans le verdict ; et comme il est monté, sa valeur **est** dans
 `form.values()`.
 
 ## Quand il rend `false`
@@ -52,7 +60,7 @@ Seuls les champs **montés** participent. Un champ masqué par un behavior
 | le travail en cours n'a pas abouti dans le délai `settleTimeout` | les champs encore `loading` sont libérés ; `form.engineErrors` peut dire pourquoi. Une règle encore en cours retrouve son verdict précédent : le formulaire peut paraître `valid` jusqu'à l'exécution suivante — [un écart connu](../model/interrupted-pass.md) |
 | une soumission était déjà en cours | rien ne change |
 
-## Ce que vous envoyez : `form.values()`
+## Ce que vous envoyez : `form.values()` {#what-you-send-formvalues}
 
 `form.values()` rend les valeurs de tous les champs **montés** — masqués compris
 — et, pour chaque liste, le tableau des valeurs de ses lignes. Un champ non
@@ -99,9 +107,6 @@ deux fois, suivez-la vous-même.
 `useForm()` donne les mêmes `submit`, `reset` et flags :
 
 ```tsx
-type SignupFields = { email: string; password: string };
-
-export const signupForm = new FormController<SignupFields>({ name: "signup" });
 export const { useField, useForm } = hooksFor(signupForm);
 
 function SubmitButton() {
@@ -132,12 +137,15 @@ un lookup a pu écrire une valeur pendant la soumission.
 La porte s'est ouverte, vous avez envoyé, et le serveur répond que l'email est
 déjà pris. Placez un
 [`ExternalValidator`](validate.md#several-validators-on-one-field) à côté des
-règles du champ et donnez-lui les constats du serveur :
+règles du champ ([`EmailValidator`](validate.md#a-rule) est la règle de la page
+Valider) et donnez-lui les constats du serveur. Montez le champ : un champ non
+monté n'est ni jugé ni envoyé, et rien ne vous prévient.
 
 ```ts
 const emailTaken = new ExternalValidator<string>();
 
-signupForm.field("email", { required: true, validator: [new EmailValidator(), emailTaken] });
+const email = signupForm.field("email", { required: true, validator: [new EmailValidator(), emailTaken] });
+email.mount();
 
 async function save(): Promise<void> {
     if (!(await signupForm.submit())) {
@@ -174,11 +182,11 @@ pas avec `hasFlag("valid", "idle")`.
 ## Repartir de zéro : `form.reset()`
 
 `form.reset()` remet chaque champ à son `initialValue` (ou à vide), non touché
-et `pristine`, rejoue les hooks `onMount` de chaque champ — un prefill refait
-son appel —, retire toutes les lignes de toutes les listes, vide
+et `pristine`, rejoue les hooks `onMount` de chaque champ (un prefill refait
+donc son appel), retire toutes les lignes de toutes les listes, vide
 `form.engineErrors` et ramène le statut à `idle`.
 
-## Réglages
+## Réglages {#settings}
 
 ```ts
 new FormController<SignupFields>({ name: "signup", settleTimeout: 5_000 });

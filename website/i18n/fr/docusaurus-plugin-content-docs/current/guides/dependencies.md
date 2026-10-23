@@ -1,7 +1,7 @@
 ---
 id: dependencies
 title: Dépendances déclarées
-sidebar_position: 3
+sidebar_position: 4
 description: Faire réagir un champ à un autre — sa valeur, son verdict ou son chargement — en le déclarant dans watch, sans jamais lui écrire.
 ---
 
@@ -79,7 +79,7 @@ quand la **valeur** de l'un de ces champs change.
 Une liste déclarée avec `FieldArray` s'observe comme un champ : sa valeur est le
 tableau des valeurs de ses lignes.
 
-## Lire un champ observé
+## Lire un champ observé {#reading-a-watched-field}
 
 Dans un hook ou une règle, lisez un champ déclaré avec `ctx.watched(name)`. Il
 rend la même vue en lecture seule, ou `null` si ce champ n'existe pas encore.
@@ -96,8 +96,11 @@ aujourd'hui dépend de l'endroit (voir [Les erreurs du moteur](engine-errors.md)
 - dans un validator qui fait partie d'un tableau d'au moins deux : comme
   `guard-violation`, et le champ reçoit le constat bloquant `"unverified"`
   (ou le refus d'un autre membre) ;
-- dans tout autre validator : c'est une règle qui lève. Si la règle n'est pas
-  `async`, le champ garde aujourd'hui son verdict précédent — voir
+- dans tout autre validator : c'est une règle qui lève. Si la règle est `async`,
+  le champ reçoit `"unverified"` et l'enregistrement porte `scope: "validator"`,
+  `kind: "hook-error"` et le nom de la règle. Sinon, le champ garde aujourd'hui
+  son verdict précédent, et l'enregistrement porte `scope: "behavior"`,
+  `kind: "hook-error"` et aucun `rule` — voir
   [l'écart connu](../model/interrupted-pass.md).
 
 :::caution `ctx.form` n'est pas vérifié
@@ -107,8 +110,12 @@ vous avez lu change. Lire une dépendance de cette façon donne un résultat qui
 périme sans bruit. Utilisez `ctx.watched()` pour tout ce dont vous dépendez.
 :::
 
-## Un formulaire, un graphe
+## Un formulaire, un graphe {#one-form-one-graph}
 
 `watch` ne voit que les champs du même formulaire. Un champ d'un autre
 formulaire, ou — dans une [ligne](../model/a-row-is-a-form.md) — un champ du
 formulaire parent, ne peut pas être observé.
+
+Une chaîne synchrone de plus de 50 maillons (`a` → `b` → `c` → …) est coupée :
+le moteur lève une erreur depuis l'appel `change()` qui l'a déclenchée, et cette
+erreur n'est pas enregistrée dans `form.engineErrors`.

@@ -35,7 +35,7 @@ The same two functions exist on a field (`FieldController`, its snapshot, and
 | `pristine` · `valid` · `error` | **one at a time** | the validator, alone | the validity to **display**: `pristine` until the field is touched |
 | `idle` · `loading` | **one at a time** | behaviors and the validator | `loading` while some asynchronous work runs on the field |
 | `locked` | cumulative | behaviors, the engine, the view | greyed out, not editable |
-| `readonly` | cumulative | behaviors, the engine, the view | readable and selectable, not editable |
+| `readonly` | cumulative | behaviors, the view | readable and selectable, not editable |
 | `invisible` | cumulative | behaviors | do not render it — see the note below |
 | `required` | cumulative | the engine (from `required: true`) | the field is mandatory |
 | `touched` | cumulative | the engine | the user changed or left the field, or `submit()` touched it |
@@ -67,7 +67,7 @@ A form uses the same words, with one difference explained below.
 | `touched` | cumulative | at least one field has been touched |
 
 ```ts
-form.snapshot.hasFlag("valid", "idle")   // nothing blocks, and no submission is running
+form.snapshot.hasFlag("valid", "idle")   // nothing blocks, and the form is neither submitting nor already submitted
 ```
 
 :::caution `submitted` stays until `reset()`
@@ -80,8 +80,8 @@ guard that fits your flow in [Submit a form](../guides/submit.md#which-guard-for
 
 The form's vocabulary is **closed**: your own flags live on fields, and
 `form.snapshot.hasFlag("skeleton")` (or `useForm().hasFlag("skeleton")`) does
-not compile. To show a form-wide state of your
-own, set the flag on a field and read that field.
+not compile. To show a form-wide state of your own, set the flag on a field
+and read that field.
 
 ## Two kinds of groups
 

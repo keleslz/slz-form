@@ -1,7 +1,7 @@
 ---
 id: repeatable-fields
 title: Champs répétables
-sidebar_position: 4
+sidebar_position: 5
 description: Ajouter, déplacer, retirer et valider les lignes d'une liste — chaque ligne étant un petit formulaire à part entière.
 ---
 

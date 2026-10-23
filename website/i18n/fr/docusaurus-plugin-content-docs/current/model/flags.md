@@ -35,7 +35,7 @@ et `useField()`) et sur un formulaire (son snapshot, et `useForm()`).
 | `pristine` · `valid` · `error` | **un seul à la fois** | le validator, seul | la validité **affichée** : `pristine` tant que le champ n'a pas été touché |
 | `idle` · `loading` | **un seul à la fois** | les behaviors et le validator | `loading` tant qu'un travail asynchrone tourne sur le champ |
 | `locked` | cumulé | les behaviors, le moteur, la vue | grisé, non modifiable |
-| `readonly` | cumulé | les behaviors, le moteur, la vue | lisible et sélectionnable, non modifiable |
+| `readonly` | cumulé | les behaviors, la vue | lisible et sélectionnable, non modifiable |
 | `invisible` | cumulé | les behaviors | à ne pas afficher — voir la note ci-dessous |
 | `required` | cumulé | le moteur (depuis `required: true`) | le champ est obligatoire |
 | `touched` | cumulé | le moteur | l'utilisateur a modifié ou quitté le champ, ou `submit()` l'a touché |
@@ -66,7 +66,7 @@ Un formulaire emploie les mêmes mots, à une différence près, expliquée plus
 | `touched` | cumulé | au moins un champ a été touché |
 
 ```ts
-form.snapshot.hasFlag("valid", "idle")   // nothing blocks, and no submission is running
+form.snapshot.hasFlag("valid", "idle")   // nothing blocks, and the form is neither submitting nor already submitted
 ```
 
 :::caution `submitted` reste jusqu'à `reset()`
@@ -79,9 +79,9 @@ garde qui correspond à votre parcours dans
 :::
 
 Le vocabulaire du formulaire est **fermé** : vos propres flags vivent sur les
-champs, et `form.snapshot.hasFlag("skeleton")` (ou `useForm().hasFlag("skeleton")`)
-ne compile pas. Pour afficher un état
-propre à tout le formulaire, posez le flag sur un champ et lisez ce champ.
+champs, et `form.snapshot.hasFlag("skeleton")` (ou
+`useForm().hasFlag("skeleton")`) ne compile pas. Pour afficher un état propre à
+tout le formulaire, posez le flag sur un champ et lisez ce champ.
 
 ## Deux sortes de groupes
 

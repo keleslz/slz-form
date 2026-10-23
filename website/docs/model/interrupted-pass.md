@@ -40,8 +40,10 @@ Two cases do not follow the table yet:
   `async`, or catch the error and report it yourself (example below).
 - **A rule whose promise never settles gets its previous verdict back** once
   `submit()` gives up waiting (`settleTimeout`). The submission is refused, but
-  the field shows its old verdict until the next run. Give network calls a
-  timeout — `AbortSignal.timeout(ms)` — so they always settle.
+  the field shows its old verdict until the next run. Worse, at one step
+  `submit()` does not give up at all and never returns — see
+  [Settings](../guides/submit.md#settings). Give network calls a timeout —
+  `AbortSignal.timeout(ms)` — so they always settle.
 :::
 
 ## Choosing to tolerate a failure
@@ -85,9 +87,11 @@ by reporting — or not.
 
 ## On the behavior side: `loading` follows the work in flight
 
-The same idea applies to a behavior's `loading` flag. A field is `loading` if
-and only if a pass of one of its behaviors is still open and asked for it — not
-because some write said `loading` last.
+The same idea applies to a behavior's `loading` flag. A pass is **open** from
+the moment its hook is called until it says its last word (below). A behavior
+contributes `loading` to its field if and only if one of its open passes asked
+for it — not because some write said `loading` last. (The field is also
+`loading` while its validator runs an `async` rule.)
 
 Two consequences when you write a behavior by hand:
 
@@ -96,8 +100,9 @@ Two consequences when you write a behavior by hand:
   says "this pass is done";
 - **a pass's loading ends when the pass says its last word.** A synchronous
   hook's last word is its return value — or, if it returns nothing, its last
-  `ctx.push`; an asynchronous hook's last word is what its promise resolves to. So `loading` pushed during an `await` ends when
-  the promise settles — unless the hook returns `loading` again:
+  `ctx.push`; an asynchronous hook's last word is what its promise resolves
+  to. So `loading` pushed during an `await` ends when the promise settles —
+  unless the hook returns `loading` again:
 
 ```ts
 onChange: async (ctx) => {

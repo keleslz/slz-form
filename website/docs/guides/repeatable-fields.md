@@ -1,7 +1,7 @@
 ---
 id: repeatable-fields
 title: Repeatable fields
-sidebar_position: 4
+sidebar_position: 5
 description: Add, move, remove and validate rows of a list — each row being a small form of its own.
 ---
 

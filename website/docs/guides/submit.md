@@ -1,7 +1,7 @@
 ---
 id: submit
 title: Submit a form
-sidebar_position: 7
+sidebar_position: 3
 description: form.submit() is a gate, not a sender — what it does step by step, what it returns, how to guard the button, and how to show server errors.
 ---
 
@@ -9,12 +9,16 @@ description: form.submit() is a gate, not a sender — what it does step by step
 
 `form.submit()` does not send anything. It is a **gate**: it gets the form
 ready, judges it, and answers `true` or `false`. Sending is your code, once the
-gate opens.
+gate opens. The examples on this page use this `signupForm`.
 
 ```ts
-if (await form.submit()) {
-    await fetch("/api/signup", { method: "POST", body: JSON.stringify(form.values()) });
-    form.reset();
+type SignupFields = { email: string; password: string };
+
+export const signupForm = new FormController<SignupFields>({ name: "signup" });
+
+if (await signupForm.submit()) {
+    await fetch("/api/signup", { method: "POST", body: JSON.stringify(signupForm.values()) });
+    signupForm.reset();
 }
 ```
 
@@ -33,14 +37,17 @@ In order:
    every list go through the same step.
 4. **Waits for work in flight.** A prefill or a lookup still running must land
    before the form is judged, otherwise you would send a value that is not
-   there yet. A field whose value changed while waiting is validated again. The
-   wait is bounded by `settleTimeout` (10 seconds by default).
+   there yet. A field whose value changed while waiting is validated again.
+   `settleTimeout` (10 seconds by default) bounds step 3 and this wait, each on
+   its own — so up to about twice `settleTimeout` in total — but not the
+   second validation; see [Settings](#settings).
 5. **Judges.** It returns `true` only if everything settled in time and the form
    is `valid`. The status becomes `submitted` on success, `idle` on failure, and
    the fields lose the `submitting` flag and the lock that came with it.
 
 Only **mounted** fields take part. A field hidden by a behavior (`invisible`)
-is not judged, but it is mounted, so its value **is** in `form.values()`.
+is still validated and can show its errors, but it does not count in the
+verdict; and since it is mounted, its value **is** in `form.values()`.
 
 ## When it returns `false`
 
@@ -94,9 +101,6 @@ that request is slow and must not be sent twice, keep track of it yourself.
 `useForm()` gives the same `submit`, `reset` and flags:
 
 ```tsx
-type SignupFields = { email: string; password: string };
-
-export const signupForm = new FormController<SignupFields>({ name: "signup" });
 export const { useField, useForm } = hooksFor(signupForm);
 
 function SubmitButton() {
@@ -126,12 +130,15 @@ value during the submission.
 
 The gate opened, you sent, and the server answers that the email is taken. Put
 an [`ExternalValidator`](validate.md#several-validators-on-one-field) next to
-the field's rules and give it the server's issues:
+the field's rules ([`EmailValidator`](validate.md#a-rule) is the rule from
+Validate) and give it the server's issues. Mount the field: an unmounted field
+is neither judged nor sent, and nothing warns you.
 
 ```ts
 const emailTaken = new ExternalValidator<string>();
 
-signupForm.field("email", { required: true, validator: [new EmailValidator(), emailTaken] });
+const email = signupForm.field("email", { required: true, validator: [new EmailValidator(), emailTaken] });
+email.mount();
 
 async function save(): Promise<void> {
     if (!(await signupForm.submit())) {
@@ -168,8 +175,8 @@ point, so guard the button with `hasFlag("submitting")`, not with
 ## Starting over: `form.reset()`
 
 `form.reset()` puts every field back to its `initialValue` (or empty), untouched
-and `pristine`, runs each field's `onMount` hooks again — a prefill fetches
-again —, removes every row of every list, empties `form.engineErrors`, and sets
+and `pristine`, runs each field's `onMount` hooks again (so a prefill fetches
+again), removes every row of every list, empties `form.engineErrors`, and sets
 the status back to `idle`.
 
 ## Settings

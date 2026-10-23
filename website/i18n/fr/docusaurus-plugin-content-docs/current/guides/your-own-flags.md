@@ -1,7 +1,7 @@
 ---
 id: your-own-flags
 title: Vos propres flags
-sidebar_position: 5
+sidebar_position: 6
 description: Publier vos propres mots d'état depuis un behavior — un skeleton, un badge — et les lire dans la vue, sans toucher au moteur.
 ---
 
@@ -62,8 +62,9 @@ Les mots du vocabulaire du moteur qu'un behavior **peut** poser sont `locked`,
 complète des mots réservés est exportée : `RESERVED_FLAGS`, et
 `isReservedFlag(word)` pour en tester un.
 
-## Sur un champ, pas sur le formulaire
+## Sur un champ, pas sur le formulaire {#on-a-field-not-on-the-form}
 
 Vos mots vivent sur le champ dont un behavior les pose. Le vocabulaire du
-formulaire est fermé — `form.snapshot.hasFlag("saving-draft")` ne compile pas — : pour un
-état propre à tout le formulaire, posez le mot sur un champ et lisez ce champ.
+formulaire est fermé : `form.snapshot.hasFlag("saving-draft")` ne compile pas.
+Pour un état propre à tout le formulaire, posez le mot sur un champ et lisez ce
+champ.

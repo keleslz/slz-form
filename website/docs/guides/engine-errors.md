@@ -1,14 +1,14 @@
 ---
 id: engine-errors
 title: Engine errors
-sidebar_position: 6
+sidebar_position: 7
 description: Where an error thrown by your behavior or validator code goes — form.engineErrors, hook-error and guard-violation.
 ---
 
 # Engine errors
 
 When **your code** throws inside the engine — a behavior hook rejects, a
-validation rule crashes, an engine rule is broken — nobody is there to catch
+validation rule crashes, an engine guard is violated — nobody is there to catch
 it: the promise that carries it is awaited by no one. The engine catches it,
 keeps the form working, and records it on the form. It **never logs to the
 console**.
@@ -60,7 +60,7 @@ A value refused by a rule is not an engine error: read it with
 | Property | What it says |
 |---|---|
 | `scope` | where it happened: `"behavior"` or `"validator"` |
-| `kind` | `"hook-error"` (your code threw) or `"guard-violation"` (an engine rule was broken) |
+| `kind` | `"hook-error"` (your code threw) or `"guard-violation"` (an engine guard was violated) |
 | `field` | the field it happened on |
 | `rule` | the class name of the rule that failed (`constructor.name`) — validator records only. A minifier may rename classes in a production build |
 | `error` | the thrown value, untouched |

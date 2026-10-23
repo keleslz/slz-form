@@ -96,10 +96,11 @@ son propre type.
 
 **Des dépendances déclarées.** Un behavior ou un validator liste dans `watch`
 les champs qu'il lit, et il est relancé quand ils changent. Lire un champ par
-`ctx.watched()` sans l'avoir déclaré **lève une erreur**, et un cycle de
-dépendances est refusé à la création du champ, au lieu d'être découvert en
-boucle infinie. Un champ peut lire les autres ; il ne peut jamais en écrire un.
-Voir [Dépendances déclarées](../guides/dependencies.md).
+`ctx.watched()` sans l'avoir déclaré **lève une erreur** — le moteur l'attrape
+et l'enregistre dans `form.engineErrors` —, et un cycle de dépendances est
+refusé à la création du champ, au lieu d'être découvert en boucle infinie. Un
+champ peut lire les autres ; il ne peut jamais en écrire un. Voir
+[Dépendances déclarées](../guides/dependencies.md).
 
 **Un champ qui change ne re-rend pas les autres.** Chaque champ a son propre
 abonnement et un snapshot qui garde la même référence tant que rien ne change.
@@ -107,8 +108,8 @@ S'abonner au formulaire entier est un choix explicite, pour ce qui en a besoin �
 un bouton de soumission, un récapitulatif.
 
 **Typé depuis une seule déclaration.** Le formulaire déclare ce que vaut chaque
-champ ; les behaviors prêts à l'emploi et les hooks React en dérivent. Un nom mal orthographié ou une valeur du
-mauvais type ne compile pas. Voir [Premier formulaire](first-form.md).
+champ ; les behaviors prêts à l'emploi et les hooks React en dérivent. Un nom
+mal orthographié ou une valeur du mauvais type ne compile pas. Voir [Premier formulaire](first-form.md).
 
 **Écrit une fois, pour tous les frameworks.** Le cœur ne connaît ni React, ni
 Angular, ni Vue. Voir [Sans framework](../guides/without-a-framework.md).

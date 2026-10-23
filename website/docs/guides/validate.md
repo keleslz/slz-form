@@ -77,7 +77,8 @@ On the field, read them as data:
 | `snapshot.issues` | every issue, with `message`, `severity` and `code` |
 
 `form.snapshot.errors` gives the blocking messages of every mounted, visible
-field, keyed by field name.
+field, keyed by field name — and, for each list with a blocking issue, the
+messages of its rows under the list's name.
 
 The engine writes two messages itself: `"This field is required"`
 (`code: "required"`, replaceable with `requiredMessage`) and
@@ -91,6 +92,8 @@ Declare the fields the rule reads in `watch`; the rule is re-run when **their
 value** changes.
 
 ```ts
+import { IValidator, type ValidationContext, type ValidationReport } from "slz-form";
+
 class SameAsPassword extends IValidator<string> {
     readonly watch = ["password"];
     protected validate(value: string, report: ValidationReport, ctx: ValidationContext) {
@@ -99,8 +102,11 @@ class SameAsPassword extends IValidator<string> {
 }
 ```
 
-`ctx.watched(name)` **throws** for a name not listed in `watch`, so a
-dependency cannot be forgotten silently.
+`ctx.watched(name)` **throws** for a name not listed in `watch`. The engine
+catches that error, so nothing crashes: depending on the rule, the field gets
+an `"unverified"` issue or keeps a stale verdict, and the error is recorded in
+`form.engineErrors` — easy to miss if you never read it. See
+[Reading a watched field](dependencies.md#reading-a-watched-field).
 
 :::caution Use `ctx.watched()`, not `ctx.form.field()`
 `ctx.form.field(name)` and `ctx.form.values()` also read other fields, but
@@ -159,8 +165,8 @@ not delayed.
 ## When a rule crashes
 
 If an `async` rule rejects, or a rule inside an array of two or more
-validators throws, the field gets a blocking `"unverified"` issue — not
-`valid`, not the previous verdict. A plain synchronous rule that throws
-currently **keeps its previous verdict**, and the value can be submitted: that
-is a known gap, with its workaround, in
+validators throws, the field gets a blocking `"unverified"` issue (or another
+rule's refusal) — not `valid`, not the previous verdict. A plain synchronous
+rule that throws currently **keeps its previous verdict**, and the value can be
+submitted: that is a known gap, with its workaround, in
 [An interrupted pass is not a verdict](../model/interrupted-pass.md).

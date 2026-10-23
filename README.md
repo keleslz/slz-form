@@ -167,7 +167,7 @@ The vocabulary, and who is allowed to emit each flag:
 | `pristine` · `valid` · `error` | exclusive | the **Validator**, alone | displayed validity — `pristine` until touched |
 | `idle` · `loading` | exclusive | Behaviors + Validator | work is in flight |
 | `locked` | cumulative | Behaviors + Controller + view | greyed out, not editable |
-| `readonly` | cumulative | Behaviors + Controller + view | readable, selectable, not modifiable |
+| `readonly` | cumulative | Behaviors + view | readable, selectable, not modifiable |
 | `invisible` | cumulative | Behaviors | not rendered — out of validity, still in the payload while mounted |
 | `required` · `touched` · `focused` · `mounted` · `submitting` | cumulative | the Controller | interaction and lifecycle |
 | *your application's* | cumulative | Behaviors — `ctx.state.mark("skeleton")` | your own words |
@@ -280,7 +280,10 @@ validator opts in.
 
 A validator or behavior that reads other fields declares them in `watch` — and
 only then is it re-run when they change. Reading an undeclared field with
-`ctx.watched()` throws, so a dependency cannot be forgotten silently:
+`ctx.watched()` throws. The engine catches that error and records it in
+`form.engineErrors` (it can also leave the field with a stale verdict — see
+[Declared dependencies](https://keleslz.github.io/slz-form/docs/guides/dependencies#reading-a-watched-field)),
+so read that buffer while you develop:
 
 ```ts
 import { IValidator, type ValidationReport, type ValidationContext } from "slz-form";
@@ -295,7 +298,8 @@ class ConfirmPasswordValidator extends IValidator<string> {
 
 Dependencies are wired into a graph that rejects cycles when a field is
 created, so a change propagates through the whole chain — `a → b → c` — and
-never loops.
+never loops. A synchronous chain longer than 50 links is cut, and throws out of
+the `change()` call that started it.
 
 > `ctx.form.field(name)` and `ctx.form.values()` can also read other fields,
 > but they are **not** checked against `watch` and nothing re-runs your code
@@ -328,8 +332,11 @@ lines.values();
 `form.submit()` is a **gate, not a sender**. It returns `Promise<boolean>` and,
 in order: touches every mounted field (so pristine required-empty fields now
 show their error), fires `onSubmit` behaviors and flushes debounced windows,
-waits for async work to converge (bounded by `settleTimeout`), revalidates, and
-returns `true` only if the form is settled and valid.
+waits for async work to converge (bounded by `settleTimeout`, with one known
+gap: a rule whose promise never settles during the final re-validation blocks
+`submit()` for good — see
+[Settings](https://keleslz.github.io/slz-form/docs/guides/submit#settings)),
+revalidates, and returns `true` only if the form is settled and valid.
 
 ```ts
 if (await form.submit()) {
@@ -359,8 +366,8 @@ engine guard is violated, a rule crashes — the engine catches it, recovers, an
 records it. It **never logs to the console**: that is the consumer's call, not
 the engine's.
 
-You read those records off the form, when you have a reason to — after a rejected
-submit, in a debug panel, in a test:
+You read those records off the form, when you have a reason to — after a
+rejected submit, in a debug panel, in a test:
 
 ```ts
 if (!(await form.submit())) {
@@ -370,8 +377,9 @@ if (!(await form.submit())) {
 }
 ```
 
-Each `EngineError` carries `scope`, `kind` (`"hook-error"` or `"guard-violation"`),
-`field`, `rule` (validator errors only), `error`, and `at`.
+Each `EngineError` carries `scope`, `kind` (`"hook-error"` or
+`"guard-violation"`), `field`, `rule` (validator errors only), `error`, and
+`at`.
 
 This is a **pull** surface — an accessor, not a subscription. An engine error is
 a crash the engine already recovered from: a diagnostic record, not a live event
@@ -380,8 +388,8 @@ cleared by `reset()`.
 
 > This is **not** how you read validation errors. A field that fails its rules
 > is not an engine error — read it with `field.snapshot.errors`,
-> `field.snapshot.issues`, or `field.hasFlag("error")`. `engineErrors` is only for when the code itself
-> throws.
+> `field.snapshot.issues`, or `field.hasFlag("error")`. `engineErrors` is only
+> for when the code itself throws.
 
 ## React
 
@@ -432,17 +440,24 @@ a sub-form.
 
 The core is framework-free; the React adapter is only a wrapper over two methods
 the controllers already expose — `listen` (subscribe) and `getSnapshot` (read).
-In plain JavaScript you make the same three gestures by hand:
+In plain JavaScript you make the same three gestures by hand: **read**
+`field.snapshot`, **subscribe** with `field.listen(callback)` — it returns the
+function that unsubscribes —, and **write** with `field.change(value)`. Mount
+the field so it takes part in the form:
 
 ```ts
 const render = () => {
-    const s = field.snapshot;                 // read
+    const s = field.snapshot;
     input.disabled = s.hasFlag("locked");
     errorEl.textContent = s.hasFlag("error") ? s.errors[0] ?? "" : "";
 };
-const stop = field.listen(render);            // subscribe → returns an unsubscribe
-input.addEventListener("input", () => field.change(input.value));   // write
+const stopListening = field.listen(render);
+input.addEventListener("input", () => field.change(input.value));
+field.mount();
+render();
 ```
+
+When the input goes away, call `stopListening()` and `field.unmount()`.
 
 A complete example, with the field lifecycle, is in
 [Without a framework](https://keleslz.github.io/slz-form/docs/guides/without-a-framework).

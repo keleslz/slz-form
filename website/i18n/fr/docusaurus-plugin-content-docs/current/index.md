@@ -54,7 +54,7 @@ Les mots ci-dessous reviennent sur toutes les pages.
 
 | Mot | Ce qu'il désigne |
 |---|---|
-| **formulaire** | un `FormController` : il crée les champs, rassemble leurs valeurs et garde la soumission. |
+| **formulaire** | un `FormController` : il crée les champs, rassemble leurs valeurs et contrôle la soumission. |
 | **champ** | un `FieldController` : une saisie — sa valeur, ses interactions, ses flags, sa validité. |
 | **map de champs** | le type TypeScript donné au formulaire, `{ email: string; age: number }`. Les noms de champs et les types de valeurs sont vérifiés contre lui. |
 | **flag** | un mot qui décrit un état : `loading`, `locked`, `error`… On le teste avec `hasFlag` / `hasAny`. |

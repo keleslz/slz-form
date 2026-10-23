@@ -24,10 +24,18 @@ Everything you attach to a field is one of two things:
 Rule of thumb: if the question is "**is it valid?**", write a validator. If it
 is "**what should happen?**", write a behavior.
 
-The goal behind this split: **anything you can do with `useState` and
-`useEffect` must be doable here** without modifying the engine. The test file
-`packages/form/test/parity.test.ts` rewrites each such case with a behavior or a
-validator, and never reaches for the `FormController` from inside one.
+The goal behind this split: anything you would do with `useState` and
+`useEffect` should be doable with a behavior or a validator, without modifying
+the engine. `packages/form/test/parity.test.ts` checks 11 such cases — cross-field
+validation, conditional `required`, server errors, a loading skeleton… — and
+never reaches for the `FormController` from inside one.
+
+It is a goal, not a guarantee: some needs are still out of reach that way.
+Leaving a field out of the payload from a rule, a row reading its parent form,
+a form-wide flag of your own, reacting to any change in a field set that is not
+known in advance, and being notified of engine errors as they happen all need
+your view code today. See [One form, one graph](../guides/dependencies.md#one-form-one-graph)
+and [On a field, not on the form](../guides/your-own-flags.md#on-a-field-not-on-the-form).
 
 ## Why validity is not shared
 
@@ -87,6 +95,7 @@ const lockedWhileEmpty: IBehavior<string> = {
 
 | Member | What it is |
 |---|---|
+| `ctx.name` | the name of the field the behavior is attached to |
 | `ctx.state` | the flags **this behavior** currently sets, as a `BehaviorState`. Its methods return a new state: `loading()`, `idle()`, `lock()`, `unlock()`, `readOnly()`, `writable()`, `hide()`, `show()`, `mark(word)`, `unmark(word)`, `clear()` |
 | `ctx.push(state)` | publishes a state **now**, before the hook returns — the way to show `loading` during an `await` |
 | `ctx.getValue()` / `ctx.setValue(value)` | read or write this field's value. `setValue` does not mark the field touched |

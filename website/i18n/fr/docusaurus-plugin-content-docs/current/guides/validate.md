@@ -11,7 +11,7 @@ Un validator **juge** une valeur : c'est la seule source de validité de son
 champ. Vous étendez `IValidator<T>`, où `T` est le type de la valeur, et vous
 signalez les constats par `report`.
 
-## Une règle
+## Une règle {#a-rule}
 
 ```ts
 import { IValidator, type ValidationReport } from "slz-form";
@@ -79,7 +79,8 @@ Sur le champ, lisez-les comme des données :
 | `snapshot.issues` | tous les constats, avec `message`, `severity` et `code` |
 
 `form.snapshot.errors` donne les messages bloquants de tous les champs montés et
-visibles, indexés par nom de champ.
+visibles, indexés par nom de champ — et, pour chaque liste qui a un constat
+bloquant, les messages de ses lignes sous le nom de la liste.
 
 Le moteur écrit lui-même deux messages : `"This field is required"`
 (`code: "required"`, remplaçable par `requiredMessage`) et
@@ -93,6 +94,8 @@ Déclarez dans `watch` les champs que lit la règle ; elle est relancée quand
 **leur valeur** change.
 
 ```ts
+import { IValidator, type ValidationContext, type ValidationReport } from "slz-form";
+
 class SameAsPassword extends IValidator<string> {
     readonly watch = ["password"];
     protected validate(value: string, report: ValidationReport, ctx: ValidationContext) {
@@ -101,8 +104,11 @@ class SameAsPassword extends IValidator<string> {
 }
 ```
 
-`ctx.watched(name)` **lève une erreur** pour un nom absent de `watch` : une
-dépendance ne peut pas être oubliée en silence.
+`ctx.watched(name)` **lève une erreur** pour un nom absent de `watch`. Le moteur
+attrape cette erreur, donc rien ne plante : selon la règle, le champ reçoit un
+constat `"unverified"` ou garde un verdict périmé, et l'erreur est enregistrée
+dans `form.engineErrors` — facile à manquer si vous ne le lisez jamais. Voir
+[Lire un champ observé](dependencies.md#reading-a-watched-field).
 
 :::caution Utilisez `ctx.watched()`, pas `ctx.form.field()`
 `ctx.form.field(name)` et `ctx.form.values()` lisent aussi d'autres champs, mais
@@ -162,8 +168,9 @@ valeur ou des options. L'un ne remplace pas l'autre.
 ## Quand une règle casse
 
 Si une règle `async` échoue, ou si une règle d'un tableau d'au moins deux
-validators lève une erreur, le champ reçoit un constat bloquant `"unverified"` —
-ni `valid`, ni le verdict précédent. Une règle synchrone seule qui lève une
-erreur **garde aujourd'hui son verdict précédent**, et la valeur peut être
-soumise : c'est un écart connu, avec son contournement, décrit dans
+validators lève une erreur, le champ reçoit un constat bloquant `"unverified"`
+(ou le refus d'une autre règle) — ni `valid`, ni le verdict précédent. Une
+règle synchrone seule qui lève une erreur **garde aujourd'hui son verdict
+précédent**, et la valeur peut être soumise : c'est un écart connu, avec son
+contournement, décrit dans
 [Une passe interrompue n'est pas un verdict](../model/interrupted-pass.md).
