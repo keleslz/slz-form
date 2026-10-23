@@ -59,7 +59,9 @@ The cost is not the length. It is what this code sets up:
 ## The same field, with the engine
 
 The reaction is declared once, in the module that declares the form.
-`loadOptions` is one of the ready-made [behaviors](../index.md#vocabulary):
+`loadOptions` is one of the ready-made [behaviors](../index.md#vocabulary); this
+typed form of it comes from `const { loadOptions } = behaviorsFor(form)` — see
+[First form](first-form.md#the-ready-made-behaviors):
 
 ```ts
 const modelOptions = loadOptions({
@@ -100,7 +102,7 @@ changes. Subscribing to the whole form is an explicit choice, for what needs it
 — a submit button, a summary.
 
 **Typed from one declaration.** The form declares what each field holds;
-behaviors and hooks are derived from it. A misspelled name or a value of the
+the ready-made behaviors and the React hooks are derived from it. A misspelled name or a value of the
 wrong type does not compile. See [First form](first-form.md).
 
 **Written once, for every framework.** The core knows neither React, nor

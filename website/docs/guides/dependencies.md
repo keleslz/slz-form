@@ -25,7 +25,7 @@ an infinite loop.
 
 ## The receiving side does the work
 
-A field can read the others; it can **never** write to one. To fill `region`
+A field can read the others; it can **never** write to one. To clear `region`
 when `country` changes, the behavior goes on `region` and watches `country`:
 
 ```ts
@@ -88,9 +88,16 @@ ctx.watched("postcode")   // ✓ declared
 ctx.watched("city")       // ✗ throws: reads "city" without declaring it in `watch`
 ```
 
-The error is immediate and names the field. It is recorded in
-`form.engineErrors` like any error thrown by your code — currently with
-`kind: "hook-error"` (see [Engine errors](engine-errors.md)).
+The error is immediate and names the field. How it is recorded today depends on
+where it happens (see [Engine errors](engine-errors.md)):
+
+- in a behavior hook: in `form.engineErrors`, as a `hook-error`;
+- in a validator that is one of an array of two or more: as a
+  `guard-violation`, and the field gets the blocking `"unverified"` issue
+  (or another member's refusal);
+- in any other validator: it is a rule that throws. If the rule is not `async`,
+  the field currently keeps its previous verdict — see
+  [the known gap](../model/interrupted-pass.md).
 
 :::caution `ctx.form` is not checked
 `ctx.form.field(name)` and `ctx.form.values()` can read **any** field, without

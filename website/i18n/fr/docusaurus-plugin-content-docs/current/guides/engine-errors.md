@@ -25,6 +25,32 @@ if (!(await form.submit())) {
 }
 ```
 
+:::caution Les helpers prêts à l'emploi gèrent leurs propres pannes
+`prefill`, `lookup`, `loadOptions` et `suggest` attrapent eux-mêmes l'échec de
+leur `fetch` : **rien** n'arrive dans `engineErrors`.
+
+- `prefill` et `lookup` laissent la valeur inchangée et repassent à `idle` ;
+- `loadOptions` et `suggest` publient une liste d'options vide ; `loadOptions`
+  appelle aussi son option `onError`, si vous en avez donné une.
+
+Pour être informé de ces pannes, attrapez l'erreur dans votre `fetch`, ou
+utilisez `onError` :
+
+```ts
+const { loadOptions } = behaviorsFor(form);
+
+const modelOptions = loadOptions({
+    field: "model",
+    watch: ["brand"],
+    fetch: ({ brand }) => fetchModels(brand),
+    onError: (error) => reportToSentry(error),
+});
+```
+
+Ce qu'enregistre `engineErrors`, c'est ce que **vos propres** hooks de behavior
+et validators lèvent ou rejettent.
+:::
+
 :::warning Ce n'est pas ainsi qu'on lit les erreurs de validation
 Une valeur refusée par une règle n'est pas une erreur du moteur : lisez-la avec
 `field.snapshot.errors`, `field.snapshot.issues` ou `field.hasFlag("error")`.
@@ -38,7 +64,7 @@ Une valeur refusée par une règle n'est pas une erreur du moteur : lisez-la ave
 | `scope` | où c'est arrivé : `"behavior"` ou `"validator"` |
 | `kind` | `"hook-error"` (votre code a levé) ou `"guard-violation"` (une règle du moteur a été enfreinte) |
 | `field` | le champ concerné |
-| `rule` | le nom de classe de la règle qui a échoué — enregistrements de validator uniquement |
+| `rule` | le nom de classe de la règle qui a échoué (`constructor.name`) — enregistrements de validator uniquement. Un minifieur peut renommer les classes dans un build de production |
 | `error` | la valeur levée, intacte |
 | `at` | le moment de l'enregistrement (`Date.now()`) |
 

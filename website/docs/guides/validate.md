@@ -158,7 +158,9 @@ not delayed.
 
 ## When a rule crashes
 
-If a rule throws or its promise rejects, the field gets a blocking
-`"unverified"` issue — not `valid`, not the previous verdict. The details, and
-two known gaps, are in
+If an `async` rule rejects, or a rule inside an array of two or more
+validators throws, the field gets a blocking `"unverified"` issue — not
+`valid`, not the previous verdict. A plain synchronous rule that throws
+currently **keeps its previous verdict**, and the value can be submitted: that
+is a known gap, with its workaround, in
 [An interrupted pass is not a verdict](../model/interrupted-pass.md).

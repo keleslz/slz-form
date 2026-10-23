@@ -37,15 +37,16 @@ Deux cas ne suivent pas encore ce tableau :
   `validate()` n'est pas `async` et lève — `new URL(value)` sur une chaîne
   malformée, `JSON.parse` —, le champ garde le verdict qu'il avait avant, et une
   valeur invalide peut être soumise. La panne est enregistrée avec
-  `scope: "behavior"`. Une règle déclarée `async`, ou l'un de plusieurs
-  validators passés en tableau, est traitée comme documenté. En attendant le
+  `scope: "behavior"`. Une règle déclarée `async`, ou un membre d'un tableau
+  d'au moins deux validators, est traitée comme documenté — un tableau d'un
+  seul élément est réduit à la règle seule, et a l'écart. En attendant le
   correctif, déclarez `async` les règles à risque, ou attrapez l'erreur et
   signalez-la vous-même (exemple plus bas).
-- **Une règle dont la promesse ne retombe jamais retrouve son verdict
+- **Une règle dont la promesse ne se termine jamais retrouve son verdict
   précédent** dès que `submit()` cesse d'attendre (`settleTimeout`). La
   soumission est refusée, mais le champ affiche son ancien verdict jusqu'à
   l'exécution suivante. Donnez un délai maximal à vos appels réseau —
-  `AbortSignal.timeout(ms)` — pour qu'ils retombent toujours.
+  `AbortSignal.timeout(ms)` — pour qu'ils se terminent toujours.
 :::
 
 ## Choisir de tolérer une panne
@@ -99,9 +100,10 @@ Deux conséquences quand vous écrivez un behavior à la main :
   est l'ensemble des flags actuels du behavior ; un hook qui renvoie
   `ctx.state.idle()` dit seulement « cette passe-ci a fini » ;
 - **le loading d'une passe s'éteint quand la passe dit son dernier mot.** Le
-  dernier mot d'un hook synchrone est son dernier `ctx.push` ; celui d'un hook
-  asynchrone est ce que résout sa promesse. Un `loading` poussé pendant un
-  `await` s'éteint donc quand la promesse retombe — sauf si le hook renvoie à
+  dernier mot d'un hook synchrone est sa valeur de retour — ou, s'il ne renvoie
+  rien, son dernier `ctx.push` ; celui d'un hook asynchrone est ce que résout sa
+  promesse. Un `loading` poussé pendant un
+  `await` s'éteint donc quand la promesse se termine — sauf si le hook renvoie à
   nouveau `loading` :
 
 ```ts

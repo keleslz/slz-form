@@ -65,5 +65,5 @@ complète des mots réservés est exportée : `RESERVED_FLAGS`, et
 ## Sur un champ, pas sur le formulaire
 
 Vos mots vivent sur le champ dont un behavior les pose. Le vocabulaire du
-formulaire est fermé — `form.hasFlag("saving-draft")` ne compile pas — : pour un
+formulaire est fermé — `form.snapshot.hasFlag("saving-draft")` ne compile pas — : pour un
 état propre à tout le formulaire, posez le mot sur un champ et lisez ce champ.

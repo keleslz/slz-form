@@ -71,8 +71,8 @@ the field's options carry no extra data. It returns exactly what `useField`
 returns.
 
 `row.id` is **stable**: it does not change when another row is removed or when
-rows are reordered. Use it as the React `key` — that is also what keeps a move
-from breaking declared dependencies.
+rows are reordered. Use it as the React `key`, so each row component keeps its
+own state when rows move.
 
 A row contributes to the payload only through its mounted fields: a row whose
 components render no field adds `{}` and blocks nothing.

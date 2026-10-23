@@ -163,8 +163,8 @@ nom de champ), `flags`, `status`.
 
 ## Les autres frameworks
 
-Un adapter pour Angular, Vue ou n'importe quoi d'autre, ce sont les trois mêmes
-gestes : créer le champ à la création du composant, appeler `mount()` /
+Un adapter pour Angular, Vue ou n'importe quoi d'autre se résume à quatre
+étapes : créer le champ à la création du composant, appeler `mount()` /
 `unmount()` avec le cycle de vie du composant, brancher `listen` / `getSnapshot`
 sur la réactivité du framework, et appeler `change` / `blur` / `focus` depuis les
 événements de la saisie. L'adapter React, `slz-react-form`, en est un exemple

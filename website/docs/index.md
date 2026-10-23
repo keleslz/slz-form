@@ -60,8 +60,8 @@ The words below come back on every page.
 | **behavior** | an object that **reacts**: it fills a value, loads options, locks or hides the field. It never decides validity. |
 | **validator** | a class that **judges** a value and reports issues. It is the only source of validity. |
 | **issue** | what a validator reports: a message, a severity (`error` blocks, `warning` does not) and an optional `code`. |
-| **hook** | a function of a behavior the engine calls at a moment of the field's life: `onMount`, `onChange`, `onBlur`… |
-| **`ctx`** | the object a hook or a validator receives: the field's own state, read access to the form, and the field's write methods. |
+| **hook** | two meanings. A **behavior hook** is a function of a behavior the engine calls at a moment of the field's life: `onMount`, `onChange`, `onBlur`… A **React hook** is one of the adapter's functions: `useField`, `useForm`… |
+| **`ctx`** | the object passed to your code. A behavior hook's `ctx` holds the behavior's own flags, read access to the form and other fields, and the methods that write **this** field. A validator's `ctx` is read-only: `watched(name)`, `form`, `signal`. |
 | **`watch`** | the list of other fields a behavior or validator reads. Declaring it is what re-runs them when those fields change. |
 | **mount** | putting a field into the form being filled. Only mounted fields count in the payload and the verdict. |
 | **payload** | `form.values()`: what you send. |
@@ -95,6 +95,8 @@ The words below come back on every page.
 - **Not an HTTP layer.** It makes no network call. It decides when yours run,
   what is locked meanwhile, and what happens with the result.
 - **Not a form generator.** No page rendered from JSON. You write your view.
+- **No input masks.** Formatting what the user types — a phone number, a card
+  number — is your input component's job.
 - **No server rendering yet.** The React adapter reads its state with
   `useSyncExternalStore` without a `getServerSnapshot`, so server-side rendering
   throws.

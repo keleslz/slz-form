@@ -9,8 +9,7 @@ description: Remplir un champ depuis une API à son montage — écrit de trois 
 
 Pour remplir un champ depuis une API quand il apparaît, branchez-lui un
 **behavior de prefill**. Voici le même besoin écrit de trois façons, de la plus
-explicite à la plus courte. Les trois se comportent **exactement** de la même
-manière.
+explicite à la plus courte. Les trois remplissent le champ de la même façon.
 
 ## 1. Une classe de behavior
 
@@ -47,8 +46,8 @@ field.mount();
 Les flags du champ, dans l'ordre :
 
 ```
-during the call   pristine, loading, locked
-after the call    pristine, idle          ← value set, field still pristine
+during the call   pristine, loading, locked, mounted
+after the call    pristine, idle, mounted          ← value set, field still pristine
 ```
 
 Trois choses à retenir :
@@ -64,7 +63,10 @@ Trois choses à retenir :
 ## 2. Le même behavior, avec un validator
 
 Ajoutez une règle. Rien ne change côté behavior : le behavior **écrit** la
-valeur, le validator la **juge**, et ils ne se gênent pas.
+valeur, le validator la **juge**, et ils ne se gênent pas. Le champ ci-dessous
+est déclaré **à la place** de l'appel de la section 1 : les paramètres d'un
+champ ne sont lus qu'à sa création, un second `form.field(...)` sur le même nom
+les ignorerait.
 
 ```ts
 class ReferenceValidator extends IValidator<string> {
@@ -81,9 +83,9 @@ const field = form.field("customerReference", {
 ```
 
 ```
-after the prefill   pristine, idle     ← judged, but nothing displayed
-the user types      error, idle        ← "Expected format: CUST-42-9013"
-they fix it         valid, idle
+after the prefill   pristine, idle, mounted, required            ← judged, but nothing displayed
+the user types      error, idle, mounted, required, touched      ← "Expected format: CUST-42-9013"
+they fix it         valid, idle, mounted, required, touched
 ```
 
 **Une valeur préremplie n'affiche jamais d'erreur d'elle-même.** Le validator la
@@ -94,7 +96,8 @@ touche, ou que `submit()` touche tous les champs.
 ## 3. Le helper typé
 
 Le cas courant, en quelques lignes. `prefill` vient de `behaviorsFor(form)` : le
-nom du champ et le type de la valeur sont vérifiés contre la map de champs.
+nom du champ et le type de la valeur sont vérifiés contre la map de champs. Là
+encore, ceci remplace les déclarations précédentes du champ.
 
 ```ts
 const { prefill } = behaviorsFor(form);

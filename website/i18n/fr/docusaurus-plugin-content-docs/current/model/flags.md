@@ -22,7 +22,7 @@ C'est ce qui remplace le `disabled={loading || submitting || !brand}` écrit à 
 main dans chaque champ :
 
 ```tsx
-<input disabled={field.hasAny("locked", "readonly")} />
+<input disabled={field.hasFlag("locked")} readOnly={field.hasFlag("readonly")} />
 ```
 
 Les deux mêmes fonctions existent sur un champ (`FieldController`, son snapshot,
@@ -38,7 +38,7 @@ et `useField()`) et sur un formulaire (son snapshot, et `useForm()`).
 | `readonly` | cumulé | les behaviors, le moteur, la vue | lisible et sélectionnable, non modifiable |
 | `invisible` | cumulé | les behaviors | à ne pas afficher — voir la note ci-dessous |
 | `required` | cumulé | le moteur (depuis `required: true`) | le champ est obligatoire |
-| `touched` | cumulé | le moteur | l'utilisateur a modifié ou quitté le champ |
+| `touched` | cumulé | le moteur | l'utilisateur a modifié ou quitté le champ, ou `submit()` l'a touché |
 | `focused` | cumulé | le moteur | le champ a le focus |
 | `mounted` | cumulé | le moteur | le champ fait partie du formulaire qu'on remplit |
 | `submitting` | cumulé | le moteur | le formulaire est en cours de soumission ; s'accompagne de `locked` |
@@ -60,7 +60,7 @@ Un formulaire emploie les mêmes mots, à une différence près, expliquée plus
 
 | Flag | Groupe | Sens |
 |---|---|---|
-| `valid` · `error` | un seul à la fois | le **verdict** : aucun champ monté et visible n'a de constat bloquant — ou l'un en a un |
+| `valid` · `error` | un seul à la fois | le **verdict** : aucun champ monté et visible, ni aucune ligne d'une liste, n'a de constat bloquant — ou l'un en a un |
 | `idle` · `submitting` · `submitted` | un seul à la fois | où en est la soumission |
 | `loading` | cumulé | un champ monté, ou une ligne, a un travail en cours |
 | `touched` | cumulé | au moins un champ a été touché |
@@ -79,7 +79,8 @@ garde qui correspond à votre parcours dans
 :::
 
 Le vocabulaire du formulaire est **fermé** : vos propres flags vivent sur les
-champs, et `form.hasFlag("skeleton")` ne compile pas. Pour afficher un état
+champs, et `form.snapshot.hasFlag("skeleton")` (ou `useForm().hasFlag("skeleton")`)
+ne compile pas. Pour afficher un état
 propre à tout le formulaire, posez le flag sur un champ et lisez ce champ.
 
 ## Deux sortes de groupes

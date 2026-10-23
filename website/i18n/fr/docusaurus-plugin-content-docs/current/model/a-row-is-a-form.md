@@ -45,6 +45,8 @@ mal.
 
 ## Ce que ça coûte
 
+- Les champs de chaque ligne doivent être créés et montés — par votre code
+  (`row.field(name)`, puis `mount()`), ou par `useFieldOn` en React.
 - Une ligne se monte et se démonte comme un formulaire. Une ligne dont les
   champs n'ont jamais été montés apporte `{}` au payload et ne bloque rien.
 - Une ligne ne peut pas lire son formulaire parent : dans une ligne, `ctx.form`

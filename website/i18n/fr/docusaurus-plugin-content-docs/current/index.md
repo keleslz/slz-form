@@ -62,8 +62,8 @@ Les mots ci-dessous reviennent sur toutes les pages.
 | **behavior** | un objet qui **réagit** : il remplit une valeur, charge des options, verrouille ou masque le champ. Il ne décide jamais de la validité. |
 | **validator** | une classe qui **juge** une valeur et signale des constats. C'est la seule source de validité. |
 | **constat** (*issue*) | ce que signale un validator : un message, une gravité (`error` bloque, `warning` non) et un `code` facultatif. |
-| **hook** | une fonction d'un behavior que le moteur appelle à un moment de la vie du champ : `onMount`, `onChange`, `onBlur`… |
-| **`ctx`** | l'objet que reçoit un hook ou un validator : l'état propre du champ, une lecture du formulaire, et les méthodes d'écriture du champ. |
+| **hook** | deux sens. Un **hook de behavior** est une fonction d'un behavior que le moteur appelle à un moment de la vie du champ : `onMount`, `onChange`, `onBlur`… Un **hook React** est l'une des fonctions de l'adapter : `useField`, `useForm`… |
+| **`ctx`** | l'objet passé à votre code. Le `ctx` d'un hook de behavior porte les flags propres au behavior, une lecture du formulaire et des autres champs, et les méthodes qui écrivent **ce** champ. Le `ctx` d'un validator est en lecture seule : `watched(name)`, `form`, `signal`. |
 | **`watch`** | la liste des autres champs qu'un behavior ou un validator lit. C'est cette déclaration qui les relance quand ces champs changent. |
 | **monter** (*mount*) | faire entrer un champ dans le formulaire qu'on remplit. Seuls les champs montés comptent dans le payload et dans le verdict. |
 | **payload** | `form.values()` : ce que vous envoyez. |
@@ -99,6 +99,8 @@ Les mots ci-dessous reviennent sur toutes les pages.
   résultat.
 - **Pas un générateur de formulaires.** Aucune page rendue depuis un JSON. Vous
   écrivez votre vue.
+- **Pas de masques de saisie.** Mettre en forme ce que tape l'utilisateur — un
+  numéro de téléphone, de carte — revient à votre composant de saisie.
 - **Pas encore de rendu serveur.** L'adapter React lit son état avec
   `useSyncExternalStore` sans `getServerSnapshot` : le rendu côté serveur lève
   une erreur.

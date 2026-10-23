@@ -24,6 +24,31 @@ if (!(await form.submit())) {
 }
 ```
 
+:::caution The ready-made helpers handle their own failures
+`prefill`, `lookup`, `loadOptions` and `suggest` catch the failure of their
+`fetch` themselves, so **nothing** reaches `engineErrors`:
+
+- `prefill` and `lookup` leave the value unchanged and return to `idle`;
+- `loadOptions` and `suggest` publish an empty option list; `loadOptions` also
+  calls its `onError` option, if you gave one.
+
+To know about those failures, catch inside your `fetch`, or use `onError`:
+
+```ts
+const { loadOptions } = behaviorsFor(form);
+
+const modelOptions = loadOptions({
+    field: "model",
+    watch: ["brand"],
+    fetch: ({ brand }) => fetchModels(brand),
+    onError: (error) => reportToSentry(error),
+});
+```
+
+What `engineErrors` records is what **your own** behavior hooks and validators
+throw or reject.
+:::
+
 :::warning This is not how you read validation errors
 A value refused by a rule is not an engine error: read it with
 `field.snapshot.errors`, `field.snapshot.issues` or `field.hasFlag("error")`.
@@ -37,7 +62,7 @@ A value refused by a rule is not an engine error: read it with
 | `scope` | where it happened: `"behavior"` or `"validator"` |
 | `kind` | `"hook-error"` (your code threw) or `"guard-violation"` (an engine rule was broken) |
 | `field` | the field it happened on |
-| `rule` | the class name of the rule that failed — validator records only |
+| `rule` | the class name of the rule that failed (`constructor.name`) — validator records only. A minifier may rename classes in a production build |
 | `error` | the thrown value, untouched |
 | `at` | when it was recorded (`Date.now()`) |
 

@@ -23,7 +23,8 @@ if (await form.submit()) {
 Dans l'ordre :
 
 1. **Refuse une seconde soumission.** Si une soumission est déjà en cours,
-   l'appel rend `false` tout de suite — un double clic n'envoie pas deux fois.
+   l'appel rend `false` tout de suite — un double clic pendant la porte rend
+   `false` la seconde fois.
 2. **Verrouille le formulaire.** Son statut passe à `submitting`, et chaque champ
    monté reçoit les flags `submitting` et `locked`.
 3. **Touche chaque champ monté.** Chacun devient `touched` : un champ obligatoire
@@ -48,7 +49,7 @@ Seuls les champs **montés** participent. Un champ masqué par un behavior
 | Cause | Ce que vous voyez |
 |---|---|
 | un champ ou une ligne a un constat bloquant | les erreurs s'affichent (tous les champs sont maintenant touchés) ; `form.snapshot.errors` les liste par champ |
-| le travail en cours n'a pas abouti dans le délai `settleTimeout` | les champs encore `loading` sont libérés ; `form.engineErrors` peut dire pourquoi |
+| le travail en cours n'a pas abouti dans le délai `settleTimeout` | les champs encore `loading` sont libérés ; `form.engineErrors` peut dire pourquoi. Une règle encore en cours retrouve son verdict précédent : le formulaire peut paraître `valid` jusqu'à l'exécution suivante — [un écart connu](../model/interrupted-pass.md) |
 | une soumission était déjà en cours | rien ne change |
 
 ## Ce que vous envoyez : `form.values()`
@@ -151,6 +152,20 @@ async function save(): Promise<void> {
 }
 ```
 
+En React, c'est `useField` qui crée le champ, et seul le **premier** appel qui
+crée un champ lit ses paramètres. Donnez donc l'`ExternalValidator` à `useField`
+lui-même, et gardez l'instance au niveau du module pour que `save()` puisse
+l'atteindre :
+
+```tsx
+const emailTaken = new ExternalValidator<string>();
+
+function EmailField() {
+    const field = useField({ name: "email", required: true, validator: [new EmailValidator(), emailTaken] });
+    return <input value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value)} onBlur={field.onBlur} />;
+}
+```
+
 Le champ affiche l'erreur aussitôt, le formulaire passe à `error`, et le constat
 disparaît dès que l'utilisateur modifie l'email. Le formulaire est encore
 `submitted` à ce moment-là : gardez donc le bouton avec `hasFlag("submitting")`,
@@ -173,10 +188,10 @@ new FormController<SignupFields>({ name: "signup", settleTimeout: 5_000 });
 cours, en millisecondes. Les lignes d'une liste utilisent le `settleTimeout` de
 leur formulaire parent.
 
-:::caution Une règle qui ne retombe jamais peut bloquer `submit()`
+:::caution Une règle qui ne se termine jamais peut bloquer `submit()`
 `settleTimeout` borne la première validation et l'attente, mais pas la seconde
 validation d'une valeur qui a changé pendant l'attente. Si la promesse d'une
-règle ne retombe jamais à ce moment-là, `submit()` ne rend jamais la main, et le
+règle ne se termine jamais à ce moment-là, `submit()` ne rend jamais la main, et le
 formulaire reste `submitting` avec ses champs verrouillés — `reset()` ne les
 déverrouille pas. Donnez un délai maximal à chaque appel réseau d'un validator,
 par exemple `fetch(url, { signal: AbortSignal.timeout(5_000) })`.

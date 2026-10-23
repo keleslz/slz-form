@@ -25,7 +25,7 @@ d'être découvert plus tard en boucle infinie.
 
 ## C'est le champ qui reçoit qui travaille
 
-Un champ peut lire les autres ; il ne peut **jamais** en écrire un. Pour remplir
+Un champ peut lire les autres ; il ne peut **jamais** en écrire un. Pour vider
 `region` quand `country` change, le behavior se pose sur `region` et observe
 `country` :
 
@@ -89,9 +89,16 @@ ctx.watched("postcode")   // ✓ declared
 ctx.watched("city")       // ✗ throws: reads "city" without declaring it in `watch`
 ```
 
-L'erreur est immédiate et nomme le champ. Elle est enregistrée dans
-`form.engineErrors` comme toute erreur levée par votre code — aujourd'hui avec
-`kind: "hook-error"` (voir [Les erreurs du moteur](engine-errors.md)).
+L'erreur est immédiate et nomme le champ. La façon dont elle est enregistrée
+aujourd'hui dépend de l'endroit (voir [Les erreurs du moteur](engine-errors.md)) :
+
+- dans un hook de behavior : dans `form.engineErrors`, comme `hook-error` ;
+- dans un validator qui fait partie d'un tableau d'au moins deux : comme
+  `guard-violation`, et le champ reçoit le constat bloquant `"unverified"`
+  (ou le refus d'un autre membre) ;
+- dans tout autre validator : c'est une règle qui lève. Si la règle n'est pas
+  `async`, le champ garde aujourd'hui son verdict précédent — voir
+  [l'écart connu](../model/interrupted-pass.md).
 
 :::caution `ctx.form` n'est pas vérifié
 `ctx.form.field(name)` et `ctx.form.values()` peuvent lire **n'importe quel**

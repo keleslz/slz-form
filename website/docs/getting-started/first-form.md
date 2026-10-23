@@ -32,6 +32,7 @@ email.mount();
 email.change("ada@lovelace.dev");
 
 email.hasFlag("valid");   // true
+unsubscribe();
 ```
 
 What each line does:
@@ -58,8 +59,8 @@ To use this field from plain DOM code, see
 ## The field map, and what it buys you
 
 In an application, declare the form once, in its own module — the way you would
-declare a store slice. Behaviors and hooks are derived from it, so they are
-typed by the field map:
+declare a store slice. The ready-made behaviors and the React hooks are derived
+from it, so they are typed by the field map:
 
 ```ts
 // src/form/car-configuration-form.ts
@@ -120,6 +121,23 @@ lookup({
 | `hideWhen({ watch, when })` | hides the field (`invisible`) while `when` returns `true` |
 | `lockUntilValid({ watch })` | locks the field until every watched field is accepted by its validator |
 
+A few options worth knowing:
+
+- `on` (`loadOptions`): what reloads the list — `"mount"`, `"dependency"`
+  (a watched field changed), `"change"` (the user types). Default: `["mount"]`,
+  plus `"dependency"` when `watch` is set.
+- `resetOnReload` (`loadOptions`, default `true`): clear the field's value when
+  a watched field reloads the list.
+- `onError` (`loadOptions`): called when loading fails. Without it, a failure
+  looks like an empty list.
+- `pending` (`lookup`, `loadOptions`, `suggest`): the flags to show while the
+  call runs. Default: `loading` + `locked` (`suggest`: `loading` only);
+  `openWhilePending` keeps the field usable.
+
+`prefill` and `lookup` leave the value unchanged if `fetch` fails, and record
+nothing: if you need to know, catch inside your `fetch`. The exact signatures
+are in the [API reference](/docs/reference/slz-form).
+
 The same helpers also exist as plain functions, where the field name and types
 are on you: `lookup`, `loadOptions`, `prefill`, `lockWhile`, `hideWhen`, plus
 `dependsOn` and `createBehavior` for writing your own. Prefer the
@@ -131,40 +149,44 @@ from a full class down to the helper.
 
 ## The model in thirty seconds
 
-```
-FormRegister              every form of the app (optional)
-  └── FormController      one form: creates its fields, gathers values, gates submission
-        ├── dependency graph   who watches whom; cycles rejected when a field is created
-        └── FieldController    one input: value, interactions, flags, validity
-              ├── behaviors      react → return the flags they want on the field
-              ├── validator      judges the value → the only source of validity
-              └── FieldSnapshot  what the component renders
-```
+- **`FormRegister`** — every form of the app, gathered in one place (optional).
+  - **`FormController`** — one form: creates its fields, gathers their values,
+    gates the submission.
+    - **dependency graph** — who watches whom; a cycle is rejected when a field
+      is created.
+    - **`FieldController`** — one input: its value, interactions, flags and
+      validity.
+      - **behaviors** — react, and return the flags they want on the field.
+      - **validator** — judges the value; the only source of validity.
+      - **`FieldSnapshot`** — what the component renders.
 
 ## Field names that are not identifiers
 
-A field can be called `Toto-1`, `2-champ` or `champ avec espaces`: the map
-accepts any key, and the typing holds.
+A field can be called `first-name`, `2nd-field` or `name with spaces`: the map
+accepts any key — except `__proto__`, which corrupts `form.values()` — and the
+typing holds.
 
 ```ts
-const form = new FormController<{ "Toto-1": string; "2-champ": number }>({ name: "f" });
+const form = new FormController<{ "first-name": string; "2nd-field": number }>({ name: "f" });
 
-form.field("Toto-1").snapshot.value   // string | undefined
+form.field("first-name").snapshot.value   // string | undefined
 ```
 
 Only the way you write a callback changes, because JavaScript cannot
-destructure a name that is not an identifier:
+destructure a name that is not an identifier. In a behavior that watches both
+fields:
 
 ```ts
-fetch: async ({ "Toto-1": toto1, "2-champ": deux }) => { … }   // string, number
-fetch: async (deps) => deps["Toto-1"]                          // string | undefined
+fetch: async ({ "first-name": firstName, "2nd-field": second }) => { … }   // string | undefined, number | undefined
+fetch: async (deps) => deps["first-name"]                                   // string | undefined
 ```
 
 This, on the other hand, is not valid JavaScript:
 
 ```ts
-fetch: async ({ Toto-1 }) => …
-//                  ~ error TS1005: ',' expected
+fetch: async ({ first-name }) => …
+//                   ~ error TS1005: ',' expected
 ```
 
-`Toto-1` reads as `Toto` minus `1`: it is a syntax error, not a type error.
+`first-name` reads as `first` minus `name`: it is a syntax error, not a type
+error.

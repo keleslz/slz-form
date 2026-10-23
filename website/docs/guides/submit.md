@@ -23,7 +23,8 @@ if (await form.submit()) {
 In order:
 
 1. **Refuses a second submission.** If one is already running, the call returns
-   `false` at once — a double click does not send twice.
+   `false` at once — a double click during the gate returns `false` the second
+   time.
 2. **Locks the form.** The form's status becomes `submitting`, and every mounted
    field gets the `submitting` and `locked` flags.
 3. **Touches every mounted field.** Each one becomes `touched`, so an untouched
@@ -46,7 +47,7 @@ is not judged, but it is mounted, so its value **is** in `form.values()`.
 | Cause | What you see |
 |---|---|
 | a field or a row has a blocking issue | the errors are displayed (every field is touched now); `form.snapshot.errors` lists them by field |
-| the work in flight did not finish within `settleTimeout` | the fields that were still `loading` are released; `form.engineErrors` may tell why |
+| the work in flight did not finish within `settleTimeout` | the fields that were still `loading` are released; `form.engineErrors` may tell why. A rule that was still running gets its previous verdict back, so the form can look `valid` until the next run — [a known gap](../model/interrupted-pass.md) |
 | a submission was already running | nothing changes |
 
 ## What you send: `form.values()`
@@ -142,6 +143,20 @@ async function save(): Promise<void> {
         return;
     }
     signupForm.reset();
+}
+```
+
+In React, the field is created by `useField`, and only the **first** call that
+creates a field reads its parameters. So give the `ExternalValidator` to
+`useField` itself, and keep the instance at module level so `save()` can reach
+it:
+
+```tsx
+const emailTaken = new ExternalValidator<string>();
+
+function EmailField() {
+    const field = useField({ name: "email", required: true, validator: [new EmailValidator(), emailTaken] });
+    return <input value={field.value ?? ""} onChange={(e) => field.onChange(e.target.value)} onBlur={field.onBlur} />;
 }
 ```
 

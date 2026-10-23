@@ -34,8 +34,9 @@ Two cases do not follow the table yet:
   `validate()` is not `async` and throws — `new URL(value)` on a malformed
   string, `JSON.parse` — the field keeps whatever verdict it had before, and an
   invalid value can be submitted. The crash is recorded with
-  `scope: "behavior"`. A rule declared `async`, or one of several validators in
-  an array, is handled as documented. Until this is fixed, declare risky rules
+  `scope: "behavior"`. A rule declared `async`, or a member of an array of two
+  or more validators, is handled as documented — an array of one is unwrapped
+  to the plain rule, and has the gap. Until this is fixed, declare risky rules
   `async`, or catch the error and report it yourself (example below).
 - **A rule whose promise never settles gets its previous verdict back** once
   `submit()` gives up waiting (`settleTimeout`). The submission is refused, but
@@ -94,8 +95,8 @@ Two consequences when you write a behavior by hand:
   the behavior's current flags; a hook that returns `ctx.state.idle()` only
   says "this pass is done";
 - **a pass's loading ends when the pass says its last word.** A synchronous
-  hook's last word is its last `ctx.push`; an asynchronous hook's last word is
-  what its promise resolves to. So `loading` pushed during an `await` ends when
+  hook's last word is its return value — or, if it returns nothing, its last
+  `ctx.push`; an asynchronous hook's last word is what its promise resolves to. So `loading` pushed during an `await` ends when
   the promise settles — unless the hook returns `loading` again:
 
 ```ts

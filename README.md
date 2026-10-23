@@ -81,7 +81,7 @@ npm install slz-react-form      # the React adapter (optional)
 ```
 
 `slz-form` has **zero runtime dependencies**. `slz-react-form` declares `react`
-and `react-dom` as peers.
+and `slz-form` as peers: your app must resolve a single copy of each.
 
 ## Requirements
 
@@ -197,9 +197,13 @@ each keeping its own slice of state.
 your field map — the names below are all narrowed to your fields:
 
 ```ts
-import { behaviorsFor } from "slz-form";
+import { behaviorsFor, FormController } from "slz-form";
 
-const { prefill, loadOptions, lookup, suggest, lockWhile, hideWhen } = behaviorsFor(form);
+type CarFields = { brand: string; otherBrand: string; consent: boolean };
+
+const carForm = new FormController<CarFields>({ name: "car" });
+
+const { prefill, lockWhile, hideWhen } = behaviorsFor(carForm);
 
 const brandPrefill = prefill({ field: "brand", fetch: () => fetchDefaultBrand() });
 
@@ -213,8 +217,12 @@ const onlyWhenOther = hideWhen({
     when: ({ brand }) => brand !== "other",
 });
 
-form.field("otherBrand", { behaviors: [onlyWhenOther] });
+carForm.field("brand", { behaviors: [brandPrefill] });
+carForm.field("otherBrand", { behaviors: [onlyWhenOther, lockedUntilConsent] });
 ```
+
+The other helpers — `lookup`, `loadOptions`, `suggest`, `lockUntilValid` — are
+listed in [First form](https://keleslz.github.io/slz-form/docs/getting-started/first-form#the-ready-made-behaviors).
 
 `prefill` fills a field from an API on mount, locked and `loading` meanwhile;
 `lockWhile` and `hideWhen` react to other fields declared in `watch`.
@@ -363,7 +371,7 @@ if (!(await form.submit())) {
 ```
 
 Each `EngineError` carries `scope`, `kind` (`"hook-error"` or `"guard-violation"`),
-`field`, `error`, and `at`.
+`field`, `rule` (validator errors only), `error`, and `at`.
 
 This is a **pull** surface — an accessor, not a subscription. An engine error is
 a crash the engine already recovered from: a diagnostic record, not a live event
@@ -371,8 +379,8 @@ to handle in real time. The buffer is bounded to the most recent entries and
 cleared by `reset()`.
 
 > This is **not** how you read validation errors. A field that fails its rules
-> is not an engine error — read it with `field.errors`, `field.issues`, or
-> `field.hasFlag("error")`. `engineErrors` is only for when the code itself
+> is not an engine error — read it with `field.snapshot.errors`,
+> `field.snapshot.issues`, or `field.hasFlag("error")`. `engineErrors` is only for when the code itself
 > throws.
 
 ## React

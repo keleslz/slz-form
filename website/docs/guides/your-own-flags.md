@@ -64,5 +64,5 @@ test one.
 ## On a field, not on the form
 
 Your words live on the field whose behavior sets them. The form's vocabulary is
-closed — `form.hasFlag("saving-draft")` does not compile — so for a form-wide
+closed — `form.snapshot.hasFlag("saving-draft")` does not compile — so for a form-wide
 state of your own, set the word on one field and read that field.

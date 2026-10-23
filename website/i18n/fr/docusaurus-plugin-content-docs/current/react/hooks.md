@@ -70,7 +70,7 @@ les behaviors.
 ```tsx
 const { hasFlag, submit } = useForm();
 
-<button disabled={!hasFlag("valid", "idle")} onClick={() => void submit()}>
+<button disabled={hasFlag("submitting")} onClick={() => void submit()}>
     Submit
 </button>
 ```

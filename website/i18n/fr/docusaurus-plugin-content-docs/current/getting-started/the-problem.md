@@ -62,7 +62,9 @@ Le coût n'est pas la longueur. C'est ce que ce code met en place :
 ## Le même champ, avec le moteur
 
 La réaction se déclare une fois, dans le module qui déclare le formulaire.
-`loadOptions` est l'un des [behaviors](../index.md#vocabulary) prêts à l'emploi :
+`loadOptions` est l'un des [behaviors](../index.md#vocabulary) prêts à l'emploi ;
+cette forme typée vient de `const { loadOptions } = behaviorsFor(form)` — voir
+[Premier formulaire](first-form.md#the-ready-made-behaviors) :
 
 ```ts
 const modelOptions = loadOptions({
@@ -105,7 +107,7 @@ S'abonner au formulaire entier est un choix explicite, pour ce qui en a besoin �
 un bouton de soumission, un récapitulatif.
 
 **Typé depuis une seule déclaration.** Le formulaire déclare ce que vaut chaque
-champ ; behaviors et hooks en dérivent. Un nom mal orthographié ou une valeur du
+champ ; les behaviors prêts à l'emploi et les hooks React en dérivent. Un nom mal orthographié ou une valeur du
 mauvais type ne compile pas. Voir [Premier formulaire](first-form.md).
 
 **Écrit une fois, pour tous les frameworks.** Le cœur ne connaît ni React, ni

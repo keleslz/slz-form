@@ -22,14 +22,15 @@ type InvoiceFields = {
 const form = new FormController<InvoiceFields>({ name: "invoice" });
 const lines = form.array("lines");
 
-const id = lines.append();          // a stable id, never an index
-const qty = lines.row(id)?.field("qty");
+const first = lines.append();       // a stable id, never an index
+const second = lines.append();
+const qty = lines.row(first)?.field("qty");
 qty?.mount();
 qty?.change(3);
 
 lines.move(0, 1);                   // reorder by position; ids do not change
-lines.remove(id);
-lines.values();                     // [{ label, qty }, …] in display order
+lines.remove(second);
+lines.values();                     // [{ qty: 3 }] — the mounted fields of each row, in display order
 ```
 
 | Method | What it does |

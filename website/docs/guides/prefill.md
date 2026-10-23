@@ -9,7 +9,7 @@ description: Fill a field from an API when it mounts — written three ways, fro
 
 To fill a field from an API when it appears, attach a **prefill behavior**.
 Below is the same need written three ways, from the most explicit to the
-shortest. All three behave **exactly** the same.
+shortest. All three fill the field the same way.
 
 ## 1. A behavior class
 
@@ -46,8 +46,8 @@ field.mount();
 The field's flags, in order:
 
 ```
-during the call   pristine, loading, locked
-after the call    pristine, idle          ← value set, field still pristine
+during the call   pristine, loading, locked, mounted
+after the call    pristine, idle, mounted          ← value set, field still pristine
 ```
 
 Three things to remember:
@@ -64,6 +64,9 @@ Three things to remember:
 
 Add a rule. Nothing changes on the behavior side: the behavior **writes** the
 value, the validator **judges** it, and they do not get in each other's way.
+The field below is declared **in place of** section 1's call: a field's
+parameters are only read when it is created, so a second `form.field(...)` on
+the same name would ignore them.
 
 ```ts
 class ReferenceValidator extends IValidator<string> {
@@ -80,9 +83,9 @@ const field = form.field("customerReference", {
 ```
 
 ```
-after the prefill   pristine, idle     ← judged, but nothing displayed
-the user types      error, idle        ← "Expected format: CUST-42-9013"
-they fix it         valid, idle
+after the prefill   pristine, idle, mounted, required            ← judged, but nothing displayed
+the user types      error, idle, mounted, required, touched      ← "Expected format: CUST-42-9013"
+they fix it         valid, idle, mounted, required, touched
 ```
 
 **A prefilled value never shows an error by itself.** The validator does judge
@@ -93,7 +96,8 @@ touches every field.
 ## 3. The typed helper
 
 The common case, in a few lines. `prefill` comes from `behaviorsFor(form)`, so
-the field name and the value type are checked against the field map.
+the field name and the value type are checked against the field map. Again,
+this replaces the earlier declarations of the field.
 
 ```ts
 const { prefill } = behaviorsFor(form);

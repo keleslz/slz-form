@@ -30,7 +30,7 @@ valeur écrite par un behavior, au montage du champ — et à nouveau quand on
 quitte le champ et à la soumission.
 
 Une règle peut être `async` : renvoyez une promesse, et le champ porte `loading`
-jusqu'à ce qu'elle retombe. Passez `ctx.signal` (le troisième argument) à
+jusqu'à ce qu'elle aboutisse. Passez `ctx.signal` (le troisième argument) à
 `fetch`, pour qu'une requête soit annulée au démontage du champ.
 
 :::caution Une instance de validator pour un seul champ
@@ -161,7 +161,9 @@ valeur ou des options. L'un ne remplace pas l'autre.
 
 ## Quand une règle casse
 
-Si une règle lève une erreur ou si sa promesse échoue, le champ reçoit un
-constat bloquant `"unverified"` — ni `valid`, ni le verdict précédent. Le
-détail, et deux écarts connus, sont dans
+Si une règle `async` échoue, ou si une règle d'un tableau d'au moins deux
+validators lève une erreur, le champ reçoit un constat bloquant `"unverified"` —
+ni `valid`, ni le verdict précédent. Une règle synchrone seule qui lève une
+erreur **garde aujourd'hui son verdict précédent**, et la valeur peut être
+soumise : c'est un écart connu, avec son contournement, décrit dans
 [Une passe interrompue n'est pas un verdict](../model/interrupted-pass.md).

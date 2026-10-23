@@ -44,6 +44,8 @@ The bug does not show when reading the code and is hard to reproduce.
 
 ## What it costs
 
+- Each row's fields must be created and mounted — by your code
+  (`row.field(name)`, then `mount()`), or by `useFieldOn` in React.
 - A row is mounted and unmounted like a form. A row whose fields were never
   mounted contributes `{}` to the payload and blocks nothing.
 - A row cannot read its parent form: inside a row, `ctx.form` is the row, and

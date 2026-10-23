@@ -1,7 +1,7 @@
 # slz-react-form
 
 Adapter React de [`slz-form`](https://www.npmjs.com/package/slz-form) : un
-provider et trois hooks. Aucune logique métier — elle vit entièrement dans le
+provider et quelques hooks. Aucune logique métier — elle vit entièrement dans le
 core.
 
 📖 **[Documentation complète](https://keleslz.github.io/slz-form/fr/docs/react/installation)**

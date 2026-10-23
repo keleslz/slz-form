@@ -160,7 +160,7 @@ On the form's snapshot: `hasFlag(...)` / `hasAny(...)` with the form's flags,
 
 ## Other frameworks
 
-An adapter for Angular, Vue or anything else is the same three gestures: create
+An adapter for Angular, Vue or anything else comes down to four steps: create
 the field when the component is created, call `mount()` / `unmount()` with the
 component's lifecycle, feed `listen` / `getSnapshot` to the framework's
 reactivity, and call `change` / `blur` / `focus` from the input's events. The

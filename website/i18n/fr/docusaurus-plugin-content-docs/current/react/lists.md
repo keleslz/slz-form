@@ -73,8 +73,8 @@ ici `<string, never>`, où `never` signifie que les options du champ ne portent
 aucune donnée supplémentaire. Il rend exactement ce que rend `useField`.
 
 `row.id` est **stable** : il ne change ni quand une autre ligne est retirée, ni
-quand les lignes sont réordonnées. Utilisez-le comme `key` React — c'est aussi
-ce qui empêche un déplacement de casser des dépendances déclarées.
+quand les lignes sont réordonnées. Utilisez-le comme `key` React : chaque
+composant de ligne garde son propre état quand les lignes bougent.
 
 Une ligne ne contribue au payload que par ses champs montés : une ligne dont les
 composants n'affichent aucun champ apporte `{}` et ne bloque rien.
