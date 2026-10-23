@@ -12,13 +12,17 @@ ready, judges it, and answers `true` or `false`. Sending is your code, once the
 gate opens. The examples on this page use this `signupForm`.
 
 ```ts
+import { FormController } from "slz-form";
+
 type SignupFields = { email: string; password: string };
 
 export const signupForm = new FormController<SignupFields>({ name: "signup" });
 
-if (await signupForm.submit()) {
-    await fetch("/api/signup", { method: "POST", body: JSON.stringify(signupForm.values()) });
-    signupForm.reset();
+export async function send(): Promise<void> {
+    if (await signupForm.submit()) {
+        await fetch("/api/signup", { method: "POST", body: JSON.stringify(signupForm.values()) });
+        signupForm.reset();
+    }
 }
 ```
 
@@ -30,7 +34,9 @@ In order:
    `false` at once — a double click during the gate returns `false` the second
    time.
 2. **Locks the form.** The form's status becomes `submitting`, and every mounted
-   field gets the `submitting` and `locked` flags.
+   field gets the `submitting` and `locked` flags. These are display flags: the
+   engine does not refuse a `change()` meanwhile, so your inputs must honour
+   `locked`.
 3. **Touches every mounted field.** Each one becomes `touched`, so an untouched
    required field now displays its error. Its `onSubmit` hooks run, anything
    waiting on a debounce runs now, and its validator runs again. The rows of
@@ -39,7 +45,8 @@ In order:
    before the form is judged, otherwise you would send a value that is not
    there yet. A field whose value changed while waiting is validated again.
    `settleTimeout` (10 seconds by default) bounds step 3 and this wait, each on
-   its own — so up to about twice `settleTimeout` in total — but not the
+   its own — so up to about twice `settleTimeout` in total, plus the rows of
+   each list, which are submitted in between with their own wait — but not the
    second validation; see [Settings](#settings).
 5. **Judges.** It returns `true` only if everything settled in time and the form
    is `valid`. The status becomes `submitted` on success, `idle` on failure, and
@@ -62,7 +69,10 @@ verdict; and since it is mounted, its value **is** in `form.values()`.
 `form.values()` returns the values of every **mounted** field — hidden ones
 included — and, for each list, the array of its rows' values. A field that is
 not mounted is left out. To leave out a field the user cannot see, unmount it
-(in React, stop rendering its component).
+(in React, stop rendering its component). This works for fields, not for
+lists: once `form.array(name)` exists, the list is always in the payload —
+unmounting its component only unmounts the rows' fields, so it sends `[{}, …]`.
+Call `clear()` on the list to send `[]`.
 
 The result is typed `Readonly<Record<string, unknown>>`: the field map is not
 carried over to it. When you need a typed value, read it from its field:
@@ -74,7 +84,8 @@ const email = signupForm.get("email")?.snapshot.value;   // string | undefined
 ## Which guard for the button
 
 After a successful `submit()`, the status stays `submitted` until
-`form.reset()` — editing a field does not bring it back to `idle`. Choose the
+`form.reset()` or the next `submit()` — editing a field does not bring it back
+to `idle`. Choose the
 guard that matches what happens after a send:
 
 | After a successful send… | Guard |
@@ -101,6 +112,8 @@ that request is slow and must not be sent twice, keep track of it yourself.
 `useForm()` gives the same `submit`, `reset` and flags:
 
 ```tsx
+import { hooksFor } from "slz-react-form";
+
 export const { useField, useForm } = hooksFor(signupForm);
 
 function SubmitButton() {
@@ -135,6 +148,8 @@ Validate) and give it the server's issues. Mount the field: an unmounted field
 is neither judged nor sent, and nothing warns you.
 
 ```ts
+import { ExternalValidator } from "slz-form";
+
 const emailTaken = new ExternalValidator<string>();
 
 const email = signupForm.field("email", { required: true, validator: [new EmailValidator(), emailTaken] });

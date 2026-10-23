@@ -33,8 +33,10 @@ it settles. Pass `ctx.signal` (the third argument) to `fetch`, so a request is
 cancelled when the field unmounts.
 
 :::caution Give one validator instance to one field
-A validator instance holds its field's verdict. Passing the same instance to two
-fields throws when the second field is created. Create one per field.
+A validator instance holds its field's verdict. Passing the same instance as
+the `validator` of two fields throws when the second field is created. Create
+one per field. (A member of an array of two or more validators may be shared:
+the array holds the verdict.)
 :::
 
 ## Empty values and `required`
@@ -46,7 +48,7 @@ an empty array. Whether an empty field is acceptable is what `required` says:
 |---|---|
 | `required: true` | an empty value gets a blocking issue, `code: "required"`, message `"This field is required"` |
 | `requiredMessage: "…"` | replaces that message |
-| `requiredTrue: true` | also treats `false` as empty — for a checkbox that must be ticked |
+| `requiredTrue: true` | with `required: true`, also treats `false` as empty — for a checkbox that must be ticked. On its own it does nothing |
 
 A rule that decides **itself** whether the field is required ("required if the
 account is a company") must run on empty values: declare
@@ -127,6 +129,8 @@ Pass an array. Each validator keeps its own rules, and their issues are added
 up:
 
 ```ts
+import { ExternalValidator } from "slz-form";
+
 const serverIssues = new ExternalValidator<string>();
 
 form.field("email", { validator: [new EmailValidator(), serverIssues] });
@@ -147,6 +151,8 @@ Only `severity: "error"` blocks. If your server uses other words, map them to
 ## Waiting before validating
 
 ```ts
+import { DebouncedValidator } from "slz-form";
+
 new DebouncedValidator(new UsernameValidator(), 400);
 ```
 

@@ -47,7 +47,8 @@ Ce que fait chaque ligne :
 - `email.listen(callback)` s'abonne au champ : le callback s'exécute à chaque
   changement de son snapshot. Il rend la fonction qui désabonne.
 - `email.mount()` fait entrer le champ dans le formulaire qu'on remplit. Un champ
-  non monté est absent de `form.values()` et du verdict du formulaire.
+  non monté est absent de `form.values()` et du
+  [verdict](../index.md#vocabulary) du formulaire — s'il peut partir ou non.
 - `email.change(value)` est ce qu'appelle une saisie quand l'utilisateur tape.
   Il marque le champ `touched` et lance le validator.
 - `email.hasFlag("valid")` lit un flag. Il vaut `true` ici parce que le champ a
@@ -102,8 +103,9 @@ vue. En échange, noms de champs, valeurs et callbacks des helpers sont typés
 affinez sans cast : `form.values()` est un `Record<string, unknown>` — lisez une
 valeur typée avec `form.get(name)`
 ([Soumettre un formulaire](../guides/submit.md#what-you-send-formvalues)) ; un
-formulaire pris dans le `FormRegister` n'est pas typé — importez le module
-propre au formulaire ([Les hooks](../react/hooks.md#formprovider-and-useformregister)) ;
+formulaire pris dans le `FormRegister` n'est aujourd'hui pas typé — un écart
+connu ; en attendant le correctif, importez le module propre au formulaire
+([Les hooks](../react/hooks.md#formprovider-and-useformregister)) ;
 et une valeur lue avec `ctx.watched()` est `unknown` — affinez-la
 ([Champs répétables](../guides/repeatable-fields.md#a-rule-about-the-whole-list)).
 
@@ -141,19 +143,24 @@ Quelques options bonnes à connaître :
   quand un champ observé recharge la liste.
 - `onError` (`loadOptions`) : appelé quand le chargement échoue. Sans lui, un
   échec ressemble à une liste vide.
-- `pending` (`lookup`, `loadOptions`, `suggest`) : les flags à afficher pendant
-  l'appel. Par défaut : `loading` + `locked` (`suggest` : `loading` seul) ;
-  `openWhilePending` laisse le champ utilisable.
+- `pending` (`lookup`, `loadOptions`, `suggest`) : une fonction qui reçoit
+  l'état du behavior et rend les flags à afficher pendant l'appel, par exemple
+  `pending: (state) => state.loading()`. Par défaut : `loading` + `locked`
+  (`suggest` : `loading` seul). La fonction exportée `openWhilePending` est
+  cette version `loading` seul.
 
 `prefill` et `lookup` laissent la valeur inchangée si `fetch` échoue, et
 n'enregistrent rien : si vous avez besoin de le savoir, attrapez l'erreur dans
 votre `fetch`. Les signatures exactes sont dans la
 [référence API](/docs/reference/slz-form).
 
-Les mêmes helpers existent aussi en fonctions nues, où le nom de champ et les
-types sont à votre charge : `lookup`, `loadOptions`, `prefill`, `lockWhile`,
-`hideWhen`, plus `dependsOn` et `createBehavior` pour écrire les vôtres.
-Préférez les versions de `behaviorsFor`.
+Certains existent aussi en fonctions nues, avec leurs propres signatures et
+sans typage par la map : `lookup(fetcher, params)`,
+`loadOptions(fetcher, params)`, `prefill(fetcher)`,
+`lockWhile(condition, watch)`, `hideWhen(watch, predicate)`. `suggest` et
+`lockUntilValid` n'existent que dans `behaviorsFor`. `dependsOn(watch, effect)`
+et `createBehavior(definition)` vous aident à écrire les vôtres. Préférez les
+versions de `behaviorsFor`.
 
 Quand aucun helper ne convient, vous écrivez le behavior à la main :
 [Préremplir un champ](../guides/prefill.md) montre le même besoin écrit de trois

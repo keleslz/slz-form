@@ -20,6 +20,8 @@ description: useField, useForm et useFieldArray — ce qu'ils prennent, ce qu'il
 ## `useField`
 
 ```tsx
+import { useField } from "./form/signup-form";
+
 const field = useField({ name: "email", required: true, validator: new EmailValidator() });
 ```
 
@@ -98,7 +100,8 @@ pas. Pour savoir si la valeur d'un champ est refusée, lisez ses `errors`. Voir
 
 :::caution Deux choses à savoir sur `useForm`
 - La garde `!hasFlag("valid", "idle")` reste désactivée après une soumission
-  réussie, jusqu'à `reset()` : le formulaire reste `submitted`. Voir
+  réussie, jusqu'à `reset()` : le formulaire reste `submitted` jusqu'à `reset()`
+  ou au `submit()` suivant, et c'est ce bouton-là qui l'appellerait. Voir
   [Quelle garde pour le bouton](../guides/submit.md#which-guard-for-the-button).
 - Un composant qui appelle `useForm()` appelle `form.mount()` à son montage, et
   cela monte **tous** les champs créés jusque-là sur le formulaire — y compris un
@@ -127,6 +130,9 @@ hooks au formulaire. Ils servent aux outils transverses — un panneau de
 diagnostic qui liste tous les formulaires, par exemple :
 
 ```tsx
+import { FormRegister } from "slz-form";
+import { FormProvider } from "slz-react-form";
+
 const formRegister = new FormRegister({ values: [signupForm, invoiceForm] });
 
 <FormProvider register={formRegister}><App /></FormProvider>
@@ -135,10 +141,11 @@ const formRegister = new FormRegister({ values: [signupForm, invoiceForm] });
 `useFormRegister()` rend ce registre : `names()`, `get(name)`, `require(name)`,
 `snapshots()`, `listen(callback)`.
 
-:::caution Le registre n'est pas typé par la map de champs
-`register.get(name)` et `register.require(name)` rendent un formulaire dont la
-map de champs est inconnue : `.field("email")` dessus ne compile pas. Utilisez
-le registre pour lister les formulaires et lire leurs snapshots ; pour
-travailler avec les champs d'un formulaire, importez le module propre à ce
-formulaire.
+:::caution Écart connu : le registre n'est pas typé par la map de champs
+`register.get(name)` et `register.require(name)` rendent aujourd'hui un
+formulaire dont la map de champs est perdue : `.field("email")` dessus ne
+compile pas. C'est une limite du typage, pas l'usage voulu du registre. En
+attendant le correctif, utilisez le registre pour lister les formulaires et lire
+leurs snapshots, et importez le module propre au formulaire pour travailler
+avec ses champs.
 :::

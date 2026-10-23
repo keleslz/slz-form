@@ -40,13 +40,15 @@ Deux cas ne suivent pas encore ce tableau :
   `scope: "behavior"`. Une règle déclarée `async`, ou un membre d'un tableau
   d'au moins deux validators, est traitée comme documenté — un tableau d'un
   seul élément est réduit à la règle seule, et a l'écart. En attendant le
-  correctif, déclarez `async` les règles à risque, ou attrapez l'erreur et
-  signalez-la vous-même (exemple plus bas).
+  correctif, attrapez l'erreur et signalez-la vous-même (exemple plus bas).
+  Déclarer la règle `async` marche aussi, mais le champ affiche alors `loading`
+  à chaque exécution.
 - **Une règle dont la promesse ne se termine jamais retrouve son verdict
   précédent** dès que `submit()` cesse d'attendre (`settleTimeout`). La
   soumission est refusée, mais le champ affiche son ancien verdict jusqu'à
-  l'exécution suivante. Pire : à une étape, `submit()` ne cesse pas d'attendre
-  et ne rend jamais la main — voir [Réglages](../guides/submit.md#settings).
+  l'exécution suivante. Pire : si la règle revalide une valeur qui a changé
+  pendant l'attente de `submit()`, `submit()` ne cesse pas d'attendre et ne rend
+  jamais la main — voir [Réglages](../guides/submit.md#settings).
   Donnez un délai maximal à vos appels réseau — `AbortSignal.timeout(ms)` — pour
   qu'ils se terminent toujours.
 :::
@@ -93,9 +95,11 @@ règle qui décide, en signalant — ou non.
 ## Côté behavior : `loading` suit le travail en cours
 
 La même idée vaut pour le flag `loading` d'un behavior. Une passe est
-**ouverte** depuis l'appel de son hook jusqu'à ce qu'elle dise son dernier mot
-(voir plus bas). Un behavior apporte `loading` à son champ si et seulement si
-l'une de ses passes ouvertes l'a demandé — pas parce qu'une écriture a dit
+**ouverte** depuis l'appel de son hook jusqu'à ce qu'elle finisse — un hook
+synchrone quand il rend la main, un hook asynchrone quand sa promesse se
+termine —, et elle ne reste ouverte au-delà que si elle a fini en demandant
+`loading` (voir plus bas). Un behavior apporte `loading` à son champ si et
+seulement si l'une de ses passes ouvertes l'a demandé — pas parce qu'une écriture a dit
 `loading` en dernier. (Le champ est aussi `loading` pendant que son validator
 exécute une règle `async`.)
 
@@ -104,11 +108,11 @@ Deux conséquences quand vous écrivez un behavior à la main :
 - **une passe qui se termine n'éteint pas le loading d'une autre.** `ctx.state`
   est l'ensemble des flags actuels du behavior ; un hook qui renvoie
   `ctx.state.idle()` dit seulement « cette passe-ci a fini » ;
-- **le loading d'une passe s'éteint quand la passe dit son dernier mot.** Le
-  dernier mot d'un hook synchrone est sa valeur de retour — ou, s'il ne renvoie
-  rien, son dernier `ctx.push` ; celui d'un hook asynchrone est ce que résout sa
-  promesse. Un `loading` poussé pendant un `await` s'éteint donc quand la
-  promesse se termine — sauf si le hook renvoie à nouveau `loading` :
+- **ce qui compte, c'est la façon dont la passe finit.** Pour un hook
+  synchrone, c'est sa valeur de retour — ou, s'il ne renvoie rien, son dernier
+  `ctx.push` ; pour un hook asynchrone, la valeur que résout sa promesse. Un
+  `loading` poussé pendant un `await` s'éteint donc quand la promesse se
+  termine — sauf si le hook renvoie à nouveau `loading` :
 
 ```ts
 onChange: async (ctx) => {

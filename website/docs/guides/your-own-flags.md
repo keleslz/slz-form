@@ -13,6 +13,8 @@ behavior publishes your own word, and the view reads it with `hasFlag`. The
 engine carries the word without having to know it.
 
 ```ts
+import type { IBehavior } from "slz-form";
+
 const skeletonUntilLoaded: IBehavior<string> = {
     onMount: async (ctx) => {
         ctx.push(ctx.state.mark("skeleton"));

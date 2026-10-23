@@ -37,6 +37,8 @@ Pour être informé de ces pannes, attrapez l'erreur dans votre `fetch`, ou
 utilisez `onError` :
 
 ```ts
+import { behaviorsFor } from "slz-form";
+
 const { loadOptions } = behaviorsFor(form);
 
 const modelOptions = loadOptions({
@@ -64,7 +66,7 @@ Une valeur refusée par une règle n'est pas une erreur du moteur : lisez-la ave
 | `scope` | où c'est arrivé : `"behavior"` ou `"validator"` |
 | `kind` | `"hook-error"` (votre code a levé) ou `"guard-violation"` (une garde du moteur a été enfreinte) |
 | `field` | le champ concerné |
-| `rule` | le nom de classe de la règle qui a échoué (`constructor.name`) — enregistrements de validator uniquement. Un minifieur peut renommer les classes dans un build de production |
+| `rule` | le nom de classe de la règle qui a échoué (`constructor.name`) — enregistrements de validator uniquement. Si la règle est enveloppée dans un `DebouncedValidator`, c'est `"DebouncedValidator"`. Un minifieur peut renommer les classes dans un build de production |
 | `error` | la valeur levée, intacte |
 | `at` | le moment de l'enregistrement (`Date.now()`) |
 
@@ -97,6 +99,8 @@ de validation qui lève **de façon synchrone** est enregistrée avec
 ## Une règle qui casse
 
 ```ts
+import { IValidator, type ValidationReport } from "slz-form";
+
 class Available extends IValidator<string> {
     protected async validate(value: string, report: ValidationReport) {
         const taken = await api.isTaken(value);   // the network fails here

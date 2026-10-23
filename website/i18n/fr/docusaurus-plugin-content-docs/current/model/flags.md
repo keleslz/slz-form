@@ -34,8 +34,8 @@ et `useField()`) et sur un formulaire (son snapshot, et `useForm()`).
 |---|---|---|---|
 | `pristine` · `valid` · `error` | **un seul à la fois** | le validator, seul | la validité **affichée** : `pristine` tant que le champ n'a pas été touché |
 | `idle` · `loading` | **un seul à la fois** | les behaviors et le validator | `loading` tant qu'un travail asynchrone tourne sur le champ |
-| `locked` | cumulé | les behaviors, le moteur, la vue | grisé, non modifiable |
-| `readonly` | cumulé | les behaviors, la vue | lisible et sélectionnable, non modifiable |
+| `locked` | cumulé | les behaviors, le moteur, la vue | à afficher grisé, non modifiable |
+| `readonly` | cumulé | les behaviors, la vue | à afficher lisible et sélectionnable, non modifiable |
 | `invisible` | cumulé | les behaviors | à ne pas afficher — voir la note ci-dessous |
 | `required` | cumulé | le moteur (depuis `required: true`) | le champ est obligatoire |
 | `touched` | cumulé | le moteur | l'utilisateur a modifié ou quitté le champ, ou `submit()` l'a touché |
@@ -43,6 +43,13 @@ et `useField()`) et sur un formulaire (son snapshot, et `useForm()`).
 | `mounted` | cumulé | le moteur | le champ fait partie du formulaire qu'on remplit |
 | `submitting` | cumulé | le moteur | le formulaire est en cours de soumission ; s'accompagne de `locked` |
 | *vos propres mots* | cumulé | les behaviors — `ctx.state.mark("skeleton")` | voir [Vos propres flags](../guides/your-own-flags.md) |
+
+:::caution `locked` et `readonly` sont des flags d'affichage
+Le moteur ne refuse pas une écriture sur un champ verrouillé ou en lecture
+seule : `field.change()` passe, même pendant `submit()`. C'est votre saisie qui
+doit respecter les flags — `disabled={field.hasFlag("locked")}`,
+`readOnly={field.hasFlag("readonly")}`.
+:::
 
 « La vue », c'est votre composant : `useField({ locked, readOnly })`, ou
 `field.update({ locked, readOnly })` en code sans framework.
@@ -69,11 +76,12 @@ Un formulaire emploie les mêmes mots, à une différence près, expliquée plus
 form.snapshot.hasFlag("valid", "idle")   // nothing blocks, and the form is neither submitting nor already submitted
 ```
 
-:::caution `submitted` reste jusqu'à `reset()`
+:::caution `submitted` reste jusqu'à `reset()` ou au `submit()` suivant
 Après un `submit()` réussi, le formulaire passe à `submitted` et **y reste** —
-modifier un champ ensuite ne le ramène pas à `idle`. Seul `form.reset()` le
-fait. Un bouton gardé par `!hasFlag("valid", "idle")` reste donc désactivé après
-le premier envoi réussi, sauf si vous réinitialisez le formulaire. Choisissez la
+modifier un champ ensuite ne le ramène pas à `idle`. Seuls `form.reset()` ou le
+`submit()` suivant le changent. Un bouton gardé par `!hasFlag("valid", "idle")`
+— celui-là même qui appellerait `submit()` — reste donc désactivé après le
+premier envoi réussi, sauf si vous réinitialisez le formulaire. Choisissez la
 garde qui correspond à votre parcours dans
 [Soumettre un formulaire](../guides/submit.md#which-guard-for-the-button).
 :::

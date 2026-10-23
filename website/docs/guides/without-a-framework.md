@@ -118,7 +118,7 @@ turn.
 |---|---|---|
 | `form.field(name, params)` | once per field | creates the field (later calls return the same field and ignore `params`) |
 | `field.mount()` | the input appears | the field joins the form: it counts in `form.values()` and in the verdict, its `onMount` hooks run, its validator runs |
-| `field.unmount()` | the input goes away | the field leaves the payload and the verdict; work in flight is cancelled (`ctx.signal` aborts) — except the wait of a `DebouncedValidator`, whose rule still runs once, with the aborted signal |
+| `field.unmount()` | the input goes away | the field leaves the payload and the verdict; work in flight is cancelled (`ctx.signal` aborts) — except, currently, the wait of a `DebouncedValidator`: its rule still runs once, with the aborted signal (a known gap) |
 | `field.reset(value?)` | start the field over | restores `initialValue` — or the `value` you pass —, untouched, and runs `onMount` again |
 | `field.update({ … })` | your code changes a setting | see below |
 

@@ -23,6 +23,8 @@ export const { useFieldArray, useForm } = hooksFor(invoiceForm);
 ```
 
 ```tsx
+import { useFieldArray } from "./form/invoice-form";
+
 function InvoiceLines() {
     const { rows, append, remove } = useFieldArray("lines");
 

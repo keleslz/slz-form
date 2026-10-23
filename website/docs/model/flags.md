@@ -34,8 +34,8 @@ The same two functions exist on a field (`FieldController`, its snapshot, and
 |---|---|---|---|
 | `pristine` · `valid` · `error` | **one at a time** | the validator, alone | the validity to **display**: `pristine` until the field is touched |
 | `idle` · `loading` | **one at a time** | behaviors and the validator | `loading` while some asynchronous work runs on the field |
-| `locked` | cumulative | behaviors, the engine, the view | greyed out, not editable |
-| `readonly` | cumulative | behaviors, the view | readable and selectable, not editable |
+| `locked` | cumulative | behaviors, the engine, the view | show it greyed out, not editable |
+| `readonly` | cumulative | behaviors, the view | show it readable and selectable, not editable |
 | `invisible` | cumulative | behaviors | do not render it — see the note below |
 | `required` | cumulative | the engine (from `required: true`) | the field is mandatory |
 | `touched` | cumulative | the engine | the user changed or left the field, or `submit()` touched it |
@@ -43,6 +43,13 @@ The same two functions exist on a field (`FieldController`, its snapshot, and
 | `mounted` | cumulative | the engine | the field is part of the form being filled |
 | `submitting` | cumulative | the engine | the form is being submitted; comes with `locked` |
 | *your own words* | cumulative | behaviors — `ctx.state.mark("skeleton")` | see [Your own flags](../guides/your-own-flags.md) |
+
+:::caution `locked` and `readonly` are display flags
+The engine does not refuse a write on a locked or read-only field:
+`field.change()` goes through, even during `submit()`. Your input must honour
+the flags — `disabled={field.hasFlag("locked")}`,
+`readOnly={field.hasFlag("readonly")}`.
+:::
 
 "The view" means your component: `useField({ locked, readOnly })`, or
 `field.update({ locked, readOnly })` in plain code.
@@ -70,10 +77,11 @@ A form uses the same words, with one difference explained below.
 form.snapshot.hasFlag("valid", "idle")   // nothing blocks, and the form is neither submitting nor already submitted
 ```
 
-:::caution `submitted` stays until `reset()`
+:::caution `submitted` stays until `reset()` or the next `submit()`
 After a successful `submit()`, the form moves to `submitted` and **stays
 there** — editing a field afterwards does not bring it back to `idle`. Only
-`form.reset()` does. So a button guarded by `!hasFlag("valid", "idle")` stays
+`form.reset()` or the next `submit()` changes it. So a button guarded by
+`!hasFlag("valid", "idle")` — the button that would call `submit()` — stays
 disabled after the first successful send, unless you reset the form. Pick the
 guard that fits your flow in [Submit a form](../guides/submit.md#which-guard-for-the-button).
 :::

@@ -20,6 +20,8 @@ description: useField, useForm and useFieldArray — what they take, what they r
 ## `useField`
 
 ```tsx
+import { useField } from "./form/signup-form";
+
 const field = useField({ name: "email", required: true, validator: new EmailValidator() });
 ```
 
@@ -96,7 +98,8 @@ refused, read its `errors`. See [Flags](../model/flags.md#displayed-versus-true)
 
 :::caution Two things to know about `useForm`
 - The guard `!hasFlag("valid", "idle")` stays disabled after a successful
-  submission until `reset()`: the form stays `submitted`. See
+  submission until `reset()`: the form stays `submitted` until `reset()` or
+  the next `submit()`, and this button is the one that would call it. See
   [Which guard for the button](../guides/submit.md#which-guard-for-the-button).
 - A component calling `useForm()` calls `form.mount()` when it mounts, and that
   mounts **every** field created on the form so far — including a field whose
@@ -123,6 +126,9 @@ hooks to the form. They exist for app-wide tools — a debug panel listing every
 form, for instance:
 
 ```tsx
+import { FormRegister } from "slz-form";
+import { FormProvider } from "slz-react-form";
+
 const formRegister = new FormRegister({ values: [signupForm, invoiceForm] });
 
 <FormProvider register={formRegister}><App /></FormProvider>
@@ -131,9 +137,10 @@ const formRegister = new FormRegister({ values: [signupForm, invoiceForm] });
 `useFormRegister()` returns that register: `names()`, `get(name)`,
 `require(name)`, `snapshots()`, `listen(callback)`.
 
-:::caution The register is not typed by field map
-`register.get(name)` and `register.require(name)` return a form whose field
-map is unknown, so `.field("email")` on it does not compile. Use the register
-to list forms and read their snapshots; to work with a form's fields, import
-the form's own module.
+:::caution Known gap: the register is not typed by field map
+`register.get(name)` and `register.require(name)` currently return a form
+whose field map is lost, so `.field("email")` on it does not compile. This is a
+typing limitation, not the intended use of the register. Until it is fixed, use
+the register to list forms and read their snapshots, and import the form's own
+module to work with its fields.
 :::

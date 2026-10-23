@@ -13,6 +13,8 @@ other field in `watch`. The engine then calls it again whenever the watched
 field changes.
 
 ```ts
+import { behaviorsFor } from "slz-form";
+
 const { lockUntilValid } = behaviorsFor(form);
 
 form.field("city", { behaviors: [lockUntilValid({ watch: ["postcode"] })] });
@@ -29,6 +31,8 @@ A field can read the others; it can **never** write to one. To clear `region`
 when `country` changes, the behavior goes on `region` and watches `country`:
 
 ```ts
+import type { IBehavior } from "slz-form";
+
 const clearWhenCountryChanges: IBehavior<string> = {
     watch: ["country"],
     onDependencyChanged: (ctx) => ctx.clear(),
@@ -67,16 +71,22 @@ the watched field — `dependency.name`, `dependency.value`,
 ```ts
 const lockWhileCountryInvalid: IBehavior<string> = {
     watch: [{ field: "country", on: ["value", "validity"] }],
+    onMount: (ctx) => (ctx.watched("country")?.errors.length ? ctx.state.lock() : ctx.state.unlock()),
     onDependencyChanged: (ctx, dependency) =>
         dependency.errors.length > 0 ? ctx.state.lock() : ctx.state.unlock(),
 };
 ```
 
+`onMount` sets the starting state; with `onDependencyChanged` alone, the field
+would stay unlocked until `country` first changes.
+
 A validator's `watch` is a plain list of names: the rule is re-run when one of
 those fields' **value** changes.
 
-A list declared with `FieldArray` can be watched like a field: its value is the
-array of its rows' values.
+A list declared with `FieldArray` can be watched for its **value** only: the
+array of its rows' values, which changes when a row's value changes or a row is
+added, moved or removed. Today a list never notifies its validity or its
+activity, so `on: ["validity"]` and `on: ["activity"]` never fire for a list.
 
 ## Reading a watched field
 
@@ -115,6 +125,8 @@ stale. Use `ctx.watched()` for anything you depend on.
 inside a [row](../model/a-row-is-a-form.md) — a field of the parent form,
 cannot be watched.
 
-A synchronous chain of more than 50 links (`a` → `b` → `c` → …) is cut: the
-engine throws out of the `change()` call that started it, and that error is not
-recorded in `form.engineErrors`.
+Current limitation: a synchronous chain of more than 50 links
+(`a` → `b` → `c` → …) is cut. When your code's `change()` started it, the error
+is thrown out of that call and not recorded in `form.engineErrors`; when an
+asynchronous behavior's write started it, it is recorded as that behavior's
+`hook-error`.

@@ -36,12 +36,14 @@ Two cases do not follow the table yet:
   invalid value can be submitted. The crash is recorded with
   `scope: "behavior"`. A rule declared `async`, or a member of an array of two
   or more validators, is handled as documented — an array of one is unwrapped
-  to the plain rule, and has the gap. Until this is fixed, declare risky rules
-  `async`, or catch the error and report it yourself (example below).
+  to the plain rule, and has the gap. Until this is fixed, catch the error and
+  report it yourself (example below). Declaring the rule `async` also works,
+  but then the field shows `loading` on every run.
 - **A rule whose promise never settles gets its previous verdict back** once
   `submit()` gives up waiting (`settleTimeout`). The submission is refused, but
-  the field shows its old verdict until the next run. Worse, at one step
-  `submit()` does not give up at all and never returns — see
+  the field shows its old verdict until the next run. Worse, if the rule is
+  re-validating a value that changed while `submit()` was waiting, `submit()`
+  does not give up at all and never returns — see
   [Settings](../guides/submit.md#settings). Give network calls a timeout —
   `AbortSignal.timeout(ms)` — so they always settle.
 :::
@@ -88,7 +90,9 @@ by reporting — or not.
 ## On the behavior side: `loading` follows the work in flight
 
 The same idea applies to a behavior's `loading` flag. A pass is **open** from
-the moment its hook is called until it says its last word (below). A behavior
+the moment its hook is called until it finishes — a synchronous hook when it
+returns, an asynchronous hook when its promise settles — and it stays open
+after that only if it finished by asking for `loading` (below). A behavior
 contributes `loading` to its field if and only if one of its open passes asked
 for it — not because some write said `loading` last. (The field is also
 `loading` while its validator runs an `async` rule.)
@@ -98,11 +102,11 @@ Two consequences when you write a behavior by hand:
 - **one pass finishing does not end another pass's loading.** `ctx.state` is
   the behavior's current flags; a hook that returns `ctx.state.idle()` only
   says "this pass is done";
-- **a pass's loading ends when the pass says its last word.** A synchronous
-  hook's last word is its return value — or, if it returns nothing, its last
-  `ctx.push`; an asynchronous hook's last word is what its promise resolves
-  to. So `loading` pushed during an `await` ends when the promise settles —
-  unless the hook returns `loading` again:
+- **what counts is how the pass finishes.** For a synchronous hook, that is
+  its return value — or, if it returns nothing, its last `ctx.push`; for an
+  asynchronous hook, the value its promise resolves to. So `loading` pushed
+  during an `await` ends when the promise settles — unless the hook returns
+  `loading` again:
 
 ```ts
 onChange: async (ctx) => {

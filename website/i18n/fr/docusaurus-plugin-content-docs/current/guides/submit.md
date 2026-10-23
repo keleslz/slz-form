@@ -12,13 +12,17 @@ le juge, et répond `true` ou `false`. L'envoi, c'est votre code, une fois la
 porte ouverte. Les exemples de cette page utilisent ce `signupForm`.
 
 ```ts
+import { FormController } from "slz-form";
+
 type SignupFields = { email: string; password: string };
 
 export const signupForm = new FormController<SignupFields>({ name: "signup" });
 
-if (await signupForm.submit()) {
-    await fetch("/api/signup", { method: "POST", body: JSON.stringify(signupForm.values()) });
-    signupForm.reset();
+export async function send(): Promise<void> {
+    if (await signupForm.submit()) {
+        await fetch("/api/signup", { method: "POST", body: JSON.stringify(signupForm.values()) });
+        signupForm.reset();
+    }
 }
 ```
 
@@ -30,7 +34,9 @@ Dans l'ordre :
    l'appel rend `false` tout de suite — un double clic pendant l'exécution de
    `submit()` rend `false` la seconde fois.
 2. **Verrouille le formulaire.** Son statut passe à `submitting`, et chaque champ
-   monté reçoit les flags `submitting` et `locked`.
+   monté reçoit les flags `submitting` et `locked`. Ce sont des flags
+   d'affichage : le moteur ne refuse pas un `change()` pendant ce temps, c'est
+   à vos saisies de respecter `locked`.
 3. **Touche chaque champ monté.** Chacun devient `touched` : un champ obligatoire
    jamais touché affiche maintenant son erreur. Ses hooks `onSubmit`
    s'exécutent, tout ce qui attendait un délai part tout de suite, et son
@@ -40,7 +46,8 @@ Dans l'ordre :
    pas encore posée. Un champ dont la valeur a changé pendant l'attente est
    revalidé. `settleTimeout` (10 secondes par défaut) borne l'étape 3 et cette
    attente, chacune de son côté — donc jusqu'à environ deux fois
-   `settleTimeout` au total —, mais pas la seconde validation ; voir
+   `settleTimeout` au total, plus les lignes de chaque liste, soumises entre
+   les deux avec leur propre attente —, mais pas la seconde validation ; voir
    [Réglages](#settings).
 5. **Juge.** Il rend `true` seulement si tout a abouti à temps et que le
    formulaire est `valid`. Le statut passe à `submitted` en cas de succès, à
@@ -65,7 +72,11 @@ compte pas dans le verdict ; et comme il est monté, sa valeur **est** dans
 `form.values()` rend les valeurs de tous les champs **montés** — masqués compris
 — et, pour chaque liste, le tableau des valeurs de ses lignes. Un champ non
 monté en est absent. Pour exclure un champ que l'utilisateur ne voit pas,
-démontez-le (en React, cessez d'afficher son composant).
+démontez-le (en React, cessez d'afficher son composant). Cela vaut pour les
+champs, pas pour les listes : dès que `form.array(name)` existe, la liste est
+toujours dans le payload — démonter son composant ne démonte que les champs des
+lignes, elle envoie donc `[{}, …]`. Appelez `clear()` sur la liste pour envoyer
+`[]`.
 
 Le résultat est typé `Readonly<Record<string, unknown>>` : la map de champs ne
 s'y retrouve pas. Quand vous avez besoin d'une valeur typée, lisez-la sur son
@@ -77,9 +88,9 @@ const email = signupForm.get("email")?.snapshot.value;   // string | undefined
 
 ## Quelle garde pour le bouton {#which-guard-for-the-button}
 
-Après un `submit()` réussi, le statut reste `submitted` jusqu'à `form.reset()` —
-modifier un champ ne le ramène pas à `idle`. Choisissez la garde qui correspond à
-ce qui se passe après un envoi :
+Après un `submit()` réussi, le statut reste `submitted` jusqu'à `form.reset()`
+ou au `submit()` suivant — modifier un champ ne le ramène pas à `idle`.
+Choisissez la garde qui correspond à ce qui se passe après un envoi :
 
 | Après un envoi réussi… | Garde |
 |---|---|
@@ -107,6 +118,8 @@ deux fois, suivez-la vous-même.
 `useForm()` donne les mêmes `submit`, `reset` et flags :
 
 ```tsx
+import { hooksFor } from "slz-react-form";
+
 export const { useField, useForm } = hooksFor(signupForm);
 
 function SubmitButton() {
@@ -142,6 +155,8 @@ Valider) et donnez-lui les constats du serveur. Montez le champ : un champ non
 monté n'est ni jugé ni envoyé, et rien ne vous prévient.
 
 ```ts
+import { ExternalValidator } from "slz-form";
+
 const emailTaken = new ExternalValidator<string>();
 
 const email = signupForm.field("email", { required: true, validator: [new EmailValidator(), emailTaken] });

@@ -31,6 +31,8 @@ export const { useField, useFieldArray, useForm } = hooksFor(signupForm);
 a ni provider à monter ni formulaire à nommer sur chaque champ :
 
 ```tsx
+import { useField } from "./form/signup-form";
+
 function EmailField() {
     const field = useField({
         name: "email",              // ← contraint à SignupFields

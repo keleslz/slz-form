@@ -13,6 +13,8 @@ validator liste cet autre champ dans `watch`. Le moteur le rappelle alors chaque
 fois que le champ observé change.
 
 ```ts
+import { behaviorsFor } from "slz-form";
+
 const { lockUntilValid } = behaviorsFor(form);
 
 form.field("city", { behaviors: [lockUntilValid({ watch: ["postcode"] })] });
@@ -30,6 +32,8 @@ Un champ peut lire les autres ; il ne peut **jamais** en écrire un. Pour vider
 `country` :
 
 ```ts
+import type { IBehavior } from "slz-form";
+
 const clearWhenCountryChanges: IBehavior<string> = {
     watch: ["country"],
     onDependencyChanged: (ctx) => ctx.clear(),
@@ -68,16 +72,23 @@ du champ observé — `dependency.name`, `dependency.value`,
 ```ts
 const lockWhileCountryInvalid: IBehavior<string> = {
     watch: [{ field: "country", on: ["value", "validity"] }],
+    onMount: (ctx) => (ctx.watched("country")?.errors.length ? ctx.state.lock() : ctx.state.unlock()),
     onDependencyChanged: (ctx, dependency) =>
         dependency.errors.length > 0 ? ctx.state.lock() : ctx.state.unlock(),
 };
 ```
 
+`onMount` pose l'état de départ ; avec `onDependencyChanged` seul, le champ
+resterait déverrouillé jusqu'au premier changement de `country`.
+
 Le `watch` d'un validator est une simple liste de noms : la règle est relancée
 quand la **valeur** de l'un de ces champs change.
 
-Une liste déclarée avec `FieldArray` s'observe comme un champ : sa valeur est le
-tableau des valeurs de ses lignes.
+Une liste déclarée avec `FieldArray` s'observe sur sa **valeur** seulement : le
+tableau des valeurs de ses lignes, qui change quand la valeur d'une ligne change
+ou qu'une ligne est ajoutée, déplacée ou retirée. Aujourd'hui, une liste ne
+notifie jamais sa validité ni son activité : `on: ["validity"]` et
+`on: ["activity"]` ne se déclenchent jamais pour une liste.
 
 ## Lire un champ observé {#reading-a-watched-field}
 
@@ -116,6 +127,8 @@ périme sans bruit. Utilisez `ctx.watched()` pour tout ce dont vous dépendez.
 formulaire, ou — dans une [ligne](../model/a-row-is-a-form.md) — un champ du
 formulaire parent, ne peut pas être observé.
 
-Une chaîne synchrone de plus de 50 maillons (`a` → `b` → `c` → …) est coupée :
-le moteur lève une erreur depuis l'appel `change()` qui l'a déclenchée, et cette
-erreur n'est pas enregistrée dans `form.engineErrors`.
+Limite actuelle : une chaîne synchrone de plus de 50 maillons
+(`a` → `b` → `c` → …) est coupée. Quand c'est un `change()` de votre code qui l'a
+déclenchée, l'erreur sort de cet appel et n'est pas enregistrée dans
+`form.engineErrors` ; quand c'est l'écriture d'un behavior asynchrone, elle est
+enregistrée comme `hook-error` de ce behavior.

@@ -13,6 +13,8 @@ métier en cours —, un behavior publie votre propre mot, et la vue le lit avec
 `hasFlag`. Le moteur transporte le mot sans avoir à le connaître.
 
 ```ts
+import type { IBehavior } from "slz-form";
+
 const skeletonUntilLoaded: IBehavior<string> = {
     onMount: async (ctx) => {
         ctx.push(ctx.state.mark("skeleton"));

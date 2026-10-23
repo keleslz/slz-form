@@ -58,6 +58,8 @@ design are in [A row is a form](../model/a-row-is-a-form.md).
 of the **parent** form — here a `total` field — that watches the list:
 
 ```ts
+import { FormController, IValidator, type FieldArray, type ValidationContext, type ValidationReport } from "slz-form";
+
 type Allocation = {
     parts: FieldArray<{ share: number }>;
     total: number;

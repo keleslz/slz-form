@@ -35,6 +35,8 @@ if (!(await form.submit())) {
 To know about those failures, catch inside your `fetch`, or use `onError`:
 
 ```ts
+import { behaviorsFor } from "slz-form";
+
 const { loadOptions } = behaviorsFor(form);
 
 const modelOptions = loadOptions({
@@ -62,7 +64,7 @@ A value refused by a rule is not an engine error: read it with
 | `scope` | where it happened: `"behavior"` or `"validator"` |
 | `kind` | `"hook-error"` (your code threw) or `"guard-violation"` (an engine guard was violated) |
 | `field` | the field it happened on |
-| `rule` | the class name of the rule that failed (`constructor.name`) — validator records only. A minifier may rename classes in a production build |
+| `rule` | the class name of the rule that failed (`constructor.name`) — validator records only. If the rule is wrapped in a `DebouncedValidator`, this is `"DebouncedValidator"`. A minifier may rename classes in a production build |
 | `error` | the thrown value, untouched |
 | `at` | when it was recorded (`Date.now()`) |
 
@@ -94,6 +96,8 @@ validators, where it is a `guard-violation`. And a validation rule that throws
 ## A rule that crashes
 
 ```ts
+import { IValidator, type ValidationReport } from "slz-form";
+
 class Available extends IValidator<string> {
     protected async validate(value: string, report: ValidationReport) {
         const taken = await api.isTaken(value);   // the network fails here

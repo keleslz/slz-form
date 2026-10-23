@@ -35,7 +35,9 @@ jusqu'à ce qu'elle aboutisse. Passez `ctx.signal` (le troisième argument) à
 
 :::caution Une instance de validator pour un seul champ
 Une instance de validator porte le verdict de son champ. Passer la même instance
-à deux champs lève une erreur à la création du second. Créez-en une par champ.
+comme `validator` de deux champs lève une erreur à la création du second.
+Créez-en une par champ. (Un membre d'un tableau d'au moins deux validators peut
+être partagé : c'est le tableau qui porte le verdict.)
 :::
 
 ## Valeurs vides et `required`
@@ -48,7 +50,7 @@ ce que dit `required` :
 |---|---|
 | `required: true` | une valeur vide reçoit un constat bloquant, `code: "required"`, message `"This field is required"` |
 | `requiredMessage: "…"` | remplace ce message |
-| `requiredTrue: true` | traite aussi `false` comme vide — pour une case à cocher qui doit être cochée |
+| `requiredTrue: true` | avec `required: true`, traite aussi `false` comme vide — pour une case à cocher qui doit être cochée. Seul, il ne fait rien |
 
 Une règle qui décide **elle-même** si le champ est obligatoire (« obligatoire si
 le compte est professionnel ») doit s'exécuter sur les valeurs vides : déclarez
@@ -130,6 +132,8 @@ Passez un tableau. Chaque validator garde ses propres règles, et leurs constats
 s'additionnent :
 
 ```ts
+import { ExternalValidator } from "slz-form";
+
 const serverIssues = new ExternalValidator<string>();
 
 form.field("email", { validator: [new EmailValidator(), serverIssues] });
@@ -150,6 +154,8 @@ traduisez-les en `"error"` ou `"warning"` avant d'appeler `set()`.
 ## Attendre avant de valider
 
 ```ts
+import { DebouncedValidator } from "slz-form";
+
 new DebouncedValidator(new UsernameValidator(), 400);
 ```
 

@@ -13,6 +13,8 @@ names: neither `lines[0].qty` nor `lines.0.qty`. Each **row** is a small
 same behaviors as any form.
 
 ```ts
+import { FormController, type FieldArray } from "slz-form";
+
 type InvoiceFields = { customer: string; lines: FieldArray<{ label: string; qty: number }> };
 
 const form = new FormController<InvoiceFields>({ name: "invoice" });

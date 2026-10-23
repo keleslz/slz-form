@@ -13,6 +13,8 @@ chemin : ni `lines[0].qty`, ni `lines.0.qty`. Chaque **ligne** est un petit
 mêmes behaviors que n'importe quel formulaire.
 
 ```ts
+import { FormController, type FieldArray } from "slz-form";
+
 type InvoiceFields = { customer: string; lines: FieldArray<{ label: string; qty: number }> };
 
 const form = new FormController<InvoiceFields>({ name: "invoice" });

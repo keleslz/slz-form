@@ -47,7 +47,9 @@ the whole read surface — and it is what deletes the `loading || submitting ||
 !brand` soup above.
 
 ```tsx
-<button disabled={!form.snapshot.hasFlag("valid", "idle")}>Submit</button>
+const { hasFlag } = useForm();
+
+<button disabled={!hasFlag("valid", "idle")}>Submit</button>
 ```
 
 (One trap with this exact guard after a successful submit — see
@@ -265,7 +267,7 @@ Validators compose (pass an array — their findings are aggregated) and can be
 wrapped:
 
 ```ts
-import { DebouncedValidator, ExternalValidator } from "slz-form";
+import { DebouncedValidator } from "slz-form";
 
 new DebouncedValidator(new UsernameValidator(), 400);
 ```
@@ -298,8 +300,8 @@ class ConfirmPasswordValidator extends IValidator<string> {
 
 Dependencies are wired into a graph that rejects cycles when a field is
 created, so a change propagates through the whole chain — `a → b → c` — and
-never loops. A synchronous chain longer than 50 links is cut, and throws out of
-the `change()` call that started it.
+never loops. Current limitation: a synchronous chain longer than 50 links is
+cut, and throws out of the `change()` call that started it.
 
 > `ctx.form.field(name)` and `ctx.form.values()` can also read other fields,
 > but they are **not** checked against `watch` and nothing re-runs your code
@@ -312,31 +314,36 @@ A repeatable list has **no path-based naming**. Each row *is* a full
 renames nothing, and no `watch` ever starts pointing into the void.
 
 ```ts
+import { FormController, type FieldArray } from "slz-form";
+
 type OrderFields = { lines: FieldArray<{ product: string; qty: number }> };
 
 const form = new FormController<OrderFields>({ name: "order" });
 const lines = form.array("lines");
 
-const id = lines.append();          // a stable row id, never an index
-const qty = lines.row(id)?.field("qty");
+const first = lines.append();       // a stable row id, never an index
+const second = lines.append();
+const qty = lines.row(first)?.field("qty");
 qty?.mount();
 qty?.change(2);
-lines.move(0, 1);
-lines.remove(id);
+lines.move(0, 1);                   // the order changes, the ids do not
+lines.remove(second);
 
-lines.values();
+lines.values();                     // [{ qty: 2 }]
 ```
 
 ## Submission
 
 `form.submit()` is a **gate, not a sender**. It returns `Promise<boolean>` and,
 in order: touches every mounted field (so pristine required-empty fields now
-show their error), fires `onSubmit` behaviors and flushes debounced windows,
-waits for async work to converge (bounded by `settleTimeout`, with one known
-gap: a rule whose promise never settles during the final re-validation blocks
+show their error), fires `onSubmit` behaviors and runs anything waiting on a
+debounce now, waits for async work to finish (bounded by `settleTimeout`,
+with one known gap: a rule whose promise never settles during the final
+re-validation blocks
 `submit()` for good — see
 [Settings](https://keleslz.github.io/slz-form/docs/guides/submit#settings)),
-revalidates, and returns `true` only if the form is settled and valid.
+revalidates, and returns `true` only if that work finished in time and the
+form is valid.
 
 ```ts
 if (await form.submit()) {
@@ -346,14 +353,14 @@ if (await form.submit()) {
 ```
 
 A `false` return means the form is invalid (its errors are now on screen), it
-did not converge in time, or a submission was already running. Keep the two
+did not finish its async work in time, or a submission was already running. Keep the two
 reads distinct: `form.snapshot.hasFlag("valid", "idle")` is the passive "is it
 ready right now?" for a disabled button; `await form.submit()` is the active
 "make it ready, then judge." The actual network call is your code, after the
 gate opens — the engine never sends anything.
 
-> After a successful `submit()`, the form stays `submitted` until `reset()`:
-> editing a field does not bring it back to `idle`. A button guarded by
+> After a successful `submit()`, the form stays `submitted` until `reset()` or
+> the next `submit()`: editing a field does not bring it back to `idle`. A button guarded by
 > `!hasFlag("valid", "idle")` therefore stays disabled after the first send
 > unless you reset. If the form stays on screen after sending, guard on
 > `hasFlag("submitting")` instead. Details:

@@ -142,7 +142,8 @@ form.field("billTo", { behaviors: [prefillFromProfile] });
 
 Une instance de **validator**, elle, porte le verdict de son champ : donner la
 même instance à deux champs lève une erreur à la création du second. Créez-en
-une par champ.
+une par champ — seul un membre d'un tableau d'au moins deux validators peut être
+partagé.
 
 ## Un champ lit ses voisins, il ne leur écrit jamais
 

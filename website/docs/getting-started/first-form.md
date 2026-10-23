@@ -46,7 +46,8 @@ What each line does:
 - `email.listen(callback)` subscribes to the field: the callback runs each time
   its snapshot changes. It returns the function that unsubscribes.
 - `email.mount()` puts the field into the form being filled. A field that is not
-  mounted is left out of `form.values()` and of the form's verdict.
+  mounted is left out of `form.values()` and of the form's
+  [verdict](../index.md#vocabulary) — whether it may be sent.
 - `email.change(value)` is what an input calls when the user types. It marks the
   field `touched` and runs the validator.
 - `email.hasFlag("valid")` reads a flag. It is `true` here because the field was
@@ -99,7 +100,8 @@ view. In exchange, field names, values and helper callbacks are typed with **no
 `as`**. Three places are not typed by the map, and you narrow them without a
 cast: `form.values()` is a `Record<string, unknown>` — read a typed value with
 `form.get(name)` ([Submit a form](../guides/submit.md#what-you-send-formvalues));
-a form taken from the `FormRegister` is untyped — import the form's own module
+a form taken from the `FormRegister` is currently untyped — a known gap; until
+it is fixed, import the form's own module
 ([Hooks](../react/hooks.md#formprovider-and-useformregister)); and a value read
 with `ctx.watched()` is `unknown` — narrow it
 ([Repeatable fields](../guides/repeatable-fields.md#a-rule-about-the-whole-list)).
@@ -137,17 +139,21 @@ A few options worth knowing:
   a watched field reloads the list.
 - `onError` (`loadOptions`): called when loading fails. Without it, a failure
   looks like an empty list.
-- `pending` (`lookup`, `loadOptions`, `suggest`): the flags to show while the
-  call runs. Default: `loading` + `locked` (`suggest`: `loading` only);
-  `openWhilePending` keeps the field usable.
+- `pending` (`lookup`, `loadOptions`, `suggest`): a function that receives the
+  behavior's state and returns the flags to show while the call runs, for
+  example `pending: (state) => state.loading()`. Default: `loading` + `locked`
+  (`suggest`: `loading` only). The exported `openWhilePending` is that
+  `loading`-only function.
 
 `prefill` and `lookup` leave the value unchanged if `fetch` fails, and record
 nothing: if you need to know, catch inside your `fetch`. The exact signatures
 are in the [API reference](/docs/reference/slz-form).
 
-The same helpers also exist as plain functions, where the field name and types
-are on you: `lookup`, `loadOptions`, `prefill`, `lockWhile`, `hideWhen`, plus
-`dependsOn` and `createBehavior` for writing your own. Prefer the
+Some of them also exist as plain functions, with their own signatures and no
+typing by the map: `lookup(fetcher, params)`, `loadOptions(fetcher, params)`,
+`prefill(fetcher)`, `lockWhile(condition, watch)`, `hideWhen(watch, predicate)`.
+`suggest` and `lockUntilValid` exist only in `behaviorsFor`. `dependsOn(watch,
+effect)` and `createBehavior(definition)` help you write your own. Prefer the
 `behaviorsFor` versions.
 
 When no helper fits, you write the behavior by hand:

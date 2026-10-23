@@ -137,7 +137,8 @@ form.field("billTo", { behaviors: [prefillFromProfile] });
 
 A **validator** instance, on the other hand, holds its field's verdict: giving
 the same instance to two fields throws when the second one is created. Create
-one per field.
+one per field — only a member of an array of two or more validators may be
+shared.
 
 ## A field reads its neighbors, it never writes to them
 

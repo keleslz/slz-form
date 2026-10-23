@@ -121,7 +121,7 @@ tour.
 |---|---|---|
 | `form.field(name, params)` | une fois par champ | crée le champ (les appels suivants rendent le même champ et ignorent `params`) |
 | `field.mount()` | la saisie apparaît | le champ rejoint le formulaire : il compte dans `form.values()` et dans le verdict, ses hooks `onMount` s'exécutent, son validator s'exécute |
-| `field.unmount()` | la saisie disparaît | le champ quitte le payload et le verdict ; le travail en cours est annulé (`ctx.signal` est avorté) — sauf l'attente d'un `DebouncedValidator`, dont la règle s'exécute encore une fois, avec le signal avorté |
+| `field.unmount()` | la saisie disparaît | le champ quitte le payload et le verdict ; le travail en cours est annulé (`ctx.signal` est avorté) — sauf, aujourd'hui, l'attente d'un `DebouncedValidator` : sa règle s'exécute encore une fois, avec le signal avorté (un écart connu) |
 | `field.reset(value?)` | repartir de zéro | restaure `initialValue` — ou la `value` passée —, non touché, et rejoue `onMount` |
 | `field.update({ … })` | votre code change un réglage | voir ci-dessous |
 

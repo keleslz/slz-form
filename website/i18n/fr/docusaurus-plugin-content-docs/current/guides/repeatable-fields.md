@@ -61,6 +61,8 @@ sur un champ du formulaire **parent** — ici un champ `total` — qui observe l
 liste :
 
 ```ts
+import { FormController, IValidator, type FieldArray, type ValidationContext, type ValidationReport } from "slz-form";
+
 type Allocation = {
     parts: FieldArray<{ share: number }>;
     total: number;
