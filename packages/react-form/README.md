@@ -17,6 +17,9 @@ même découpage qu'une slice :
 
 ```ts
 // src/form/signup-form.ts
+import { FormController } from "slz-form";
+import { hooksFor } from "slz-react-form";
+
 export type SignupFields = { email: string; postcode: string; city: string };
 
 export const signupForm = new FormController<SignupFields>({ name: "signup" });
@@ -53,7 +56,9 @@ function EmailField() {
 ```
 
 Ajouter un champ au formulaire, c'est monter ce composant. Rien à déclarer en
-amont.
+amont. Démonter le composant démonte le champ, ce qui retire sa valeur du
+payload. `EmailValidator` est un validator que vous écrivez ; `Spinner`, votre
+propre composant.
 
 `useField` ne fait que brancher le cycle de vie React sur le controller et lire
 son snapshot via `useSyncExternalStore` : **aucun `useState` ne recopie l'état
@@ -65,6 +70,7 @@ du moteur**, et un champ qui change ne re-rend pas les autres.
 |---|---|
 | Les hooks en détail | [documentation](https://keleslz.github.io/slz-form/fr/docs/react/hooks) |
 | Listes répétables | [documentation](https://keleslz.github.io/slz-form/fr/docs/react/lists) |
+| Le bouton de soumission, et la garde qui lui convient | [documentation](https://keleslz.github.io/slz-form/fr/docs/guides/submit) |
 | Signatures exactes | [référence API](https://keleslz.github.io/slz-form/fr/docs/reference/slz-react-form) |
 
 ## Ce que l'adapter ne fait pas encore

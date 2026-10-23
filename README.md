@@ -47,8 +47,11 @@ the whole read surface — and it is what deletes the `loading || submitting ||
 !brand` soup above.
 
 ```tsx
-<button disabled={!form.hasFlag("valid", "idle")}>Submit</button>
+<button disabled={!form.snapshot.hasFlag("valid", "idle")}>Submit</button>
 ```
+
+(One trap with this exact guard after a successful submit — see
+[Submission](#submission).)
 
 ## Table of contents
 
@@ -110,7 +113,6 @@ class EmailValidator extends IValidator<string> {
 const email = form.field("email", { required: true, validator: new EmailValidator() });
 const password = form.field("password", { required: true });
 
-form.mount();
 email.mount();
 password.mount();
 
@@ -122,10 +124,16 @@ if (await form.submit()) {
 }
 ```
 
-`form.field(name, params)` returns the field controller; `field.change(v)`,
-`field.focus()`, `field.blur()` drive it; `field.snapshot` reads it (`.value`,
-`.errors`, `.hasFlag(...)`). Everything below is the same engine, seen from
-different angles.
+- `form.field(name, params)` creates the field on the first call and returns
+  the same controller afterwards (`params` are only read the first time).
+- `field.mount()` puts it into the form being filled: only mounted fields count
+  in `form.values()` and in the verdict.
+- `field.change(v)`, `field.focus()`, `field.blur()` drive it, the way an input
+  would; `field.snapshot` reads it (`.value`, `.errors`, `.hasFlag(...)`).
+- `form.submit()` touches every mounted field, waits for async work, and answers
+  whether the form may be sent — it sends nothing itself.
+
+Everything below is the same engine, seen from different angles.
 
 ## The model: flags, and two functions
 
@@ -211,6 +219,10 @@ form.field("otherBrand", { behaviors: [onlyWhenOther] });
 `prefill` fills a field from an API on mount, locked and `loading` meanwhile;
 `lockWhile` and `hideWhen` react to other fields declared in `watch`.
 
+> A field hidden by `hideWhen` is left out of the verdict, but **not** out of
+> the payload: while it is mounted, `form.values()` still contains it. To leave
+> a field out of what you send, unmount it.
+
 When no helper fits, a behavior is just an object — the full lifecycle is
 `onMount` / `onChange` / `onDependencyChanged` / `onBlur` / `onFocus` /
 `onSubmit` / `onUnmount`, each receiving a `ctx`:
@@ -251,15 +263,16 @@ new DebouncedValidator(new UsernameValidator(), 400);
 ```
 
 `DebouncedValidator` delays an expensive rule while the user types;
-`ExternalValidator` asks a server and can re-judge without the value changing.
+`ExternalValidator` carries issues your code received from a server (a 422, for
+instance) and applies them without the value changing.
 Rules do not run on an empty value (that is what `required` is for), unless the
 validator opts in.
 
 ## Cross-field dependencies
 
 A validator or behavior that reads other fields declares them in `watch` — and
-only then is it re-run when they change. Reading an undeclared field throws, so
-a dependency can never be silent:
+only then is it re-run when they change. Reading an undeclared field with
+`ctx.watched()` throws, so a dependency cannot be forgotten silently:
 
 ```ts
 import { IValidator, type ValidationReport, type ValidationContext } from "slz-form";
@@ -272,8 +285,13 @@ class ConfirmPasswordValidator extends IValidator<string> {
 }
 ```
 
-Dependencies are wired into a graph that rejects cycles at construction, so a
-change propagates through the whole chain — `a → b → c` — and never loops.
+Dependencies are wired into a graph that rejects cycles when a field is
+created, so a change propagates through the whole chain — `a → b → c` — and
+never loops.
+
+> `ctx.form.field(name)` and `ctx.form.values()` can also read other fields,
+> but they are **not** checked against `watch` and nothing re-runs your code
+> when they change. Use `ctx.watched()` for anything you depend on.
 
 ## Repeatable fields
 
@@ -288,7 +306,9 @@ const form = new FormController<OrderFields>({ name: "order" });
 const lines = form.array("lines");
 
 const id = lines.append();          // a stable row id, never an index
-lines.row(id)?.form.field("qty").change(2);
+const qty = lines.row(id)?.field("qty");
+qty?.mount();
+qty?.change(2);
 lines.move(0, 1);
 lines.remove(id);
 
@@ -310,11 +330,19 @@ if (await form.submit()) {
 }
 ```
 
-A `false` return means the form is invalid (its errors are already on screen)
-or it did not converge in time. Keep the two reads distinct: `form.hasFlag("valid", "idle")` is the passive
-"is it ready right now?" for a disabled button; `await form.submit()` is the
-active "make it ready, then judge." The actual network call is your code, after
-the gate opens — the engine never sends anything.
+A `false` return means the form is invalid (its errors are now on screen), it
+did not converge in time, or a submission was already running. Keep the two
+reads distinct: `form.snapshot.hasFlag("valid", "idle")` is the passive "is it
+ready right now?" for a disabled button; `await form.submit()` is the active
+"make it ready, then judge." The actual network call is your code, after the
+gate opens — the engine never sends anything.
+
+> After a successful `submit()`, the form stays `submitted` until `reset()`:
+> editing a field does not bring it back to `idle`. A button guarded by
+> `!hasFlag("valid", "idle")` therefore stays disabled after the first send
+> unless you reset. If the form stays on screen after sending, guard on
+> `hasFlag("submitting")` instead. Details:
+> [Submit a form](https://keleslz.github.io/slz-form/docs/guides/submit).
 
 ## Engine errors
 
@@ -380,7 +408,7 @@ function EmailField() {
 function SubmitButton() {
     const { hasFlag, submit } = useForm();
     return (
-        <button disabled={!hasFlag("valid", "idle")} onClick={() => submit()}>
+        <button disabled={hasFlag("submitting")} onClick={() => void submit()}>
             Submit
         </button>
     );
@@ -408,6 +436,8 @@ const stop = field.listen(render);            // subscribe → returns an unsubs
 input.addEventListener("input", () => field.change(input.value));   // write
 ```
 
+A complete example, with the field lifecycle, is in
+[Without a framework](https://keleslz.github.io/slz-form/docs/guides/without-a-framework).
 Angular and Vue adapters will follow the same contract.
 
 ## How it compares

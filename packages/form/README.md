@@ -31,7 +31,7 @@ const form = new FormController<{ email: string; postcode: string; city: string 
 });
 
 const email = form.field("email", { required: true, validator: new EmailValidator() });
-email.listen(() => render(email.snapshot));
+email.listen(() => console.log(email.snapshot.flags));
 email.mount();
 email.change("ada@lovelace.dev");
 
@@ -39,7 +39,9 @@ email.hasFlag("valid");   // true
 ```
 
 Aucun framework requis : ce code tourne tel quel dans un navigateur, sous Node,
-Deno ou Bun.
+Deno ou Bun. `mount()` fait entrer le champ dans le formulaire (seuls les champs
+montés comptent dans `form.values()` et dans le verdict), `change()` est ce
+qu'appelle une saisie, `listen()` s'abonne aux changements du champ.
 
 ## L'idée
 
@@ -64,6 +66,8 @@ connaître.
 | Les flags, et les deux fonctions | [modèle](https://keleslz.github.io/slz-form/fr/docs/model/flags) |
 | Behavior ou validator ? | [modèle](https://keleslz.github.io/slz-form/fr/docs/model/behavior-and-validator) |
 | Préremplir, valider, dépendances, listes | [guides](https://keleslz.github.io/slz-form/fr/docs/guides/prefill) |
+| Soumettre : `submit()` est une porte, pas un envoi | [guide](https://keleslz.github.io/slz-form/fr/docs/guides/submit) |
+| Utiliser le moteur sans framework | [guide](https://keleslz.github.io/slz-form/fr/docs/guides/without-a-framework) |
 | Signatures exactes | [référence API](https://keleslz.github.io/slz-form/fr/docs/reference/slz-form) |
 | Arbitrages et invariants d'architecture | [`docs/MODEL.md`](https://github.com/keleslz/slz-form/blob/master/docs/MODEL.md) |
 
