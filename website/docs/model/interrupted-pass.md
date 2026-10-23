@@ -55,6 +55,8 @@ catches the failure and says so. It has then **concluded**, and the submission
 can go through:
 
 ```ts
+import { IValidator, type ValidationReport } from "slz-form";
+
 class Available extends IValidator<string> {
     protected async validate(value: string, report: ValidationReport) {
         try {
@@ -118,5 +120,5 @@ onChange: async (ctx) => {
 ```
 
 Without this rule, a late response that says nothing would keep the field busy
-forever. A field left `loading` this way is released by `submit()` when its
-`settleTimeout` expires.
+forever. A field left `loading` this way is released when `submit()`'s
+`settleTimeout` expires, when the field unmounts, or on `reset()`.

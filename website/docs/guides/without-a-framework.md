@@ -162,6 +162,33 @@ On the form's snapshot: `hasFlag(...)` / `hasAny(...)` with the form's flags,
 `values` (same as `form.values()`), `errors` (blocking messages by field name),
 `flags`, `status`.
 
+## Lists
+
+A [repeatable list](repeatable-fields.md) uses the same three gestures.
+`form.array(name)` returns the list; `rows` (each with an `id` and a `form`),
+`append()`, `remove(id)`, `move(from, to)` and `clear()` change its
+composition, and `listen` / `getSnapshot` follow it:
+
+```ts
+import { FormController, type FieldArray } from "slz-form";
+
+const invoiceForm = new FormController<{ lines: FieldArray<{ label: string; qty: number }> }>({ name: "invoice" });
+const lines = invoiceForm.array("lines");
+
+lines.listen(() => console.log(lines.rows.map((row) => row.id)));
+
+const id = lines.append();
+const qty = lines.row(id)?.field("qty");
+qty?.mount();
+```
+
+- `lines.listen(callback)` is called when rows are added, removed or moved —
+  not when a value inside a row changes.
+- The fields of each row are created and mounted one by one, like any field,
+  and each has its own `listen`.
+- The state of the list — `lines.ui.hasFlag("error")`, `lines.errors` — changes
+  with its rows' values: follow it with `form.listen`.
+
 ## Other frameworks
 
 An adapter for Angular, Vue or anything else comes down to four steps: create

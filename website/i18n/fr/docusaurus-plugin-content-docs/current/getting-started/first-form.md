@@ -99,9 +99,9 @@ numériques :
 
 Le prix : ajouter un champ coûte une ligne dans la map en plus de celle dans la
 vue. En échange, noms de champs, valeurs et callbacks des helpers sont typés
-**sans aucun `as`**. Trois endroits ne sont pas typés par la map, et vous les
-affinez sans cast : `form.values()` est un `Record<string, unknown>` — lisez une
-valeur typée avec `form.get(name)`
+**sans aucun `as`**. Trois endroits ne sont pas typés par la map — deux que vous
+gérez sans cast, un que vous évitez pour l'instant : `form.values()` est un
+`Record<string, unknown>` — lisez une valeur typée avec `form.get(name)`
 ([Soumettre un formulaire](../guides/submit.md#what-you-send-formvalues)) ; un
 formulaire pris dans le `FormRegister` n'est aujourd'hui pas typé — un écart
 connu ; en attendant le correctif, importez le module propre au formulaire

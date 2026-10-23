@@ -97,8 +97,9 @@ handles. In the demo, `NumberField` only accepts number fields:
 
 The price: adding a field costs one line in the map on top of the one in the
 view. In exchange, field names, values and helper callbacks are typed with **no
-`as`**. Three places are not typed by the map, and you narrow them without a
-cast: `form.values()` is a `Record<string, unknown>` — read a typed value with
+`as`**. Three places are not typed by the map — two you handle without a cast,
+one you avoid for now: `form.values()` is a `Record<string, unknown>` — read a
+typed value with
 `form.get(name)` ([Submit a form](../guides/submit.md#what-you-send-formvalues));
 a form taken from the `FormRegister` is currently untyped — a known gap; until
 it is fixed, import the form's own module

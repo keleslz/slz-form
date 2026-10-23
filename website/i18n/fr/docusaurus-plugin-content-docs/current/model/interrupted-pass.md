@@ -2,7 +2,7 @@
 id: interrupted-pass
 title: Une passe interrompue n'est pas un verdict
 sidebar_position: 3
-description: Ce que publie le moteur quand une règle casse, pourquoi ce n'est ni « valide » ni le verdict précédent, et comment se termine le loading d'un behavior.
+description: Ce que publie le moteur quand une règle casse, pourquoi ce n'est ni « valide » ni le verdict précédent, et comment se termine l'attente (`loading`) d'un behavior.
 ---
 
 # Une passe interrompue n'est pas un verdict
@@ -60,6 +60,8 @@ indisponible attrape la panne et le dit. Elle a alors **conclu**, et la
 soumission peut partir :
 
 ```ts
+import { IValidator, type ValidationReport } from "slz-form";
+
 class Available extends IValidator<string> {
     protected async validate(value: string, report: ValidationReport) {
         try {
@@ -97,15 +99,15 @@ règle qui décide, en signalant — ou non.
 La même idée vaut pour le flag `loading` d'un behavior. Une passe est
 **ouverte** depuis l'appel de son hook jusqu'à ce qu'elle finisse — un hook
 synchrone quand il rend la main, un hook asynchrone quand sa promesse se
-termine —, et elle ne reste ouverte au-delà que si elle a fini en demandant
-`loading` (voir plus bas). Un behavior apporte `loading` à son champ si et
-seulement si l'une de ses passes ouvertes l'a demandé — pas parce qu'une écriture a dit
+termine —, et elle ne reste ouverte au-delà que si elle a fini en demandant `loading`
+(voir plus bas). Un behavior apporte `loading` à son champ si et seulement si
+l'une de ses passes ouvertes l'a demandé — pas parce qu'une écriture a dit
 `loading` en dernier. (Le champ est aussi `loading` pendant que son validator
 exécute une règle `async`.)
 
 Deux conséquences quand vous écrivez un behavior à la main :
 
-- **une passe qui se termine n'éteint pas le loading d'une autre.** `ctx.state`
+- **une passe qui se termine n'éteint pas le `loading` d'une autre.** `ctx.state`
   est l'ensemble des flags actuels du behavior ; un hook qui renvoie
   `ctx.state.idle()` dit seulement « cette passe-ci a fini » ;
 - **ce qui compte, c'est la façon dont la passe finit.** Pour un hook
@@ -124,5 +126,5 @@ onChange: async (ctx) => {
 ```
 
 Sans cette règle, une réponse tardive qui ne dit rien garderait le champ occupé
-pour toujours. Un champ resté `loading` de cette façon est libéré par
-`submit()` quand son `settleTimeout` expire.
+pour toujours. Un champ resté `loading` de cette façon est libéré quand le
+`settleTimeout` de `submit()` expire, au démontage du champ, ou par `reset()`.

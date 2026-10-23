@@ -165,6 +165,33 @@ Sur le snapshot du formulaire : `hasFlag(...)` / `hasAny(...)` avec les flags du
 formulaire, `values` (comme `form.values()`), `errors` (messages bloquants par
 nom de champ), `flags`, `status`.
 
+## Les listes
+
+Une [liste répétable](repeatable-fields.md) utilise les trois mêmes gestes.
+`form.array(name)` rend la liste ; `rows` (chacune avec un `id` et un `form`),
+`append()`, `remove(id)`, `move(from, to)` et `clear()` changent sa
+composition, et `listen` / `getSnapshot` la suivent :
+
+```ts
+import { FormController, type FieldArray } from "slz-form";
+
+const invoiceForm = new FormController<{ lines: FieldArray<{ label: string; qty: number }> }>({ name: "invoice" });
+const lines = invoiceForm.array("lines");
+
+lines.listen(() => console.log(lines.rows.map((row) => row.id)));
+
+const id = lines.append();
+const qty = lines.row(id)?.field("qty");
+qty?.mount();
+```
+
+- `lines.listen(callback)` est appelé quand des lignes sont ajoutées, retirées
+  ou déplacées — pas quand une valeur change dans une ligne.
+- Les champs de chaque ligne se créent et se montent un par un, comme n'importe
+  quel champ, et chacun a son propre `listen`.
+- L'état de la liste — `lines.ui.hasFlag("error")`, `lines.errors` — change avec
+  les valeurs de ses lignes : suivez-le avec `form.listen`.
+
 ## Les autres frameworks
 
 Un adapter pour Angular, Vue ou n'importe quoi d'autre se résume à quatre

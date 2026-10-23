@@ -126,7 +126,7 @@ What the compiler catches:
 
 ```ts
 prefill({ field: "reference", fetch: async () => "x" });
-//              ~~~~~~~~~~~ '"reference"' is not assignable to '"customerReference"'
+//        ~~~~~ Type '"reference"' is not assignable to type '"customerReference"'
 ```
 
 And on a form declared `{ customerReference: string; mileage: number }`, a
@@ -134,8 +134,8 @@ fetch of the wrong type does not compile either:
 
 ```ts
 prefill({ field: "mileage", fetch: async () => "not a number" });
-//                                 ~~~~~~~~~~~~~~~~~~~~~~~~~ 'string' is not
-//                                 assignable to 'number'
+//                                             ~~~~~~~~~~~~~~
+// Type 'Promise<"not a number">' is not assignable to type 'Promise<number | undefined>'
 ```
 
 ## Good to know

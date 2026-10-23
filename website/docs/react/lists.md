@@ -53,6 +53,7 @@ A row's field is wired with `useFieldOn`, giving it the row's form:
 ```tsx
 import type { FieldArrayRow } from "slz-form";
 import { useFieldOn } from "slz-react-form";
+import type { InvoiceLine } from "./form/invoice-form";
 
 function LineLabel({ row }: { row: FieldArrayRow<InvoiceLine> }) {
     const field = useFieldOn<string, never>(row.form, { name: "label", required: true });

@@ -144,7 +144,7 @@ const formRegister = new FormRegister({ values: [signupForm, invoiceForm] });
 :::caution Écart connu : le registre n'est pas typé par la map de champs
 `register.get(name)` et `register.require(name)` rendent aujourd'hui un
 formulaire dont la map de champs est perdue : `.field("email")` dessus ne
-compile pas. C'est une limite du typage, pas l'usage voulu du registre. En
+compile pas. C'est un bug de typage, pas un choix de conception. En
 attendant le correctif, utilisez le registre pour lister les formulaires et lire
 leurs snapshots, et importez le module propre au formulaire pour travailler
 avec ses champs.

@@ -7,8 +7,8 @@ description: Installer les packages, ou lancer la démo depuis le dépôt.
 
 # Installation
 
-**Prérequis :** Node.js ≥ 20.19, npm. TypeScript en `strict: true` — le
-narrowing des noms de champ et des valeurs en dépend.
+**Prérequis :** Node.js ≥ 20.19, npm. TypeScript en `strict: true` —
+l'affinage des types des noms de champ et des valeurs en dépend.
 
 ## Dans votre application
 

@@ -32,9 +32,10 @@ never reaches for the `FormController` from inside one.
 
 It is a goal, not a guarantee: some needs are still out of reach that way.
 Leaving a field out of the payload from a rule, a row reading its parent form,
-a form-wide flag of your own, reacting to any change in a field set that is not
-known in advance, and being notified of engine errors as they happen all need
-your view code today. See [One form, one graph](../guides/dependencies.md#one-form-one-graph)
+a form-wide flag of your own and reacting to any change in a field set that is
+not known in advance all need your view code today. Being notified of engine
+errors as they happen is not possible at all yet — read `form.engineErrors`
+when you have a reason to. See [One form, one graph](../guides/dependencies.md#one-form-one-graph)
 and [On a field, not on the form](../guides/your-own-flags.md#on-a-field-not-on-the-form).
 
 ## Why validity is not shared
@@ -110,7 +111,9 @@ const lockedWhileEmpty: IBehavior<string> = {
 `onChange` means "the value changed", not "the user typed". It runs for
 `field.change()`, but also for `ctx.setValue()`, `ctx.clear()` and
 `field.update({ value })` — so a prefill or a lookup triggers the `onChange` of
-the other behaviors on that field. The hook is not told where a write came
+every behavior on that field, including the one that wrote. A `lookup` without
+`watch`, which runs on its own field's changes, therefore runs again after
+writing its result. The hook is not told where a write came
 from; the closest signal is `ctx.ui.hasFlag("touched")`, which says whether the
 user has interacted with the field at all.
 :::
@@ -126,9 +129,13 @@ reads such as the form's `name`.
 
 A behavior *returns* its flags; the field stores them. An instance may carry
 **configuration** — a URL, a delay — but never the state of a field. That is
-what lets you share one instance between fields:
+what lets you share one instance between fields. This sample uses the plain
+`prefill(fetcher)` function, which takes no field name — the typed
+`prefill({ field, fetch })` from `behaviorsFor` is bound to one field:
 
 ```ts
+import { prefill } from "slz-form";
+
 const prefillFromProfile = prefill(fetchProfileDefault);
 
 form.field("shipTo", { behaviors: [prefillFromProfile] });

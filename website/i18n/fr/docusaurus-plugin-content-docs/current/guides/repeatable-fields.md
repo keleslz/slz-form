@@ -106,7 +106,7 @@ Deux choses à savoir sur le champ porteur :
   l'utilisateur ne l'a pas touché ou n'a pas soumis, lisez le message dans
   `allocation.snapshot.errors.total`.
 
-## L'état d'une liste
+## L'état d'une liste {#the-state-of-a-list}
 
 Une liste répond aux deux mêmes fonctions qu'un champ, avec les mots d'un
 formulaire : `valid` ou `error` — jamais `pristine`, puisque personne ne

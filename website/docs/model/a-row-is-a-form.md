@@ -66,4 +66,7 @@ with `ctx.watched(...)`. The full example is in
 
 A list reports its state with the words of a form: `valid` or `error` — never
 `pristine`. A list is an aggregate, not a field the user touches, so a row with
-an empty required field puts the list in `error` before anyone types.
+an empty required field puts the list in `error` before anyone types. Read it
+with `form.array("lines").ui.hasFlag("error")`, or in React from
+`useForm().snapshot.arrays` — see
+[The state of a list](../guides/repeatable-fields.md#the-state-of-a-list).

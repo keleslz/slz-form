@@ -50,7 +50,7 @@ ce que dit `required` :
 |---|---|
 | `required: true` | une valeur vide reçoit un constat bloquant, `code: "required"`, message `"This field is required"` |
 | `requiredMessage: "…"` | remplace ce message |
-| `requiredTrue: true` | avec `required: true`, traite aussi `false` comme vide — pour une case à cocher qui doit être cochée. Seul, il ne fait rien |
+| `requiredTrue: true` | avec `required: true`, traite aussi `false` comme vide — pour une case à cocher qui doit être cochée. Seul, il fait seulement sauter `false` aux règles ; utilisez-le avec `required: true` |
 
 Une règle qui décide **elle-même** si le champ est obligatoire (« obligatoire si
 le compte est professionnel ») doit s'exécuter sur les valeurs vides : déclarez
@@ -159,8 +159,10 @@ import { DebouncedValidator } from "slz-form";
 new DebouncedValidator(new UsernameValidator(), 400);
 ```
 
-`DebouncedValidator` attend que l'utilisateur ait cessé de taper depuis 400 ms
-avant d'exécuter la règle qu'il enveloppe. Le champ est `loading` dès la
+`UsernameValidator` représente n'importe laquelle de vos règles — typiquement
+une règle qui demande au serveur si le nom est libre. `DebouncedValidator` attend
+que l'utilisateur ait cessé de taper depuis 400 ms avant d'exécuter la règle
+qu'il enveloppe. Le champ est `loading` dès la
 première frappe. Quitter le champ ou soumettre exécute tout de suite la règle en
 attente : un formulaire soumis dans les 400 ms n'est jamais jugé sur un verdict
 périmé. `required` n'est pas différé.

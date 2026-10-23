@@ -44,16 +44,15 @@ if (field.hasFlag("invisible")) return null;
 Two functions read every state, at the field and at the form: `hasFlag(...)` is
 the **AND** (all present), `hasAny(...)` is the **OR** (at least one). That is
 the whole read surface — and it is what deletes the `loading || submitting ||
-!brand` soup above.
+!brand` soup above. With the React adapter, `useForm()` answers the same two
+functions for the whole form; this button is disabled while the form is
+invalid or being submitted:
 
 ```tsx
-const { hasFlag } = useForm();
+const { hasAny } = useForm();
 
-<button disabled={!hasFlag("valid", "idle")}>Submit</button>
+<button disabled={hasAny("error", "submitting")}>Submit</button>
 ```
-
-(One trap with this exact guard after a successful submit — see
-[Submission](#submission).)
 
 ## Table of contents
 
@@ -129,7 +128,8 @@ if (await form.submit()) {
 - `form.field(name, params)` creates the field on the first call and returns
   the same controller afterwards (`params` are only read the first time).
 - `field.mount()` puts it into the form being filled: only mounted fields count
-  in `form.values()` and in the verdict.
+  in `form.values()` (the **payload**, what you send) and in the **verdict**
+  (whether the form may be sent).
 - `field.change(v)`, `field.focus()`, `field.blur()` drive it, the way an input
   would; `field.snapshot` reads it (`.value`, `.errors`, `.hasFlag(...)`).
 - `form.submit()` touches every mounted field, waits for async work, and answers
@@ -193,7 +193,7 @@ path: `mark("error")` throws.
 A **behavior** *reacts*. It writes its field's value, publishes options, and
 emits activity (`loading`) and availability (`locked` / `readonly` /
 `invisible`). It never decides validity. Several behaviors can share one field,
-each keeping its own slice of state.
+each setting its own flags.
 
 `behaviorsFor(form)` returns a set of ready-made, fully-typed helpers bound to
 your field map — the names below are all narrowed to your fields:
@@ -250,7 +250,7 @@ const greetOnMount: IBehavior<string> = {
 A **validator** *judges*. It is the single authority on validity — no behavior
 can contradict it, so there is never an arbitration between two disagreeing
 sources. You extend `IValidator<T>` and report findings, each carrying a
-`code` and a `severity`:
+severity and an optional `code`:
 
 ```ts
 import { IValidator, type ValidationReport } from "slz-form";
@@ -277,6 +277,11 @@ new DebouncedValidator(new UsernameValidator(), 400);
 instance) and applies them without the value changing.
 Rules do not run on an empty value (that is what `required` is for), unless the
 validator opts in.
+
+A rule that crashes gives the field a blocking `"unverified"` issue — except,
+currently, a plain rule that throws synchronously: it keeps its previous
+verdict, so an invalid value can be submitted. See
+[the known gap](https://keleslz.github.io/slz-form/docs/model/interrupted-pass).
 
 ## Cross-field dependencies
 
@@ -334,16 +339,19 @@ lines.values();                     // [{ qty: 2 }]
 
 ## Submission
 
-`form.submit()` is a **gate, not a sender**. It returns `Promise<boolean>` and,
-in order: touches every mounted field (so pristine required-empty fields now
-show their error), fires `onSubmit` behaviors and runs anything waiting on a
-debounce now, waits for async work to finish (bounded by `settleTimeout`,
-with one known gap: a rule whose promise never settles during the final
-re-validation blocks
-`submit()` for good — see
-[Settings](https://keleslz.github.io/slz-form/docs/guides/submit#settings)),
-revalidates, and returns `true` only if that work finished in time and the
-form is valid.
+`form.submit()` is a **gate, not a sender**. It returns `Promise<boolean>`.
+In order, it:
+
+1. touches every mounted field, so an untouched required field now shows its
+   error;
+2. runs the `onSubmit` hooks, and anything waiting on a debounce, now;
+3. waits for async work to finish, within `settleTimeout`;
+4. validates again what changed meanwhile;
+5. returns `true` only if that work finished in time and the form is valid.
+
+> Known gap: a rule whose promise never settles during step 4 blocks
+> `submit()` for good. Give network calls a timeout — see
+> [Settings](https://keleslz.github.io/slz-form/docs/guides/submit#settings).
 
 ```ts
 if (await form.submit()) {
@@ -353,25 +361,25 @@ if (await form.submit()) {
 ```
 
 A `false` return means the form is invalid (its errors are now on screen), it
-did not finish its async work in time, or a submission was already running. Keep the two
-reads distinct: `form.snapshot.hasFlag("valid", "idle")` is the passive "is it
-ready right now?" for a disabled button; `await form.submit()` is the active
-"make it ready, then judge." The actual network call is your code, after the
-gate opens — the engine never sends anything.
+did not finish its async work in time, or a submission was already running. Keep
+the two reads distinct: `form.snapshot.hasFlag("valid", "idle")` is the passive
+"is it ready right now?" for a disabled button; `await form.submit()` is the
+active "make it ready, then judge." The actual network call is your code, after
+the gate opens — the engine never sends anything.
 
 > After a successful `submit()`, the form stays `submitted` until `reset()` or
-> the next `submit()`: editing a field does not bring it back to `idle`. A button guarded by
-> `!hasFlag("valid", "idle")` therefore stays disabled after the first send
-> unless you reset. If the form stays on screen after sending, guard on
-> `hasFlag("submitting")` instead. Details:
+> the next `submit()`: editing a field does not bring it back to `idle`. A
+> button guarded by `!hasFlag("valid", "idle")` therefore stays disabled after
+> the first send unless you reset. If the form stays on screen after sending,
+> guard on `hasFlag("submitting")` instead. Details:
 > [Submit a form](https://keleslz.github.io/slz-form/docs/guides/submit).
 
 ## Engine errors
 
 When the **code** of a behavior or a rule *throws* — an async hook rejects, an
-engine guard is violated, a rule crashes — the engine catches it, recovers, and
-records it. It **never logs to the console**: that is the consumer's call, not
-the engine's.
+engine guard is violated, a rule crashes — the engine catches it, keeps the form
+working, and records it. It **never logs to the console**: that is the
+consumer's call, not the engine's.
 
 You read those records off the form, when you have a reason to — after a
 rejected submit, in a debug panel, in a test:
@@ -386,7 +394,10 @@ if (!(await form.submit())) {
 
 Each `EngineError` carries `scope`, `kind` (`"hook-error"` or
 `"guard-violation"`), `field`, `rule` (validator errors only), `error`, and
-`at`.
+`at`. Keeping the form working does not always mean judging correctly: a rule
+that throws synchronously currently keeps its previous verdict and is recorded
+with `scope: "behavior"` —
+[the known gap](https://keleslz.github.io/slz-form/docs/model/interrupted-pass).
 
 This is a **pull** surface — an accessor, not a subscription. An engine error is
 a crash the engine already recovered from: a diagnostic record, not a live event

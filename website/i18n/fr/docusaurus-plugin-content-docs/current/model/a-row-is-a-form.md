@@ -69,4 +69,7 @@ la lit avec `ctx.watched(...)`. L'exemple complet est dans
 Une liste dit son état avec les mots d'un formulaire : `valid` ou `error` —
 jamais `pristine`. Une liste est un agrégat, pas un champ que l'utilisateur
 touche : une ligne dont un champ obligatoire est vide met donc la liste en
-`error` avant que quiconque n'ait tapé.
+`error` avant que quiconque n'ait tapé. Lisez-le avec
+`form.array("lines").ui.hasFlag("error")`, ou en React dans
+`useForm().snapshot.arrays` — voir
+[L'état d'une liste](../guides/repeatable-fields.md#the-state-of-a-list).

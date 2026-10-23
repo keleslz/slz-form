@@ -8,8 +8,8 @@ description: Remplir un champ depuis une API à son montage — écrit de trois 
 # Préremplir un champ
 
 Pour remplir un champ depuis une API quand il apparaît, branchez-lui un
-**behavior de prefill**. Voici le même besoin écrit de trois façons, de la plus
-explicite à la plus courte. Les trois remplissent le champ de la même façon.
+**behavior de préremplissage**. Voici le même besoin écrit de trois façons, de
+la plus explicite à la plus courte. Les trois remplissent le champ de la même façon.
 
 ## 1. Une classe de behavior
 
@@ -126,7 +126,7 @@ Ce que le compilateur attrape :
 
 ```ts
 prefill({ field: "reference", fetch: async () => "x" });
-//              ~~~~~~~~~~~ '"reference"' is not assignable to '"customerReference"'
+//        ~~~~~ Type '"reference"' is not assignable to type '"customerReference"'
 ```
 
 Et sur un formulaire déclaré `{ customerReference: string; mileage: number }`,
@@ -134,8 +134,8 @@ un fetch du mauvais type ne compile pas non plus :
 
 ```ts
 prefill({ field: "mileage", fetch: async () => "not a number" });
-//                                 ~~~~~~~~~~~~~~~~~~~~~~~~~ 'string' is not
-//                                 assignable to 'number'
+//                                             ~~~~~~~~~~~~~~
+// Type 'Promise<"not a number">' is not assignable to type 'Promise<number | undefined>'
 ```
 
 ## Bon à savoir

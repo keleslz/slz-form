@@ -84,7 +84,7 @@ Les mots ci-dessous reviennent sur toutes les pages.
 | la signature exacte d'une fonction | [Référence API](reference/slz-form/index.md) |
 | savoir **pourquoi** c'est fait ainsi | [Le dossier de conception](/conception/MODEL) |
 
-## Ce que ce n'est pas
+## Ce que ce n'est pas {#what-it-is-not}
 
 - **Pas une bibliothèque de composants.** Aucun style, aucun markup : le moteur
   produit un état, le rendu est à vous. Les composants de la démo sont des

@@ -140,7 +140,7 @@ const formRegister = new FormRegister({ values: [signupForm, invoiceForm] });
 :::caution Known gap: the register is not typed by field map
 `register.get(name)` and `register.require(name)` currently return a form
 whose field map is lost, so `.field("email")` on it does not compile. This is a
-typing limitation, not the intended use of the register. Until it is fixed, use
+typing bug, not a design choice. Until it is fixed, use
 the register to list forms and read their snapshots, and import the form's own
 module to work with its fields.
 :::

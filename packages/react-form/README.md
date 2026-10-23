@@ -12,8 +12,8 @@ npm install slz-form slz-react-form
 
 ## Utilisation
 
-Déclarez le formulaire et sa map dans un module, puis dérivez-en ses hooks — le
-même découpage qu'une slice :
+Déclarez le formulaire et sa map dans un module à part, que le reste de
+l'application importe, puis dérivez-en ses hooks :
 
 ```ts
 // src/form/signup-form.ts
@@ -57,8 +57,8 @@ function EmailField() {
 }
 ```
 
-Ajouter un champ au formulaire, c'est monter ce composant. Rien à déclarer en
-amont. Démonter le composant démonte le champ, ce qui retire sa valeur du
+Ajouter un champ au formulaire, c'est monter ce composant — rien à enregistrer
+au-delà de sa ligne dans la map. Démonter le composant démonte le champ, ce qui retire sa valeur du
 payload. `EmailValidator` est un validator que vous écrivez ; `Spinner`, votre
 propre composant.
 
@@ -85,7 +85,7 @@ lève `Missing getServerSnapshot`. À monter côté client uniquement pour l'ins
 
 ## Pourquoi des peer dependencies
 
-**`react`** : deux copies cassent les hooks (« Invalid hook call »). Classique.
+**`react`** : deux copies cassent les hooks (« Invalid hook call »).
 
 **`slz-form`** : le moteur teste `result instanceof BehaviorState` pour appliquer
 la tranche d'état renvoyée par un behavior. Avec deux copies du core, un

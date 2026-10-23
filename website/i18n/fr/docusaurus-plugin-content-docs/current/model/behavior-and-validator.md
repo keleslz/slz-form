@@ -33,9 +33,10 @@ chargement… — et n'attrape jamais le `FormController` depuis l'un d'eux.
 C'est un objectif, pas une garantie : certains besoins restent hors d'atteinte
 par ce chemin. Retirer un champ du payload depuis une règle, une ligne qui lit
 son formulaire parent, un flag propre à tout le formulaire, réagir à n'importe
-quel changement dans un ensemble de champs inconnu à l'avance, et être prévenu
-des erreurs du moteur au moment où elles arrivent demandent aujourd'hui du code
-dans la vue. Voir [Un formulaire, un graphe](../guides/dependencies.md#one-form-one-graph)
+quel changement dans un ensemble de champs inconnu à l'avance demandent
+aujourd'hui du code dans la vue. Être prévenu des erreurs du moteur au moment où
+elles arrivent n'est pas encore possible du tout — lisez `form.engineErrors`
+quand vous avez une raison de le faire. Voir [Un formulaire, un graphe](../guides/dependencies.md#one-form-one-graph)
 et [Sur un champ, pas sur le formulaire](../guides/your-own-flags.md#on-a-field-not-on-the-form).
 
 ## Pourquoi la validité n'est pas partagée
@@ -114,7 +115,9 @@ const lockedWhileEmpty: IBehavior<string> = {
 `onChange` signifie « la valeur a changé », pas « l'utilisateur a tapé ». Il
 s'exécute pour `field.change()`, mais aussi pour `ctx.setValue()`, `ctx.clear()`
 et `field.update({ value })` — un prefill ou un lookup déclenche donc le
-`onChange` des autres behaviors du champ. Le hook ne sait pas d'où vient
+`onChange` de tous les behaviors du champ, y compris celui qui a écrit. Un
+`lookup` sans `watch`, qui s'exécute aux changements de son propre champ, est
+donc relancé après avoir écrit son résultat. Le hook ne sait pas d'où vient
 l'écriture ; le signal le plus proche est `ctx.ui.hasFlag("touched")`, qui dit
 si l'utilisateur a interagi avec le champ, une fois au moins.
 :::
@@ -131,9 +134,13 @@ change. Utilisez `ctx.watched(name)` pour tout ce dont vous dépendez ; gardez
 Un behavior *rend* ses flags ; c'est le champ qui les range. Une instance peut
 porter de la **configuration** — une URL, un délai — mais jamais l'état d'un
 champ. C'est ce qui permet de partager une même instance entre plusieurs
-champs :
+champs. Cet exemple utilise la fonction nue `prefill(fetcher)`, qui ne prend pas
+de nom de champ — le `prefill({ field, fetch })` typé de `behaviorsFor` est lié
+à un seul champ :
 
 ```ts
+import { prefill } from "slz-form";
+
 const prefillFromProfile = prefill(fetchProfileDefault);
 
 form.field("shipTo", { behaviors: [prefillFromProfile] });

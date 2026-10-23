@@ -9,9 +9,13 @@ description: form.submit() est une porte, pas un envoi — ce qu'il fait étape 
 
 `form.submit()` n'envoie rien. C'est une **porte** : il prépare le formulaire,
 le juge, et répond `true` ou `false`. L'envoi, c'est votre code, une fois la
-porte ouverte. Les exemples de cette page utilisent ce `signupForm`.
+porte ouverte. Les exemples de cette page utilisent ce `signupForm`. Ses champs
+sont créés et montés par vos saisies (`useField` en React, `form.field(...)` puis
+`mount()` sans framework) : un formulaire sans champ monté ne bloque rien,
+`submit()` rend donc `true` et `values()` vaut `{}`.
 
 ```ts
+// src/form/signup-form.ts
 import { FormController } from "slz-form";
 
 type SignupFields = { email: string; password: string };
@@ -44,11 +48,12 @@ Dans l'ordre :
 4. **Attend le travail en cours.** Un prefill ou un lookup encore en cours doit
    aboutir avant que le formulaire soit jugé, sinon vous enverriez une valeur
    pas encore posée. Un champ dont la valeur a changé pendant l'attente est
-   revalidé. `settleTimeout` (10 secondes par défaut) borne l'étape 3 et cette
-   attente, chacune de son côté — donc jusqu'à environ deux fois
-   `settleTimeout` au total, plus les lignes de chaque liste, soumises entre
-   les deux avec leur propre attente —, mais pas la seconde validation ; voir
-   [Réglages](#settings).
+   revalidé. Combien de temps cela peut prendre :
+   - l'étape 3 et cette attente disposent chacune de `settleTimeout`
+     (10 secondes par défaut), soit jusqu'à environ deux fois cette durée ;
+   - les lignes de chaque liste sont soumises entre les deux, avec leur propre
+     attente ;
+   - la seconde validation n'est pas bornée — voir [Réglages](#settings).
 5. **Juge.** Il rend `true` seulement si tout a abouti à temps et que le
    formulaire est `valid`. Le statut passe à `submitted` en cas de succès, à
    `idle` en cas d'échec, et les champs perdent le flag `submitting` et le
@@ -73,10 +78,10 @@ compte pas dans le verdict ; et comme il est monté, sa valeur **est** dans
 — et, pour chaque liste, le tableau des valeurs de ses lignes. Un champ non
 monté en est absent. Pour exclure un champ que l'utilisateur ne voit pas,
 démontez-le (en React, cessez d'afficher son composant). Cela vaut pour les
-champs, pas pour les listes : dès que `form.array(name)` existe, la liste est
-toujours dans le payload — démonter son composant ne démonte que les champs des
-lignes, elle envoie donc `[{}, …]`. Appelez `clear()` sur la liste pour envoyer
-`[]`.
+champs, pas pour les listes : dès que `form.array(name)` existe, la liste reste
+dans le payload — démonter son composant ne démonte que les champs des lignes,
+elle envoie donc `[{}, …]`. Appelez `clear()` sur la liste pour envoyer `[]`, ou
+`form.removeArray(name)` pour retirer la clé du payload.
 
 Le résultat est typé `Readonly<Record<string, unknown>>` : la map de champs ne
 s'y retrouve pas. Quand vous avez besoin d'une valeur typée, lisez-la sur son
@@ -96,11 +101,12 @@ Choisissez la garde qui correspond à ce qui se passe après un envoi :
 |---|---|
 | vous appelez `form.reset()` (le formulaire repart de zéro) | `disabled={!hasFlag("valid", "idle")}` |
 | le formulaire reste affiché (enregistrer et continuer, erreurs serveur à afficher) | `disabled={hasFlag("submitting")}` |
-| idem, et vous voulez aussi bloquer tant qu'il est invalide | `disabled={!hasFlag("valid") \|\| hasFlag("submitting")}` |
+| idem, et vous voulez aussi bloquer tant qu'il est invalide | `disabled={hasAny("error", "submitting")}` |
 
 `!hasFlag("valid", "idle")` se lit « non (valide et au repos) » : le bouton est
 désactivé tant que le formulaire est invalide **ou** pas au repos — en cours
-d'envoi, ou déjà `submitted`.
+d'envoi, ou déjà `submitted`. `hasAny("error", "submitting")` se lit
+« invalide ou en cours d'envoi », et reste utilisable après un envoi réussi.
 
 Laisser l'utilisateur cliquer alors que le formulaire est invalide est aussi un
 choix valable : `submit()` touche alors tous les champs, ce qui affiche toutes
@@ -118,6 +124,7 @@ deux fois, suivez-la vous-même.
 `useForm()` donne les mêmes `submit`, `reset` et flags :
 
 ```tsx
+// src/form/signup-form.ts (continued)
 import { hooksFor } from "slz-react-form";
 
 export const { useField, useForm } = hooksFor(signupForm);
@@ -181,6 +188,9 @@ lui-même, et gardez l'instance au niveau du module pour que `save()` puisse
 l'atteindre :
 
 ```tsx
+import { ExternalValidator } from "slz-form";
+import { useField } from "./form/signup-form";
+
 const emailTaken = new ExternalValidator<string>();
 
 function EmailField() {

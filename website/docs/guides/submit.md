@@ -9,9 +9,13 @@ description: form.submit() is a gate, not a sender — what it does step by step
 
 `form.submit()` does not send anything. It is a **gate**: it gets the form
 ready, judges it, and answers `true` or `false`. Sending is your code, once the
-gate opens. The examples on this page use this `signupForm`.
+gate opens. The examples on this page use this `signupForm`. Its fields are
+created and mounted by your inputs (`useField` in React, `form.field(...)` then
+`mount()` without a framework): a form with no mounted field blocks nothing, so
+`submit()` returns `true` and `values()` is `{}`.
 
 ```ts
+// src/form/signup-form.ts
 import { FormController } from "slz-form";
 
 type SignupFields = { email: string; password: string };
@@ -44,10 +48,11 @@ In order:
 4. **Waits for work in flight.** A prefill or a lookup still running must land
    before the form is judged, otherwise you would send a value that is not
    there yet. A field whose value changed while waiting is validated again.
-   `settleTimeout` (10 seconds by default) bounds step 3 and this wait, each on
-   its own — so up to about twice `settleTimeout` in total, plus the rows of
-   each list, which are submitted in between with their own wait — but not the
-   second validation; see [Settings](#settings).
+   How long it can take:
+   - step 3 and this wait each get `settleTimeout` (10 seconds by default), so
+     up to about twice that in total;
+   - the rows of each list are submitted in between, with their own wait;
+   - the second validation is not bounded — see [Settings](#settings).
 5. **Judges.** It returns `true` only if everything settled in time and the form
    is `valid`. The status becomes `submitted` on success, `idle` on failure, and
    the fields lose the `submitting` flag and the lock that came with it.
@@ -70,9 +75,10 @@ verdict; and since it is mounted, its value **is** in `form.values()`.
 included — and, for each list, the array of its rows' values. A field that is
 not mounted is left out. To leave out a field the user cannot see, unmount it
 (in React, stop rendering its component). This works for fields, not for
-lists: once `form.array(name)` exists, the list is always in the payload —
+lists: once `form.array(name)` exists, the list stays in the payload —
 unmounting its component only unmounts the rows' fields, so it sends `[{}, …]`.
-Call `clear()` on the list to send `[]`.
+Call `clear()` on the list to send `[]`, or `form.removeArray(name)` to take
+the key out of the payload.
 
 The result is typed `Readonly<Record<string, unknown>>`: the field map is not
 carried over to it. When you need a typed value, read it from its field:
@@ -92,11 +98,12 @@ guard that matches what happens after a send:
 |---|---|
 | you call `form.reset()` (the form starts over) | `disabled={!hasFlag("valid", "idle")}` |
 | the form stays on screen (save and keep editing, server errors to show) | `disabled={hasFlag("submitting")}` |
-| same, and you also want to block while invalid | `disabled={!hasFlag("valid") \|\| hasFlag("submitting")}` |
+| same, and you also want to block while invalid | `disabled={hasAny("error", "submitting")}` |
 
 `!hasFlag("valid", "idle")` reads "not (valid and idle)": it disables the
 button while the form is invalid **or** not idle — sending, or already
-`submitted`.
+`submitted`. `hasAny("error", "submitting")` reads "invalid or sending", and
+stays usable after a successful send.
 
 Letting the user click while the form is invalid is a valid choice too:
 `submit()` then touches every field, which displays every error at once.
@@ -112,6 +119,7 @@ that request is slow and must not be sent twice, keep track of it yourself.
 `useForm()` gives the same `submit`, `reset` and flags:
 
 ```tsx
+// src/form/signup-form.ts (continued)
 import { hooksFor } from "slz-react-form";
 
 export const { useField, useForm } = hooksFor(signupForm);
@@ -174,6 +182,9 @@ creates a field reads its parameters. So give the `ExternalValidator` to
 it:
 
 ```tsx
+import { ExternalValidator } from "slz-form";
+import { useField } from "./form/signup-form";
+
 const emailTaken = new ExternalValidator<string>();
 
 function EmailField() {

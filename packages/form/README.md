@@ -76,7 +76,7 @@ connaître.
 **ESM uniquement** : le package n'expose pas de build CommonJS.
 
 Ce que le moteur ne couvre pas — masques de saisie, rendu serveur — est listé
-dans [« ce que ce n'est pas »](https://keleslz.github.io/slz-form/fr/docs/).
+dans [« ce que ce n'est pas »](https://keleslz.github.io/slz-form/fr/docs/#what-it-is-not).
 
 ## Licence
 

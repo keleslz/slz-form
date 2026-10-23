@@ -48,7 +48,7 @@ an empty array. Whether an empty field is acceptable is what `required` says:
 |---|---|
 | `required: true` | an empty value gets a blocking issue, `code: "required"`, message `"This field is required"` |
 | `requiredMessage: "…"` | replaces that message |
-| `requiredTrue: true` | with `required: true`, also treats `false` as empty — for a checkbox that must be ticked. On its own it does nothing |
+| `requiredTrue: true` | with `required: true`, also treats `false` as empty — for a checkbox that must be ticked. On its own it only makes rules skip `false`; use it with `required: true` |
 
 A rule that decides **itself** whether the field is required ("required if the
 account is a company") must run on empty values: declare
@@ -156,11 +156,12 @@ import { DebouncedValidator } from "slz-form";
 new DebouncedValidator(new UsernameValidator(), 400);
 ```
 
-`DebouncedValidator` waits until the user stops typing for 400 ms before
-running the rule it wraps. The field is `loading` from the first keystroke.
-Leaving the field or submitting runs the waiting rule immediately, so a form
-submitted within the 400 ms is never judged on a stale verdict. `required` is
-not delayed.
+`UsernameValidator` stands for any rule of yours — typically one that asks the
+server whether the name is free. `DebouncedValidator` waits until the user stops
+typing for 400 ms before running the rule it wraps. The field is `loading` from
+the first keystroke. Leaving the field or submitting runs the waiting rule
+immediately, so a form submitted within the 400 ms is never judged on a stale
+verdict. `required` is not delayed.
 
 :::tip Two kinds of debounce
 `DebouncedValidator` delays a validator, which **judges** a value. The

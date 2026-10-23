@@ -52,7 +52,8 @@ the flags — `disabled={field.hasFlag("locked")}`,
 :::
 
 "The view" means your component: `useField({ locked, readOnly })`, or
-`field.update({ locked, readOnly })` in plain code.
+`field.update({ locked, readOnly })` in plain code (once the field is mounted —
+before that, `update()` does nothing).
 
 :::note An invisible field is still sent
 `invisible` takes the field out of the **verdict**: a hidden required field
@@ -120,9 +121,8 @@ prevent.
 There is no `isVisible`, no `isLoading`, no `showError`. If you need an `isX`,
 the flag you need is missing or badly named — it is not an accessor to add.
 
-The reason is practical: an earlier version shipped the flag API *and* seven
-derived booleans in the same change. Everyone used the booleans, and the flags
-were never read.
+The reason is practical: an earlier version shipped seven derived booleans next
+to the flags, and code ended up reading the booleans instead.
 
 ## Displayed versus true
 

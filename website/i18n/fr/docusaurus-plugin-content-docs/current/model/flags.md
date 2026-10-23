@@ -52,7 +52,8 @@ doit respecter les flags — `disabled={field.hasFlag("locked")}`,
 :::
 
 « La vue », c'est votre composant : `useField({ locked, readOnly })`, ou
-`field.update({ locked, readOnly })` en code sans framework.
+`field.update({ locked, readOnly })` en code sans framework (une fois le champ
+monté — avant, `update()` ne fait rien).
 
 :::note Un champ invisible est quand même envoyé
 `invisible` retire le champ du **verdict** : un champ obligatoire masqué ne
@@ -124,9 +125,8 @@ Il n'y a pas de `isVisible`, pas de `isLoading`, pas de `showError`. Si vous ave
 besoin d'un `isX`, c'est que le flag dont vous avez besoin manque ou est mal
 nommé — ce n'est pas un accesseur à ajouter.
 
-La raison est pratique : une version antérieure a livré l'API par flags *et*
-sept booléens dérivés dans le même changement. Tout le monde a utilisé les
-booléens, et les flags n'ont jamais été lus.
+La raison est pratique : une version antérieure livrait sept booléens dérivés à
+côté des flags, et le code a fini par lire les booléens à leur place.
 
 ## Affiché contre vrai {#displayed-versus-true}
 
