@@ -2,13 +2,14 @@
 id: lists
 title: Listes répétables
 sidebar_position: 3
-description: useFieldArray, useFieldOn, et pourquoi la liste ne publie pas les flags de ses lignes.
+description: Afficher une liste de lignes avec useFieldArray, brancher les champs de chaque ligne avec useFieldOn, et lire l'état de la liste dans useForm.
 ---
 
 # Listes répétables
 
-Une liste se déclare `FieldArray<Row>` dans la map. `useFieldArray(name)` en rend
-la composition ; chaque ligne est un formulaire à part entière.
+Une liste se déclare `FieldArray<Row>` dans la map de champs.
+`useFieldArray(name)` vous donne ses lignes ; chaque ligne est un petit
+formulaire à part entière, avec ses propres champs.
 
 ```ts
 // src/form/invoice-form.ts
@@ -23,6 +24,8 @@ export const { useFieldArray, useForm } = hooksFor(invoiceForm);
 ```
 
 ```tsx
+import { useFieldArray } from "./form/invoice-form";
+
 function InvoiceLines() {
     const { rows, append, remove } = useFieldArray("lines");
 
@@ -31,19 +34,29 @@ function InvoiceLines() {
             {rows.map((row) => (
                 <fieldset key={row.id}>
                     <LineLabel row={row} />
-                    <button onClick={() => remove(row.id)}>Retirer</button>
+                    <button onClick={() => remove(row.id)}>Remove</button>
                 </fieldset>
             ))}
-            <button onClick={append}>Ajouter une ligne</button>
+            <button onClick={append}>Add a row</button>
         </>
     );
 }
 ```
 
-Un champ de ligne se câble avec `useFieldOn`, en lui passant le formulaire de la
-ligne :
+`useFieldArray("lines")` n'accepte que les noms déclarés en `FieldArray` dans la
+map. Il rend `rows` (dans l'ordre d'affichage) et `append()`, `remove(id)`,
+`move(from, to)`, `clear()`.
+
+## Les champs d'une ligne
+
+Le champ d'une ligne se branche avec `useFieldOn`, en lui donnant le formulaire
+de la ligne :
 
 ```tsx
+import type { FieldArrayRow } from "slz-form";
+import { useFieldOn } from "slz-react-form";
+import type { InvoiceLine } from "./form/invoice-form";
+
 function LineLabel({ row }: { row: FieldArrayRow<InvoiceLine> }) {
     const field = useFieldOn<string, never>(row.form, { name: "label", required: true });
 
@@ -57,24 +70,35 @@ function LineLabel({ row }: { row: FieldArrayRow<InvoiceLine> }) {
 }
 ```
 
-`useFieldOn` prend un formulaire quelconque : la map de la ligne est effacée à ce
-pont générique, donc le type de la valeur se donne à la main — `<string, never>`
-ici (`never` : ce champ ne porte pas de meta d'options).
+`useFieldOn` accepte n'importe quel formulaire, il ne peut donc pas vérifier
+`name` contre la map de la ligne : vous donnez vous-même le type de la valeur —
+ici `<string, never>`, où `never` signifie que les options du champ ne portent
+aucune donnée supplémentaire. Il rend exactement ce que rend `useField`.
 
-`row.id` est **stable** : il ne change ni à la suppression d'une autre ligne, ni
-au réordonnancement. C'est une clé React fiable, et c'est ce qui évite qu'un
-déplacement casse les dépendances déclarées.
+`row.id` est **stable** : il ne change ni quand une autre ligne est retirée, ni
+quand les lignes sont réordonnées. Utilisez-le comme `key` React : chaque
+composant de ligne garde son propre état quand les lignes bougent.
 
-## Où lire l'état agrégé
+Une ligne ne contribue au payload que par ses champs montés : une ligne dont les
+composants n'affichent aucun champ apporte `{}` et ne bloque rien.
 
-L'état agrégé d'une liste — sa validité, ses erreurs, son travail en vol — se lit
-par `useForm().snapshot.arrays`, **pas** par `useFieldArray`.
+## Où lire l'état de la liste {#where-to-read-the-state-of-the-list}
 
-`useFieldArray` ne s'abonne qu'à la **composition** de la liste (ajout, retrait,
-déplacement), pour qu'une frappe dans une ligne ne re-rende pas les autres. Y
-exposer des flags les rendrait périmés dès la frappe suivante — un état faux
-affiché avec assurance, ce qui est pire que pas d'état du tout.
+L'état d'une liste — son verdict, ses erreurs, son travail en cours — se lit dans
+`useForm().snapshot.arrays`, **pas** dans `useFieldArray` :
 
-Le pourquoi — une ligne est un `FormController` identifié, jamais indexé — est
-dans [Une ligne est un formulaire](../model/a-row-is-a-form.md) ; le
-versant moteur, dans [Champs répétables](../guides/repeatable-fields.md).
+```tsx
+function LinesStatus() {
+    const { snapshot } = useForm();
+    const linesSummary = snapshot.arrays.find((list) => list.name === "lines");
+    return <p>{linesSummary?.ui.hasFlag("error") ? "A line is incomplete" : null}</p>;
+}
+```
+
+`useFieldArray` ne se re-rend que lorsque des lignes sont ajoutées, retirées ou
+déplacées, pour que taper dans une ligne ne re-rende pas les autres. S'il
+exposait les flags de la liste, ils seraient périmés dès la frappe suivante.
+
+Les raisons pour lesquelles une ligne est un formulaire sont dans
+[Une ligne est un formulaire](../model/a-row-is-a-form.md) ; le côté moteur, dans
+[Champs répétables](../guides/repeatable-fields.md).

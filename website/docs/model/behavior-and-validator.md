@@ -2,72 +2,153 @@
 id: behavior-and-validator
 title: Behavior or Validator?
 sidebar_position: 2
-description: The judge has eyes and a bell; the reactor reacts, it never decides validity.
+description: A behavior reacts, a validator judges. What each one can do, the hooks a behavior receives, and how to choose.
 ---
 
 # Behavior or Validator?
 
-The central bet: **nothing you can do with `useState` and a `useEffect` should
-be impossible here**, and nothing should force you to modify the engine.
+Everything you attach to a field is one of two things:
 
-The division of roles is clear-cut. The **behavior** reacts — it writes a value,
-publishes options, emits `loading`, `locked`, `readonly`, `invisible`. The
-**validator** judges — it is the single authority on validity.
+- a **behavior** reacts — it fills the value, loads options, sets `loading`,
+  `locked`, `readonly` or `invisible`;
+- a **validator** judges — it says whether the value is accepted. It is the
+  **only** source of validity.
 
 | | Validator | Behavior |
 |---|---|---|
-| Semantics | "is this value acceptable?" | "what happens when…?" |
-| Output | issues: `severity`, `message`, `code` | a state slice: activity, availability |
-| Writes the value | no | yes, **its own** |
-| Impact on submission | direct — a blocking issue prevents it | indirect — `submit()` waits for its async work |
+| Question it answers | "is this value acceptable?" | "what should happen when…?" |
+| What it produces | issues: `message`, `severity`, `code` | flags on its own field |
+| Writes the value | no | yes — **its own field's** value only |
+| Effect on submission | direct: a blocking issue stops it | indirect: `submit()` waits for its async work |
 
-A simple rule: if the question is "**is it valid?**", it is a validator. If it
-is "**what should happen?**", it is a behavior.
+Rule of thumb: if the question is "**is it valid?**", write a validator. If it
+is "**what should happen?**", write a behavior.
 
-## Why the authority is not shared
+The goal behind this split: anything you would do with `useState` and
+`useEffect` should be doable with a behavior or a validator, without modifying
+the engine. `packages/form/test/parity.test.ts` checks 11 such cases — cross-field
+validation, conditional `required`, server errors, a loading skeleton… — and
+never reaches for the `FormController` from inside one.
 
-If a behavior could write validity, you would have to arbitrate between two
-sources that disagree — and that trade-off has no right answer. That is what
-makes the flags trustworthy: `valid` means a judge has ruled, not that a
-component decreed it.
+It is a goal, not a guarantee: some needs are still out of reach that way.
+Leaving a field out of the payload from a rule, a row reading its parent form,
+a form-wide flag of your own and reacting to any change in a field set that is
+not known in advance all need your view code today. Being notified of engine
+errors as they happen is not possible at all yet — read `form.engineErrors`
+when you have a reason to. See [One form, one graph](../guides/dependencies.md#one-form-one-graph)
+and [On a field, not on the form](../guides/your-own-flags.md#on-a-field-not-on-the-form).
 
-For the separation to hold without making anything impossible, the judge gets
-what it needs to work — never what it needs to write. **Eyes**: it declares
-`watch` and reads `ctx.watched(...)`. A **bell**: `requestRevalidation()`, which
-it rings to re-judge when its verdict can change without the value moving.
+## Why validity is not shared
+
+If a behavior could write validity, two sources could disagree, and there is no
+right way to arbitrate between them. Keeping a single judge is what makes the
+flags trustworthy: `valid` means a validator ruled, not that some component
+decided so.
+
+So the validator gets what it needs to judge — never a way to write:
+
+- **read access to other fields**: it declares them in `watch` and reads them
+  with `ctx.watched(name)`;
+- **a way to ask for a re-run**: inside a validator subclass,
+  `this.requestRevalidation()` re-runs it when its verdict can change while the
+  value did not — this is how `ExternalValidator` applies server errors.
 
 | Need | How |
 |---|---|
-| Confirm a password, order two dates | the validator declares `watch` and reads `ctx.watched(...)` |
-| `required` only in some cases | the validator decides, with `validateWhenEmpty` |
-| An error returned by the server | `ExternalValidator`, composed with the business rules |
-| Re-judge after the fact, with no new keystroke | `requestRevalidation()`, the validator's bell |
+| Confirm a password, compare two dates | the validator declares `watch` and reads `ctx.watched(...)` |
+| `required` only in some cases | the validator decides, with `validateWhenEmpty = true` |
+| An error returned by the server | an `ExternalValidator`, next to your rules: `validator: [rules, serverIssues]` |
+| Re-judge with no new keystroke | `this.requestRevalidation()` from the validator |
 | A warning that does not block | `report.warn(...)` |
-| Route a message to a snackbar | `report.error(msg, { code })`, and the view reads `code` |
-| Lock until another field is valid | `lockUntilValid({ watch })` |
-| Invoice lines, dynamic lists | `form.array("lines")` — a row is a form |
+| Show a message in a toast, not under the field | `report.error(message, { code })`, and the view routes on `code` |
+| Lock a field until another is valid | `lockUntilValid({ watch })` |
+| Invoice lines, dynamic lists | `form.array("lines")` — [a row is a form](a-row-is-a-form.md) |
 
-This criterion is verified, not asserted: `packages/form/test/parity.test.ts`
-takes each case and writes it with a behavior or a validator, **without ever
-capturing the `FormController`**. A case that could only be done by capturing
-the form would not be covered — it would be worked around.
+Writing validators: [Validate](../guides/validate.md).
 
-## A behavior carries no state
+## Writing a behavior
 
-It *returns* its state slice; the controller stores it. An instance carries
-**configuration** — a URL, a debounce —, never state, otherwise sharing it
-between two fields would couple them.
+A behavior is a plain object (or an instance of the `Behavior` base class) with
+optional **hooks** — functions the engine calls at a moment of the field's life:
+
+| Hook | Called when |
+|---|---|
+| `onMount(ctx)` | the field is mounted, and again on `reset()` |
+| `onChange(ctx, value)` | the field's value changed — by the user **or** by code (see the caution below) |
+| `onFocus(ctx)` / `onBlur(ctx)` | the input gains or loses focus |
+| `onSubmit(ctx)` | the form is being submitted |
+| `onDependencyChanged(ctx, dependency)` | a field listed in `watch` changed — its value by default ([details](../guides/dependencies.md)) |
+| `onUnmount(ctx)` | the field is unmounted — clean up here; writes are ignored |
+
+A hook returns the flags the behavior wants on the field — a `BehaviorState`,
+built from `ctx.state` — or a promise of one, or nothing ("no change").
 
 ```ts
-// ✓ shareable: carries only its configuration, no field state
+import type { IBehavior } from "slz-form";
+
+const lockedWhileEmpty: IBehavior<string> = {
+    onMount: (ctx) => (ctx.getValue() ? ctx.state.unlock() : ctx.state.lock()),
+    onChange: (ctx, value) => (value ? ctx.state.unlock() : ctx.state.lock()),
+};
+```
+
+`ctx` is what a hook receives:
+
+| Member | What it is |
+|---|---|
+| `ctx.name` | the name of the field the behavior is attached to |
+| `ctx.state` | the flags **this behavior** currently sets, as a `BehaviorState`. Its methods return a new state: `loading()`, `idle()`, `lock()`, `unlock()`, `readOnly()`, `writable()`, `hide()`, `show()`, `mark(word)`, `unmark(word)`, `clear()` |
+| `ctx.push(state)` | publishes a state **now**, before the hook returns — the way to show `loading` during an `await` |
+| `ctx.getValue()` / `ctx.setValue(value)` | read or write this field's value. `setValue` does not mark the field touched |
+| `ctx.clear()` | empties the value **and** makes the field untouched again, so no "required" error appears for a clearing the user did not do |
+| `ctx.setOptions(options)` | publishes the option list (select, radio…) |
+| `ctx.watched(name)` | reads a field declared in `watch`: `value`, `errors`, `hasFlag(...)`. Throws for an undeclared name |
+| `ctx.ui` | the field's merged flags — everything every behavior and the validator say |
+| `ctx.form` | read access to the form: `name`, `status`, `field(name)`, `values()` |
+| `ctx.signal` | an `AbortSignal` aborted when the field unmounts — pass it to `fetch`, check it after each `await` |
+
+:::caution `onChange` also fires on programmatic writes
+`onChange` means "the value changed", not "the user typed". It runs for
+`field.change()`, but also for `ctx.setValue()`, `ctx.clear()` and
+`field.update({ value })` — so a prefill or a lookup triggers the `onChange` of
+every behavior on that field, including the one that wrote. A `lookup` without
+`watch`, which runs on its own field's changes, therefore runs again after
+writing its result. The hook is not told where a write came
+from; the closest signal is `ctx.ui.hasFlag("touched")`, which says whether the
+user has interacted with the field at all.
+:::
+
+:::caution `ctx.form` is a one-off read
+`ctx.form.field(name)` and `ctx.form.values()` read any field without checking
+`watch`, and nothing re-runs your hook when what you read changes. Use
+`ctx.watched(name)` for anything you depend on; keep `ctx.form` for one-off
+reads such as the form's `name`.
+:::
+
+## A behavior holds no field state
+
+A behavior *returns* its flags; the field stores them. An instance may carry
+**configuration** — a URL, a delay — but never the state of a field. That is
+what lets you share one instance between fields. This sample uses the plain
+`prefill(fetcher)` function, which takes no field name — the typed
+`prefill({ field, fetch })` from `behaviorsFor` is bound to one field:
+
+```ts
+import { prefill } from "slz-form";
+
 const prefillFromProfile = prefill(fetchProfileDefault);
 
 form.field("shipTo", { behaviors: [prefillFromProfile] });
 form.field("billTo", { behaviors: [prefillFromProfile] });
 ```
 
-## A field reads, it never writes to its neighbor
+A **validator** instance, on the other hand, holds its field's verdict: giving
+the same instance to two fields throws when the second one is created. Create
+one per field — only a member of an array of two or more validators may be
+shared.
 
-A field is the source of truth for itself and for nothing else. Cross-field
-locking, hiding and reloading all go through a declared **read**, with no
-mutation. See [Declared dependencies](../guides/dependencies.md).
+## A field reads its neighbors, it never writes to them
+
+A field is the source of truth for itself and nothing else. To fill `city` from
+`postcode`, the behavior goes on `city` and watches `postcode` — never the other
+way around. See [Declared dependencies](../guides/dependencies.md).

@@ -1,7 +1,7 @@
 # slz-react-form
 
 Adapter React de [`slz-form`](https://www.npmjs.com/package/slz-form) : un
-provider et trois hooks. Aucune logique métier — elle vit entièrement dans le
+provider et quelques hooks. Aucune logique métier — elle vit entièrement dans le
 core.
 
 📖 **[Documentation complète](https://keleslz.github.io/slz-form/fr/docs/react/installation)**
@@ -12,11 +12,14 @@ npm install slz-form slz-react-form
 
 ## Utilisation
 
-Déclarez le formulaire et sa map dans un module, puis dérivez-en ses hooks — le
-même découpage qu'une slice :
+Déclarez le formulaire et sa map dans un module à part, que le reste de
+l'application importe, puis dérivez-en ses hooks :
 
 ```ts
 // src/form/signup-form.ts
+import { FormController } from "slz-form";
+import { hooksFor } from "slz-react-form";
+
 export type SignupFields = { email: string; postcode: string; city: string };
 
 export const signupForm = new FormController<SignupFields>({ name: "signup" });
@@ -28,6 +31,8 @@ export const { useField, useFieldArray, useForm } = hooksFor(signupForm);
 a ni provider à monter ni formulaire à nommer sur chaque champ :
 
 ```tsx
+import { useField } from "./form/signup-form";
+
 function EmailField() {
     const field = useField({
         name: "email",              // ← contraint à SignupFields
@@ -52,8 +57,10 @@ function EmailField() {
 }
 ```
 
-Ajouter un champ au formulaire, c'est monter ce composant. Rien à déclarer en
-amont.
+Ajouter un champ au formulaire, c'est monter ce composant — rien à enregistrer
+au-delà de sa ligne dans la map. Démonter le composant démonte le champ, ce qui
+retire sa valeur du payload. `EmailValidator` est un validator que vous écrivez ;
+`Spinner`, votre propre composant.
 
 `useField` ne fait que brancher le cycle de vie React sur le controller et lire
 son snapshot via `useSyncExternalStore` : **aucun `useState` ne recopie l'état
@@ -65,6 +72,7 @@ du moteur**, et un champ qui change ne re-rend pas les autres.
 |---|---|
 | Les hooks en détail | [documentation](https://keleslz.github.io/slz-form/fr/docs/react/hooks) |
 | Listes répétables | [documentation](https://keleslz.github.io/slz-form/fr/docs/react/lists) |
+| Le bouton de soumission, et la garde qui lui convient | [documentation](https://keleslz.github.io/slz-form/fr/docs/guides/submit) |
 | Signatures exactes | [référence API](https://keleslz.github.io/slz-form/fr/docs/reference/slz-react-form) |
 
 ## Ce que l'adapter ne fait pas encore
@@ -77,10 +85,10 @@ lève `Missing getServerSnapshot`. À monter côté client uniquement pour l'ins
 
 ## Pourquoi des peer dependencies
 
-**`react`** : deux copies cassent les hooks (« Invalid hook call »). Classique.
+**`react`** : deux copies cassent les hooks (« Invalid hook call »).
 
 **`slz-form`** : le moteur teste `result instanceof BehaviorState` pour appliquer
-la tranche d'état renvoyée par un behavior. Avec deux copies du core, un
+les flags qu'un behavior renvoie. Avec deux copies du core, un
 `BehaviorState` construit par l'une échoue le test dans l'autre — **les flags
 sont alors silencieusement ignorés**, sans erreur ni crash. Le champ arrête
 simplement de réagir.

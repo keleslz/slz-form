@@ -2,15 +2,15 @@
 id: first-form
 title: Premier formulaire
 sidebar_position: 3
-description: Déclarer la map des champs, dériver les helpers typés, monter un champ.
+description: Créer un formulaire, lui ajouter un champ et une règle, lire son état — puis dériver des helpers typés depuis la map de champs.
 ---
 
 # Premier formulaire
 
 ## Le moteur, seul
 
-Aucun framework requis : ce code tourne tel quel dans un navigateur, sous Node,
-Deno ou Bun.
+Aucun framework n'est nécessaire : ce code tourne tel quel dans un navigateur,
+sous Node, Deno ou Bun.
 
 ```ts
 import { FormController, IValidator, type ValidationReport } from "slz-form";
@@ -19,7 +19,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 class EmailValidator extends IValidator<string> {
     protected validate(value: string, report: ValidationReport): void {
-        if (!EMAIL.test(value)) report.error("Adresse email invalide");
+        if (!EMAIL.test(value)) report.error("Invalid email address");
     }
 }
 
@@ -31,21 +31,41 @@ const unsubscribe = email.listen(() => console.log(email.snapshot.flags));
 email.mount();
 email.change("ada@lovelace.dev");
 
-email.hasFlag("valid");   // true — change() a marqué le champ touché, la règle a jugé
+email.hasFlag("valid");   // true
+unsubscribe();
 ```
 
-La map passée à `FormController` déclare ce que vaut chaque champ ; tout le reste
-s'en infère — le nom passé à `field()`, la valeur, le meta des options. Un
-`field()` répété rend la même instance : le champ est créé au premier appel.
+Ce que fait chaque ligne :
 
-## La map, et ce qu'elle fait gagner
+- `new FormController<{ email: string }>({ name: "signup" })` crée le
+  formulaire. L'argument de type est la **map de champs** : elle liste les
+  champs et le type de chaque valeur. `name` identifie le formulaire ; il doit
+  être unique dans votre application.
+- `form.field("email", params)` crée le champ au premier appel et rend la
+  **même instance** à chaque appel suivant. `params` n'est lu qu'à ce premier
+  appel.
+- `email.listen(callback)` s'abonne au champ : le callback s'exécute à chaque
+  changement de son snapshot. Il rend la fonction qui désabonne.
+- `email.mount()` fait entrer le champ dans le formulaire qu'on remplit. Un champ
+  non monté est absent de `form.values()` et du
+  [verdict](../index.md#vocabulary) du formulaire — s'il peut partir ou non.
+- `email.change(value)` est ce qu'appelle une saisie quand l'utilisateur tape.
+  Il marque le champ `touched` et lance le validator.
+- `email.hasFlag("valid")` lit un flag. Il vaut `true` ici parce que le champ a
+  été touché et que la règle a accepté la valeur.
 
-Le formulaire se déclare une fois, dans son module contextualisé — le pendant
-d'une slice. Behaviors et hooks en sont dérivés, donc entièrement typés sur la
-map :
+Pour utiliser ce champ depuis du DOM sans framework, voir
+[Sans framework](../guides/without-a-framework.md). Pour envoyer le formulaire,
+voir [Soumettre un formulaire](../guides/submit.md).
+
+## La map de champs, et ce qu'elle apporte
+
+Dans une application, déclarez le formulaire une fois, dans un module à part que
+le reste de l'application importe. Les behaviors prêts à l'emploi et les hooks
+React en dérivent, donc ils sont typés par la map :
 
 ```ts
-// src/form/car-configuration-form.ts        (≈ une slice)
+// src/form/car-configuration-form.ts
 import { behaviorsFor, FormController } from "slz-form";
 import { hooksFor } from "slz-react-form";
 
@@ -63,88 +83,131 @@ export const { lookup, loadOptions, suggest, prefill, lockWhile, lockUntilValid,
 export const { useField, useForm, useFieldArray } = hooksFor(carForm);
 ```
 
-`CarFields` est un `type`, pas une `interface` : seul le premier porte la
-signature d'index implicite qu'exige la contrainte `FieldsShape` du moteur.
+`CarFields` est un `type`, pas une `interface` : seul un alias de type porte la
+signature d'index implicite qu'exige la contrainte `FieldsShape` du moteur. Avec
+une `interface`, `new FormController<CarFields>` ne compile pas.
 
-Il n'y a plus de formulaire à nommer sur chaque champ, et `name` est vérifié —
-y compris contre le **type** du champ :
+Les noms de champs sont désormais vérifiés — y compris contre le type de valeur
+que manipule un composant. Dans la démo, `NumberField` n'accepte que les champs
+numériques :
 
 ```tsx
-<NumberField name="mileage" label="Kilométrage" />   // ✓
-<NumberField name="brand" label="Marque" />          // ✗ brand est un string, ne compile pas
-<TextField   name="typo" label="Inconnu" />          // ✗ champ inexistant, ne compile pas
+<NumberField name="mileage" label="Mileage" />       // ✓
+<NumberField name="brand" label="Brand" />           // ✗ brand is a string: does not compile
+<TextField   name="typo" label="Unknown" />          // ✗ unknown field: does not compile
 ```
 
-C'est le prix assumé du narrowing : ajouter un champ coûte une ligne dans la map
-en plus de celle dans la vue. En échange, **aucun `as`** dans le code
-consommateur.
+Le prix : ajouter un champ coûte une ligne dans la map en plus de celle dans la
+vue. En échange, noms de champs, valeurs et callbacks des helpers sont typés
+**sans aucun `as`**. Trois endroits ne sont pas typés par la map — deux que vous
+gérez sans cast, un que vous évitez pour l'instant. `form.values()` est un
+`Record<string, unknown>` : lisez une valeur typée avec `form.get(name)`
+([Soumettre un formulaire](../guides/submit.md#what-you-send-formvalues)). Une
+valeur lue avec `ctx.watched()` est `unknown` : affinez-la
+([Champs répétables](../guides/repeatable-fields.md#a-rule-about-the-whole-list)).
+Et un formulaire pris dans le `FormRegister` n'est aujourd'hui pas typé — un
+écart connu ; en attendant le correctif, importez plutôt le module propre au
+formulaire ([Les hooks](../react/hooks.md#formprovider-and-useformregister)).
 
-## Les behaviors prêts à l'emploi
+## Les behaviors prêts à l'emploi {#the-ready-made-behaviors}
 
-`behaviorsFor(carForm)` rend sept helpers, tous liés à la map. Ce qu'un champ
-observe dans `watch` est ce que reçoit le callback, narrowé sur la map :
+`behaviorsFor(carForm)` rend sept helpers, tous typés par la map. Les champs
+que vous listez dans `watch` sont exactement ce que reçoit le callback, avec
+leurs types :
 
 ```ts
 lookup({
     field: "model",
     watch: ["brand"],
     debounce: 400,
-    fetch: ({ brand }) => fetchDefaultModel(brand),   // brand: string
+    fetch: ({ brand }) => fetchDefaultModel(brand),   // brand: string | undefined
 });
 ```
 
-Deux listes, et la distinction compte :
-
-| Depuis `behaviorsFor(form)` — typés sur la map | Exports nus — le nom du champ est à votre charge |
+| Helper | Ce qu'il fait |
 |---|---|
-| `lookup`, `loadOptions`, `suggest`, `prefill`, `lockWhile`, `lockUntilValid`, `hideWhen` | `lookup`, `loadOptions`, `prefill`, `lockWhile`, `hideWhen`, `dependsOn`, `createBehavior` |
+| `prefill({ field, fetch })` | remplit le champ depuis une API à son montage — `loading` et `locked` pendant l'appel, toujours non touché ensuite |
+| `lookup({ field, watch, debounce, fetch })` | appelle une API quand un champ observé change (ou quand le champ lui-même change, sans `watch`) et **écrit** le résultat |
+| `loadOptions({ field, watch, on, debounce, fetch })` | charge la liste d'options du champ au montage, puis à nouveau quand un champ observé change |
+| `suggest({ field, debounce, fetch })` | champ de recherche : recharge les suggestions à la frappe, sans verrouiller le champ |
+| `lockWhile({ watch, when })` | verrouille le champ tant que `when` renvoie `true` |
+| `hideWhen({ watch, when })` | masque le champ (`invisible`) tant que `when` renvoie `true` |
+| `lockUntilValid({ watch })` | verrouille le champ jusqu'à ce que chaque champ observé soit accepté par son validator |
 
-`suggest` n'a pas de `watch` : il ne lit aucun autre champ. S'il n'existe que par
-`behaviorsFor`, c'est parce que les options qu'il produit sont typées sur son
-propre champ. `lockUntilValid`, lui, est le seul qui lit d'autres champs — il
-observe leur **validité**, pas leur valeur (`on: ["validity"]`).
+Quelques options bonnes à connaître :
 
-Quand le besoin sort de l'ordinaire, le même comportement s'écrit à la main :
-[les trois formes du même prefill](../guides/prefill.md) montrent le passage
-de la classe écrite entièrement à l'utilitaire en trois lignes.
+- `on` (`loadOptions`) : ce qui recharge la liste — `"mount"`, `"dependency"`
+  (un champ observé a changé), `"change"` (l'utilisateur tape). Par défaut :
+  `["mount"]`, plus `"dependency"` quand `watch` est renseigné.
+- `resetOnReload` (`loadOptions`, `true` par défaut) : vider la valeur du champ
+  quand un champ observé recharge la liste.
+- `onError` (`loadOptions`) : appelé quand le chargement échoue. Sans lui, un
+  échec ressemble à une liste vide.
+- `pending` (`lookup`, `loadOptions`, `suggest`) : une fonction qui reçoit
+  l'état du behavior et rend les flags à afficher pendant l'appel, par exemple
+  `pending: (state) => state.loading()`. Par défaut : `loading` + `locked`
+  (`suggest` : `loading` seul). La fonction exportée `openWhilePending` est
+  cette version `loading` seul.
+
+`prefill` et `lookup` laissent la valeur inchangée si `fetch` échoue, et
+n'enregistrent rien : si vous avez besoin de le savoir, attrapez l'erreur dans
+votre `fetch`. Les signatures exactes sont dans la
+[référence API](/docs/reference/slz-form).
+
+Certains existent aussi en fonctions nues, avec leurs propres signatures et
+sans typage par la map : `lookup(fetcher, params)`,
+`loadOptions(fetcher, params)`, `prefill(fetcher)`,
+`lockWhile(condition, watch)`, `hideWhen(watch, predicate)`. `suggest` et
+`lockUntilValid` n'existent que dans `behaviorsFor`. `dependsOn(watch, effect)`
+et `createBehavior(definition)` vous aident à écrire les vôtres. Préférez les
+versions de `behaviorsFor`.
+
+Quand aucun helper ne convient, vous écrivez le behavior à la main :
+[Préremplir un champ](../guides/prefill.md) montre le même besoin écrit de trois
+façons, de la classe complète jusqu'au helper.
 
 ## Le modèle en trente secondes
 
-```
-FormRegister              tous les formulaires de l'app          (≈ root reducer)
-  └── FormController      un formulaire, orchestre ses Fields    (≈ slice)
-        ├── DependencyGraph   réactivité inter-champs, cycles rejetés au câblage
-        └── FieldController   un input : valeur, interactions, flags, validité
-              ├── IBehavior[]     réactions → retournent une tranche d'état
-              ├── IValidator<T>   autorité de validité
-              └── FieldSnapshot   ce que le composant rend
-```
+- **`FormRegister`** — tous les formulaires de l'application, réunis en un seul
+  endroit (facultatif).
+  - **`FormController`** — un formulaire : crée ses champs, rassemble leurs
+    valeurs, contrôle la soumission.
+    - **graphe de dépendances** — qui observe qui ; un cycle est refusé à la
+      création d'un champ.
+    - **`FieldController`** — une saisie : sa valeur, ses interactions, ses
+      flags et sa validité.
+      - **behaviors** — réagissent, et rendent les flags qu'ils veulent sur le
+        champ.
+      - **validator** — juge la valeur ; la seule source de validité.
+      - **`FieldSnapshot`** — ce que le composant affiche.
 
 ## Des noms de champ qui ne sont pas des identifiants
 
-Un champ peut s'appeler `Toto-1`, `2-champ` ou `champ avec espaces` : la map
-accepte n'importe quelle clé, et le narrowing tient intégralement.
+Un champ peut s'appeler `first-name`, `2nd-field` ou `name with spaces` : la map
+accepte n'importe quelle clé — sauf `__proto__`, qui corrompt `form.values()` —
+et le typage tient.
 
 ```ts
-const form = new FormController<{ "Toto-1": string; "2-champ": number }>({ name: "f" });
+const form = new FormController<{ "first-name": string; "2nd-field": number }>({ name: "f" });
 
-form.field("Toto-1").snapshot.value   // string | undefined
+form.field("first-name").snapshot.value   // string | undefined
 ```
 
-Seule l'**écriture** du callback change, parce que JavaScript ne sait pas
-destructurer un nom qui n'est pas un identifiant :
+Seule change la façon d'écrire un callback, parce que JavaScript ne peut pas
+déstructurer un nom qui n'est pas un identifiant. Dans un behavior qui observe
+les deux champs :
 
 ```ts
-fetch: async ({ "Toto-1": toto1, "2-champ": deux }) => { … }   // string, number
-fetch: async (deps) => deps["Toto-1"]                          // string | undefined
+fetch: async ({ "first-name": firstName, "2nd-field": second }) => { … }   // string | undefined, number | undefined
+fetch: async (deps) => deps["first-name"]                                   // string | undefined
 ```
 
 En revanche, ceci n'est pas du JavaScript valide :
 
 ```ts
-fetch: async ({ Toto-1 }) => …
-//                  ~ error TS1005: ',' expected
+fetch: async ({ first-name }) => …
+//                   ~ error TS1005: ',' expected
 ```
 
-`Toto-1` se lit comme `Toto` moins `1` : c'est une erreur de syntaxe, pas de
-type — le compilateur échoue au parsing avant même de regarder les types.
+`first-name` se lit `first` moins `name` : c'est une erreur de syntaxe, pas une
+erreur de type.

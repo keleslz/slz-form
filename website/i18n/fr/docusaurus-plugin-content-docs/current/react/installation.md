@@ -2,22 +2,22 @@
 id: installation
 title: Brancher React
 sidebar_position: 1
-description: Un module de formulaire, des hooks dérivés, aucun provider obligatoire.
+description: Déclarer le formulaire dans un module, en dériver des hooks typés, et écrire un premier composant de champ. Aucun provider requis.
 ---
 
 # Brancher React
 
-L'adapter est **un provider et trois hooks**. Aucune logique métier : elle vit
-entièrement dans le core.
+`slz-react-form` est un pont mince : un provider et quelques hooks. Il ne porte
+aucune logique métier — elle vit tout entière dans le cœur.
 
 ```bash
 npm install slz-form slz-react-form
 ```
 
-## Le module de formulaire
+## Le module du formulaire
 
-Déclarez le formulaire et sa map dans un module, puis dérivez-en ses hooks — le
-même découpage qu'une slice :
+Déclarez le formulaire et sa map de champs dans un module à part, puis
+dérivez-en les hooks :
 
 ```ts
 // src/form/signup-form.ts
@@ -31,19 +31,18 @@ export const signupForm = new FormController<SignupFields>({ name: "signup" });
 export const { useField, useFieldArray, useForm } = hooksFor(signupForm);
 ```
 
-`name` est alors contraint aux champs déclarés, et la valeur est inférée. Il n'y
-a **ni provider à monter, ni formulaire à nommer** sur chaque champ.
+Les hooks rendus par `hooksFor` sont liés à ce formulaire et typés par sa map :
+`name` n'accepte que les champs déclarés, et le type de la valeur est inféré. Il
+n'y a **aucun provider à monter** et aucun formulaire à nommer sur chaque champ.
 
-`FormProvider` et `useFormRegister` existent pour l'accès transverse au
-`FormRegister` — utile quand un composant très éloigné doit atteindre un
-formulaire —, pas pour le cas courant.
-
-## Un champ
+## Un composant de champ
 
 ```tsx
+import { useField } from "./form/signup-form";
+
 function EmailField() {
     const field = useField({
-        name: "email",              // ← contraint à SignupFields
+        name: "email",              // ← only names declared in SignupFields compile
         required: true,
         validator: new EmailValidator(),
     });
@@ -66,15 +65,26 @@ function EmailField() {
 }
 ```
 
-**Ajouter un champ au formulaire, c'est monter ce composant.** Rien à déclarer
-en amont.
+`EmailValidator` est un validator que vous écrivez (voir
+[Valider](../guides/validate.md)) ; `Spinner` est votre propre composant.
 
-Les deux fonctions de lecture — `hasFlag` / `hasAny` — et l'isolation des rendus
-sont détaillées dans [Les hooks](./hooks.md) ; les listes, dans
-[Listes répétables](./lists.md).
+**Ajouter un champ au formulaire, c'est afficher un tel composant.** Le premier
+rendu crée le champ ; monter le composant monte le champ ; démonter le composant
+le démonte, ce qui retire sa valeur de `values()`.
+
+Ensuite :
+
+- les hooks en détail, et ce que chacun rend : [Les hooks](./hooks.md) ;
+- les listes de lignes : [Listes répétables](./lists.md) ;
+- le bouton de soumission : [Soumettre un formulaire](../guides/submit.md#in-react).
 
 ## Pas de rendu serveur, pour l'instant
 
-`useField`, `useFieldArray` et `useForm` lisent leur état par
-`useSyncExternalStore` **sans** `getServerSnapshot` : un `renderToString` lève
-`Missing getServerSnapshot`. À monter côté client uniquement.
+`useField`, `useFieldArray` et `useForm` lisent leur état avec
+`useSyncExternalStore` **sans** `getServerSnapshot` : `renderToString` lève
+`Missing getServerSnapshot`. Affichez ces composants côté client uniquement.
+
+Un formulaire déclaré au niveau d'un module, comme ci-dessus, est **un seul
+objet par processus JavaScript**. Dans le navigateur, c'est ce qu'on veut. Sur un
+serveur, il serait partagé par toutes les requêtes et tous les utilisateurs —
+une raison de plus de garder les formulaires côté client.

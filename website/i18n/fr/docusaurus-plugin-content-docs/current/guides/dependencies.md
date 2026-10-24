@@ -1,58 +1,134 @@
 ---
 id: dependencies
 title: Dépendances déclarées
-sidebar_position: 3
-description: Observer un voisin — sa valeur, ou son état — sans jamais écrire chez lui.
+sidebar_position: 4
+description: Faire réagir un champ à un autre — sa valeur, son verdict ou son chargement — en le déclarant dans watch, sans jamais lui écrire.
 ---
 
 # Dépendances déclarées
 
-Un behavior liste les champs qu'il observe. Le graphe est construit au câblage :
-un **cycle est rejeté là**, pas découvert en boucle infinie à l'exécution.
+Quand un champ doit réagir à un autre — recharger ses options quand `brand`
+change, se verrouiller tant que `postcode` n'est pas valide —, le behavior ou le
+validator liste cet autre champ dans `watch`. Le moteur le rappelle alors chaque
+fois que le champ observé change.
 
 ```ts
+import { behaviorsFor } from "slz-form";
+
 const { lockUntilValid } = behaviorsFor(form);
 
-lockUntilValid({ watch: ["postcode"] });
+form.field("city", { behaviors: [lockUntilValid({ watch: ["postcode"] })] });
 ```
 
-## Sur quel axe être réveillé
+Le moteur construit le graphe de qui observe qui à la création de chaque champ.
+Un **cycle** (`a` observe `b`, `b` observe `a`) ou un champ qui s'observe
+lui-même est **refusé sur-le-champ** — `form.field()` lève une erreur — au lieu
+d'être découvert plus tard en boucle infinie.
 
-Un nom seul est déclenché par la **valeur** :
+## C'est le champ qui reçoit qui travaille
+
+Un champ peut lire les autres ; il ne peut **jamais** en écrire un. Pour vider
+`region` quand `country` change, le behavior se pose sur `region` et observe
+`country` :
 
 ```ts
-{ watch: ["postcode"] }                                   // ≡ on: ["value"]
+import type { IBehavior } from "slz-form";
+
+const clearWhenCountryChanges: IBehavior<string> = {
+    watch: ["country"],
+    onDependencyChanged: (ctx) => ctx.clear(),
+};
+
+form.field("region", { behaviors: [clearWhenCountryChanges] });
 ```
 
-C'est le défaut, et il évite qu'une revalidation rejoue les appels réseau des
-behaviors qui observent le champ. Pour réagir à autre chose, on nomme l'axe :
+Si plusieurs champs doivent réagir à un même champ, chacun déclare son propre
+behavior. C'est ce qui garde le graphe prévisible : si un champ pouvait écrire
+chez ses voisins, l'ordre d'exécution des behaviors deviendrait visible, et deux
+behaviors pourraient s'écraser mutuellement sans qu'aucun ait tort.
+
+## Ce qui réveille un behavior
+
+Un nom seul réveille le behavior quand la **valeur** du champ observé change :
 
 ```ts
-{ watch: [{ field: "postcode", on: ["value"] }] }      // défaut — la valeur change
-{ watch: [{ field: "postcode", on: ["validity"] }] }   // le verdict — ce que fait lockUntilValid
-{ watch: [{ field: "postcode", on: ["activity"] }] }   // loading / idle
+{ watch: ["postcode"] }                                   // same as on: ["value"]
 ```
 
-`onDependencyChanged(ctx, dependency)` reçoit alors la vue du champ observé —
-`dependency.value`, `dependency.errors`, `dependency.hasFlag(...)` — en lecture
-seule.
-
-## Lire, jamais écrire
-
-Un champ peut lire les autres ; il ne peut **jamais** en écrire un. Les
-verrouillages, masquages et rechargements croisés passent tous par cette
-lecture, sans mutation.
-
-C'est ce qui rend le graphe fiable : si écrire chez le voisin était possible,
-l'ordre d'exécution deviendrait observable, et deux behaviors pourraient se
-contredire sans qu'aucun ait tort.
-
-## Lire un champ non déclaré lève
+C'est le défaut, et c'est voulu : toucher ou revalider `postcode` ne rejoue pas
+les appels réseau des behaviors qui l'observent. Pour réagir à autre chose,
+nommez-le :
 
 ```ts
-ctx.watched("postcode")   // ✓ déclaré
-ctx.watched("city")       // ✗ lève — reads "city" without declaring it in `watch`
+{ watch: [{ field: "postcode", on: ["value"] }] }      // the value changed (default)
+{ watch: [{ field: "postcode", on: ["validity"] }] }   // its verdict or displayed validity changed
+{ watch: [{ field: "postcode", on: ["activity"] }] }   // it went loading / idle
 ```
 
-L'erreur est immédiate et nommée. Une dépendance implicite est précisément ce
-qu'on ne veut pas pouvoir installer par distraction.
+`onDependencyChanged(ctx, dependency)` reçoit alors une vue **en lecture seule**
+du champ observé — `dependency.name`, `dependency.value`,
+`dependency.errors`, `dependency.hasFlag(...)` :
+
+```ts
+const lockWhileCountryInvalid: IBehavior<string> = {
+    watch: [{ field: "country", on: ["value", "validity"] }],
+    onMount: (ctx) => (ctx.watched("country")?.errors.length ? ctx.state.lock() : ctx.state.unlock()),
+    onDependencyChanged: (ctx, dependency) =>
+        dependency.errors.length > 0 ? ctx.state.lock() : ctx.state.unlock(),
+};
+```
+
+`onMount` pose l'état de départ ; avec `onDependencyChanged` seul, le champ
+resterait déverrouillé jusqu'au premier changement de `country`.
+
+Le `watch` d'un validator est une simple liste de noms : la règle est relancée
+quand la **valeur** de l'un de ces champs change.
+
+Une liste déclarée avec `FieldArray` s'observe sur sa **valeur** seulement : le
+tableau des valeurs de ses lignes, qui change quand la valeur d'une ligne change
+ou qu'une ligne est ajoutée, déplacée ou retirée. Aujourd'hui, une liste ne
+notifie jamais sa validité ni son activité : `on: ["validity"]` et
+`on: ["activity"]` ne se déclenchent jamais pour une liste.
+
+## Lire un champ observé {#reading-a-watched-field}
+
+Dans un hook ou une règle, lisez un champ déclaré avec `ctx.watched(name)`. Il
+rend la même vue en lecture seule, ou `null` si ce champ n'existe pas encore.
+
+```ts
+ctx.watched("postcode")   // ✓ declared
+ctx.watched("city")       // ✗ throws: reads "city" without declaring it in `watch`
+```
+
+L'erreur est immédiate et nomme le champ. La façon dont elle est enregistrée
+aujourd'hui dépend de l'endroit (voir [Les erreurs du moteur](engine-errors.md)) :
+
+- dans un hook de behavior : dans `form.engineErrors`, comme `hook-error` ;
+- dans un validator qui fait partie d'un tableau d'au moins deux : comme
+  `guard-violation`, et le champ reçoit le constat bloquant `"unverified"`
+  (ou le refus d'un autre membre) ;
+- dans tout autre validator : c'est une règle qui lève. Si la règle est `async`,
+  le champ reçoit `"unverified"` et l'enregistrement porte `scope: "validator"`,
+  `kind: "hook-error"` et le nom de la règle. Sinon, le champ garde aujourd'hui
+  son verdict précédent, et l'enregistrement porte `scope: "behavior"`,
+  `kind: "hook-error"` et aucun `rule` — voir
+  [l'écart connu](../model/interrupted-pass.md).
+
+:::caution `ctx.form` n'est pas vérifié
+`ctx.form.field(name)` et `ctx.form.values()` peuvent lire **n'importe quel**
+champ, sans `watch` et sans erreur — et rien ne rappelle votre code quand ce que
+vous avez lu change. Lire une dépendance de cette façon donne un résultat qui se
+périme sans bruit. Utilisez `ctx.watched()` pour tout ce dont vous dépendez.
+:::
+
+## Un formulaire, un graphe {#one-form-one-graph}
+
+`watch` ne voit que les champs du même formulaire. Un champ d'un autre
+formulaire, ou — dans une [ligne](../model/a-row-is-a-form.md) — un champ du
+formulaire parent, ne peut pas être observé.
+
+Limite actuelle : une chaîne synchrone de plus de 50 maillons
+(`a` → `b` → `c` → …) est coupée. Quand c'est un `change()` de votre code qui l'a
+déclenchée, l'erreur sort de cet appel et n'est pas enregistrée dans
+`form.engineErrors` ; quand c'est l'écriture d'un behavior asynchrone, elle est
+enregistrée comme `hook-error` de ce behavior.

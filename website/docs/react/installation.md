@@ -2,13 +2,13 @@
 id: installation
 title: Wiring up React
 sidebar_position: 1
-description: A form module, derived hooks, no mandatory provider.
+description: Declare the form in a module, derive typed hooks from it, and write your first field component. No provider required.
 ---
 
 # Wiring up React
 
-The adapter is **a provider and three hooks**. No business logic: it lives
-entirely in the core.
+`slz-react-form` is a thin bridge: a provider and a few hooks. It holds no
+business logic — that all lives in the core.
 
 ```bash
 npm install slz-form slz-react-form
@@ -16,8 +16,8 @@ npm install slz-form slz-react-form
 
 ## The form module
 
-Declare the form and its field map in a module, then derive its hooks from it —
-the same split as a slice:
+Declare the form and its field map in a module of its own, then derive the
+hooks from it:
 
 ```ts
 // src/form/signup-form.ts
@@ -31,19 +31,18 @@ export const signupForm = new FormController<SignupFields>({ name: "signup" });
 export const { useField, useFieldArray, useForm } = hooksFor(signupForm);
 ```
 
-`name` is then constrained to the declared fields, and the value is inferred.
-There is **no provider to mount and no form to name** on each field.
+The hooks returned by `hooksFor` are bound to that form and typed by its map:
+`name` only accepts declared fields, and the value type is inferred. There is
+**no provider to mount** and no form to name on each field.
 
-`FormProvider` and `useFormRegister` exist for cross-cutting access to the
-`FormRegister` — useful when a very distant component must reach a form —, not
-for the common case.
-
-## A field
+## A field component
 
 ```tsx
+import { useField } from "./form/signup-form";
+
 function EmailField() {
     const field = useField({
-        name: "email",              // ← constrained to SignupFields
+        name: "email",              // ← only names declared in SignupFields compile
         required: true,
         validator: new EmailValidator(),
     });
@@ -66,15 +65,25 @@ function EmailField() {
 }
 ```
 
-**Adding a field to the form means mounting this component.** Nothing to declare
-upfront.
+`EmailValidator` is a validator you write (see [Validate](../guides/validate.md));
+`Spinner` is your own component.
 
-The two read functions — `hasFlag` / `hasAny` — and render isolation are
-detailed in [Hooks](./hooks.md); lists, in
-[Repeatable lists](./lists.md).
+**Adding a field to the form means rendering such a component.** The first
+render creates the field; mounting the component mounts the field; unmounting
+the component unmounts it, which takes its value out of `values()`.
+
+Next:
+
+- the hooks in detail, and what each returns: [Hooks](./hooks.md);
+- lists of rows: [Repeatable lists](./lists.md);
+- the submit button: [Submit a form](../guides/submit.md#in-react).
 
 ## No server rendering, for now
 
-`useField`, `useFieldArray` and `useForm` read their state through
-`useSyncExternalStore` **without** `getServerSnapshot`: a `renderToString`
-throws `Missing getServerSnapshot`. Mount on the client only.
+`useField`, `useFieldArray` and `useForm` read their state with
+`useSyncExternalStore` **without** a `getServerSnapshot`: `renderToString`
+throws `Missing getServerSnapshot`. Render these components on the client only.
+
+A form declared at module level, as above, is **one object per JavaScript
+process**. In the browser that is what you want. On a server it would be shared
+by every request and every user — another reason to keep forms on the client.

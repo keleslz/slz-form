@@ -38,10 +38,12 @@ const sidebars: SidebarsConfig = {
             items: [
                 "guides/prefill",
                 "guides/validate",
+                "guides/submit",
                 "guides/dependencies",
                 "guides/repeatable-fields",
                 "guides/your-own-flags",
                 "guides/engine-errors",
+                "guides/without-a-framework",
             ],
         },
         {

@@ -44,10 +44,14 @@ if (field.hasFlag("invisible")) return null;
 Two functions read every state, at the field and at the form: `hasFlag(...)` is
 the **AND** (all present), `hasAny(...)` is the **OR** (at least one). That is
 the whole read surface — and it is what deletes the `loading || submitting ||
-!brand` soup above.
+!brand` soup above. With the React adapter, `useForm()` answers the same two
+functions for the whole form; this button is disabled while the form is
+invalid or being submitted:
 
 ```tsx
-<button disabled={!form.hasFlag("valid", "idle")}>Submit</button>
+const { hasAny } = useForm();
+
+<button disabled={hasAny("error", "submitting")}>Submit</button>
 ```
 
 ## Table of contents
@@ -78,7 +82,7 @@ npm install slz-react-form      # the React adapter (optional)
 ```
 
 `slz-form` has **zero runtime dependencies**. `slz-react-form` declares `react`
-and `react-dom` as peers.
+and `slz-form` as peers: your app must resolve a single copy of each.
 
 ## Requirements
 
@@ -110,7 +114,6 @@ class EmailValidator extends IValidator<string> {
 const email = form.field("email", { required: true, validator: new EmailValidator() });
 const password = form.field("password", { required: true });
 
-form.mount();
 email.mount();
 password.mount();
 
@@ -122,10 +125,17 @@ if (await form.submit()) {
 }
 ```
 
-`form.field(name, params)` returns the field controller; `field.change(v)`,
-`field.focus()`, `field.blur()` drive it; `field.snapshot` reads it (`.value`,
-`.errors`, `.hasFlag(...)`). Everything below is the same engine, seen from
-different angles.
+- `form.field(name, params)` creates the field on the first call and returns
+  the same controller afterwards (`params` are only read the first time).
+- `field.mount()` puts it into the form being filled: only mounted fields count
+  in `form.values()` (the **payload**, what you send) and in the **verdict**
+  (whether the form may be sent).
+- `field.change(v)`, `field.focus()`, `field.blur()` drive it, the way an input
+  would; `field.snapshot` reads it (`.value`, `.errors`, `.hasFlag(...)`).
+- `form.submit()` touches every mounted field, waits for async work, and answers
+  whether the form may be sent — it sends nothing itself.
+
+Everything below is the same engine, seen from different angles.
 
 ## The model: flags, and two functions
 
@@ -159,7 +169,7 @@ The vocabulary, and who is allowed to emit each flag:
 | `pristine` · `valid` · `error` | exclusive | the **Validator**, alone | displayed validity — `pristine` until touched |
 | `idle` · `loading` | exclusive | Behaviors + Validator | work is in flight |
 | `locked` | cumulative | Behaviors + Controller + view | greyed out, not editable |
-| `readonly` | cumulative | Behaviors + Controller + view | readable, selectable, not modifiable |
+| `readonly` | cumulative | Behaviors + view | readable, selectable, not modifiable |
 | `invisible` | cumulative | Behaviors | not rendered — out of validity, still in the payload while mounted |
 | `required` · `touched` · `focused` · `mounted` · `submitting` | cumulative | the Controller | interaction and lifecycle |
 | *your application's* | cumulative | Behaviors — `ctx.state.mark("skeleton")` | your own words |
@@ -183,15 +193,19 @@ path: `mark("error")` throws.
 A **behavior** *reacts*. It writes its field's value, publishes options, and
 emits activity (`loading`) and availability (`locked` / `readonly` /
 `invisible`). It never decides validity. Several behaviors can share one field,
-each keeping its own slice of state.
+each setting its own flags.
 
 `behaviorsFor(form)` returns a set of ready-made, fully-typed helpers bound to
 your field map — the names below are all narrowed to your fields:
 
 ```ts
-import { behaviorsFor } from "slz-form";
+import { behaviorsFor, FormController } from "slz-form";
 
-const { prefill, loadOptions, lookup, suggest, lockWhile, hideWhen } = behaviorsFor(form);
+type CarFields = { brand: string; otherBrand: string; consent: boolean };
+
+const carForm = new FormController<CarFields>({ name: "car" });
+
+const { prefill, lockWhile, hideWhen } = behaviorsFor(carForm);
 
 const brandPrefill = prefill({ field: "brand", fetch: () => fetchDefaultBrand() });
 
@@ -205,11 +219,19 @@ const onlyWhenOther = hideWhen({
     when: ({ brand }) => brand !== "other",
 });
 
-form.field("otherBrand", { behaviors: [onlyWhenOther] });
+carForm.field("brand", { behaviors: [brandPrefill] });
+carForm.field("otherBrand", { behaviors: [onlyWhenOther, lockedUntilConsent] });
 ```
+
+The other helpers — `lookup`, `loadOptions`, `suggest`, `lockUntilValid` — are
+listed in [First form](https://keleslz.github.io/slz-form/docs/getting-started/first-form#the-ready-made-behaviors).
 
 `prefill` fills a field from an API on mount, locked and `loading` meanwhile;
 `lockWhile` and `hideWhen` react to other fields declared in `watch`.
+
+> A field hidden by `hideWhen` is left out of the verdict, but **not** out of
+> the payload: while it is mounted, `form.values()` still contains it. To leave
+> a field out of what you send, unmount it.
 
 When no helper fits, a behavior is just an object — the full lifecycle is
 `onMount` / `onChange` / `onDependencyChanged` / `onBlur` / `onFocus` /
@@ -228,7 +250,7 @@ const greetOnMount: IBehavior<string> = {
 A **validator** *judges*. It is the single authority on validity — no behavior
 can contradict it, so there is never an arbitration between two disagreeing
 sources. You extend `IValidator<T>` and report findings, each carrying a
-`code` and a `severity`:
+severity and an optional `code`:
 
 ```ts
 import { IValidator, type ValidationReport } from "slz-form";
@@ -245,21 +267,30 @@ Validators compose (pass an array — their findings are aggregated) and can be
 wrapped:
 
 ```ts
-import { DebouncedValidator, ExternalValidator } from "slz-form";
+import { DebouncedValidator } from "slz-form";
 
 new DebouncedValidator(new UsernameValidator(), 400);
 ```
 
 `DebouncedValidator` delays an expensive rule while the user types;
-`ExternalValidator` asks a server and can re-judge without the value changing.
+`ExternalValidator` carries issues your code received from a server (a 422, for
+instance) and applies them without the value changing.
 Rules do not run on an empty value (that is what `required` is for), unless the
 validator opts in.
+
+A rule that crashes gives the field a blocking `"unverified"` issue — except,
+currently, a plain rule that throws synchronously: it keeps its previous
+verdict, so an invalid value can be submitted. See
+[the known gap](https://keleslz.github.io/slz-form/docs/model/interrupted-pass).
 
 ## Cross-field dependencies
 
 A validator or behavior that reads other fields declares them in `watch` — and
-only then is it re-run when they change. Reading an undeclared field throws, so
-a dependency can never be silent:
+only then is it re-run when they change. Reading an undeclared field with
+`ctx.watched()` throws. The engine catches that error and records it in
+`form.engineErrors` (it can also leave the field with a stale verdict — see
+[Declared dependencies](https://keleslz.github.io/slz-form/docs/guides/dependencies#reading-a-watched-field)),
+so read that buffer while you develop:
 
 ```ts
 import { IValidator, type ValidationReport, type ValidationContext } from "slz-form";
@@ -272,8 +303,14 @@ class ConfirmPasswordValidator extends IValidator<string> {
 }
 ```
 
-Dependencies are wired into a graph that rejects cycles at construction, so a
-change propagates through the whole chain — `a → b → c` — and never loops.
+Dependencies are wired into a graph that rejects cycles when a field is
+created, so a change propagates through the whole chain — `a → b → c` — and
+never loops. Current limitation: a synchronous chain longer than 50 links is
+cut, and throws out of the `change()` call that started it.
+
+> `ctx.form.field(name)` and `ctx.form.values()` can also read other fields,
+> but they are **not** checked against `watch` and nothing re-runs your code
+> when they change. Use `ctx.watched()` for anything you depend on.
 
 ## Repeatable fields
 
@@ -282,26 +319,39 @@ A repeatable list has **no path-based naming**. Each row *is* a full
 renames nothing, and no `watch` ever starts pointing into the void.
 
 ```ts
+import { FormController, type FieldArray } from "slz-form";
+
 type OrderFields = { lines: FieldArray<{ product: string; qty: number }> };
 
 const form = new FormController<OrderFields>({ name: "order" });
 const lines = form.array("lines");
 
-const id = lines.append();          // a stable row id, never an index
-lines.row(id)?.form.field("qty").change(2);
-lines.move(0, 1);
-lines.remove(id);
+const first = lines.append();       // a stable row id, never an index
+const second = lines.append();
+const qty = lines.row(first)?.field("qty");
+qty?.mount();
+qty?.change(2);
+lines.move(0, 1);                   // the order changes, the ids do not
+lines.remove(second);
 
-lines.values();
+lines.values();                     // [{ qty: 2 }]
 ```
 
 ## Submission
 
-`form.submit()` is a **gate, not a sender**. It returns `Promise<boolean>` and,
-in order: touches every mounted field (so pristine required-empty fields now
-show their error), fires `onSubmit` behaviors and flushes debounced windows,
-waits for async work to converge (bounded by `settleTimeout`), revalidates, and
-returns `true` only if the form is settled and valid.
+`form.submit()` is a **gate, not a sender**. It returns `Promise<boolean>`.
+In order, it:
+
+1. touches every mounted field, so an untouched required field now shows its
+   error;
+2. runs the `onSubmit` hooks, and anything waiting on a debounce, now;
+3. waits for async work to finish, within `settleTimeout`;
+4. validates again what changed meanwhile;
+5. returns `true` only if that work finished in time and the form is valid.
+
+> Known gap: a rule whose promise never settles during step 4 blocks
+> `submit()` for good. Give network calls a timeout — see
+> [Settings](https://keleslz.github.io/slz-form/docs/guides/submit#settings).
 
 ```ts
 if (await form.submit()) {
@@ -310,21 +360,29 @@ if (await form.submit()) {
 }
 ```
 
-A `false` return means the form is invalid (its errors are already on screen)
-or it did not converge in time. Keep the two reads distinct: `form.hasFlag("valid", "idle")` is the passive
+A `false` return means the form is invalid (its errors are now on screen), it
+did not finish its async work in time, or a submission was already running. Keep
+the two reads distinct: `form.snapshot.hasFlag("valid", "idle")` is the passive
 "is it ready right now?" for a disabled button; `await form.submit()` is the
 active "make it ready, then judge." The actual network call is your code, after
 the gate opens — the engine never sends anything.
 
+> After a successful `submit()`, the form stays `submitted` until `reset()` or
+> the next `submit()`: editing a field does not bring it back to `idle`. A
+> button guarded by `!hasFlag("valid", "idle")` therefore stays disabled after
+> the first send unless you reset. If the form stays on screen after sending,
+> guard on `hasFlag("submitting")` instead. Details:
+> [Submit a form](https://keleslz.github.io/slz-form/docs/guides/submit).
+
 ## Engine errors
 
 When the **code** of a behavior or a rule *throws* — an async hook rejects, an
-engine guard is violated, a rule crashes — the engine catches it, recovers, and
-records it. It **never logs to the console**: that is the consumer's call, not
-the engine's.
+engine guard is violated, a rule crashes — the engine catches it, keeps the form
+working, and records it. It **never logs to the console**: that is the
+consumer's call, not the engine's.
 
-You read those records off the form, when you have a reason to — after a rejected
-submit, in a debug panel, in a test:
+You read those records off the form, when you have a reason to — after a
+rejected submit, in a debug panel, in a test:
 
 ```ts
 if (!(await form.submit())) {
@@ -334,8 +392,12 @@ if (!(await form.submit())) {
 }
 ```
 
-Each `EngineError` carries `scope`, `kind` (`"hook-error"` or `"guard-violation"`),
-`field`, `error`, and `at`.
+Each `EngineError` carries `scope`, `kind` (`"hook-error"` or
+`"guard-violation"`), `field`, `rule` (validator errors only), `error`, and
+`at`. Keeping the form working does not always mean judging correctly: a rule
+that throws synchronously currently keeps its previous verdict and is recorded
+with `scope: "behavior"` —
+[the known gap](https://keleslz.github.io/slz-form/docs/model/interrupted-pass).
 
 This is a **pull** surface — an accessor, not a subscription. An engine error is
 a crash the engine already recovered from: a diagnostic record, not a live event
@@ -343,9 +405,9 @@ to handle in real time. The buffer is bounded to the most recent entries and
 cleared by `reset()`.
 
 > This is **not** how you read validation errors. A field that fails its rules
-> is not an engine error — read it with `field.errors`, `field.issues`, or
-> `field.hasFlag("error")`. `engineErrors` is only for when the code itself
-> throws.
+> is not an engine error — read it with `field.snapshot.errors`,
+> `field.snapshot.issues`, or `field.hasFlag("error")`. `engineErrors` is only
+> for when the code itself throws.
 
 ## React
 
@@ -380,7 +442,7 @@ function EmailField() {
 function SubmitButton() {
     const { hasFlag, submit } = useForm();
     return (
-        <button disabled={!hasFlag("valid", "idle")} onClick={() => submit()}>
+        <button disabled={hasFlag("submitting")} onClick={() => void submit()}>
             Submit
         </button>
     );
@@ -396,18 +458,27 @@ a sub-form.
 
 The core is framework-free; the React adapter is only a wrapper over two methods
 the controllers already expose — `listen` (subscribe) and `getSnapshot` (read).
-In plain JavaScript you make the same three gestures by hand:
+In plain JavaScript you make the same three gestures by hand: **read**
+`field.snapshot`, **subscribe** with `field.listen(callback)` — it returns the
+function that unsubscribes —, and **write** with `field.change(value)`. Mount
+the field so it takes part in the form:
 
 ```ts
 const render = () => {
-    const s = field.snapshot;                 // read
+    const s = field.snapshot;
     input.disabled = s.hasFlag("locked");
     errorEl.textContent = s.hasFlag("error") ? s.errors[0] ?? "" : "";
 };
-const stop = field.listen(render);            // subscribe → returns an unsubscribe
-input.addEventListener("input", () => field.change(input.value));   // write
+const stopListening = field.listen(render);
+input.addEventListener("input", () => field.change(input.value));
+field.mount();
+render();
 ```
 
+When the input goes away, call `stopListening()` and `field.unmount()`.
+
+A complete example, with the field lifecycle, is in
+[Without a framework](https://keleslz.github.io/slz-form/docs/guides/without-a-framework).
 Angular and Vue adapters will follow the same contract.
 
 ## How it compares

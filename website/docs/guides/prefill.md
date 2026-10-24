@@ -2,21 +2,22 @@
 id: prefill
 title: Prefill a field
 sidebar_position: 1
-description: The same need written three ways, from the full class down to the three-line helper.
+description: Fill a field from an API when it mounts — written three ways, from a full behavior class down to the typed helper.
 ---
 
 # Prefill a field
 
-Filling a field from an API on mount, written three ways — from the most
-explicit to the shortest. All three produce **exactly** the same behavior.
+To fill a field from an API when it appears, attach a **prefill behavior**.
+Below is the same need written three ways, from the most explicit to the
+shortest. All three fill the field the same way.
 
-## 1. A behavior class, no validator
+## 1. A behavior class
 
-The case where you write everything yourself. Useful to understand what the
-engine does, and necessary as soon as a behavior goes off the beaten path.
+You write everything yourself. Useful to see what the engine does, and the
+starting point when a behavior goes off the beaten path.
 
 ```ts
-import { Behavior, type BehaviorContext, type BehaviorState } from "slz-form";
+import { Behavior, FormController, type BehaviorContext, type BehaviorState } from "slz-form";
 
 class PrefillCustomerReference extends Behavior<string> {
     async onMount(ctx: BehaviorContext<string>): Promise<BehaviorState> {
@@ -28,7 +29,7 @@ class PrefillCustomerReference extends Behavior<string> {
             }
         } catch {
             // a prefill that fails leaves the field empty:
-            // it is not an input error, and the Validator remains the only judge
+            // it is not an input error, and the validator stays the only judge
         }
         return ctx.state.idle().unlock();
     }
@@ -42,30 +43,34 @@ const field = form.field("customerReference", {
 field.mount();
 ```
 
-What happens, in order:
+The field's flags, in order:
 
 ```
-during the call   pristine, loading, locked
-after the call    pristine, idle          ← value set, field still pristine
+during the call   pristine, loading, locked, mounted
+after the call    pristine, idle, mounted          ← value set, field still pristine
 ```
 
-Three points are worth remembering:
+Three things to remember:
 
-- **the field stays `pristine`**: `ctx.setValue` does not mark the field as
-  touched, because a value that came from an API is not a user interaction;
-- **`ctx.push` publishes the wait before the `await`** — without it, `loading`
-  would never be visible, since nothing is returned until the promise has
-  resolved;
-- **`ctx.signal` is aborted on unmount**: that is what stops a late response
-  from writing into a field that no longer exists.
+- **The field stays `pristine`.** `ctx.setValue` does not mark the field
+  touched: a value from an API is not something the user did.
+- **`ctx.push` shows `loading` before the `await`.** A hook's return value is
+  only applied when the promise resolves; without `push`, `loading` would never
+  be visible.
+- **`ctx.signal` is aborted when the field unmounts.** Checking it after the
+  `await` stops a late response from writing into a field that is gone.
 
 ## 2. The same behavior, with a validator
 
-We add a rule. Nothing changes on the behavior side: the two do not step on
-each other, because they do not act on the same axis — the behavior **writes**
-a value, the validator **judges** it.
+Add a rule. Nothing changes on the behavior side: the behavior **writes** the
+value, the validator **judges** it, and they do not get in each other's way.
+The field below is declared **in place of** section 1's call: a field's
+parameters are only read when it is created, so a second `form.field(...)` on
+the same name would ignore them.
 
 ```ts
+import { IValidator, type ValidationReport } from "slz-form";
+
 class ReferenceValidator extends IValidator<string> {
     protected validate(value: string, report: ValidationReport): void {
         report.errorIf(!/^CUST-\d{2}-\d{4}$/.test(value), "Expected format: CUST-42-9013");
@@ -80,21 +85,25 @@ const field = form.field("customerReference", {
 ```
 
 ```
-after the prefill   pristine, idle     ← the validator has not ruled
-the user types      error, idle        ← "Expected format: CUST-42-9013"
-they fix it         valid, idle
+after the prefill   pristine, idle, mounted, required            ← judged, but nothing displayed
+the user types      error, idle, mounted, required, touched      ← "Expected format: CUST-42-9013"
+they fix it         valid, idle, mounted, required, touched
 ```
 
-**A prefilled value does not trigger an error.** The field has not been
-touched, so it stays `pristine` and displays nothing. The validator only rules
-from the first input — or from submission, which touches every field.
+**A prefilled value never shows an error by itself.** The validator does judge
+it — `field.snapshot.errors` is filled, and the form's verdict counts it — but
+the field stays `pristine` until the user touches it, or until `submit()`
+touches every field.
 
-## 3. The helper, fully typed
+## 3. The typed helper
 
-The common case, in three lines. `prefill` comes from `behaviorsFor(form)`, so
-everything is inferred from the form's field map.
+The common case, in a few lines. `prefill` comes from `behaviorsFor(form)`, so
+the field name and the value type are checked against the field map. Again,
+this replaces the earlier declarations of the field.
 
 ```ts
+import { behaviorsFor } from "slz-form";
+
 const { prefill } = behaviorsFor(form);
 
 const customerReferencePrefill = prefill({
@@ -109,24 +118,33 @@ const field = form.field("customerReference", {
 });
 ```
 
-Same behavior as the first example — `loading` + `locked` during the call,
-value set, field still `pristine`.
+Same result as the class: `loading` + `locked` during the call, then the value,
+field still `pristine`. If `fetch` rejects or resolves `undefined`, the field
+stays empty.
 
-What is checked at compile time:
+What the compiler catches:
 
 ```ts
 prefill({ field: "reference", fetch: async () => "x" });
-//              ~~~~~~~~~~~ '"reference"' is not assignable to '"customerReference"'
+//        ~~~~~ Type '"reference"' is not assignable to type '"customerReference"'
 ```
 
-And on a form that declares `{ customerReference: string; mileage: number }`,
-a fetch of the wrong type does not compile either:
+And on a form declared `{ customerReference: string; mileage: number }`, a
+fetch of the wrong type does not compile either:
 
 ```ts
 prefill({ field: "mileage", fetch: async () => "not a number" });
-//                                 ~~~~~~~~~~~~~~~~~~~~~~~~~ 'string' is not
-//                                 assignable to 'number'
+//                                             ~~~~~~~~~~~~~~
+// Type 'Promise<"not a number">' is not assignable to type 'Promise<number | undefined>'
 ```
 
-A misspelled field name and a fetch of the wrong type are **compile errors**,
-not runtime surprises.
+## Good to know
+
+- **`reset()` runs the prefill again.** `field.reset()` and `form.reset()`
+  replay `onMount`, so the API is called again and its answer overwrites the
+  restored value.
+- **Loading a record into a form that is already on screen** is not a prefill:
+  write each value with `field.update({ value })`. It does not mark the field
+  touched. It does fire the field's `onChange` behaviors.
+- **The value lands after the field mounts.** A behavior that reads the value in
+  its own `onMount` sees it empty.
