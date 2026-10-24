@@ -50,7 +50,7 @@ ce que dit `required` :
 |---|---|
 | `required: true` | une valeur vide reçoit un constat bloquant, `code: "required"`, message `"This field is required"` |
 | `requiredMessage: "…"` | remplace ce message |
-| `requiredTrue: true` | avec `required: true`, traite aussi `false` comme vide — pour une case à cocher qui doit être cochée. Seul, il fait seulement sauter `false` aux règles ; utilisez-le avec `required: true` |
+| `requiredTrue: true` | avec `required: true`, traite aussi `false` comme vide — pour une case à cocher qui doit être cochée. Seul, il empêche seulement les règles de s'exécuter sur `false` ; utilisez-le avec `required: true` |
 
 Une règle qui décide **elle-même** si le champ est obligatoire (« obligatoire si
 le compte est professionnel ») doit s'exécuter sur les valeurs vides : déclarez

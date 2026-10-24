@@ -168,9 +168,9 @@ nom de champ), `flags`, `status`.
 ## Les listes
 
 Une [liste répétable](repeatable-fields.md) utilise les trois mêmes gestes.
-`form.array(name)` rend la liste ; `rows` (chacune avec un `id` et un `form`),
-`append()`, `remove(id)`, `move(from, to)` et `clear()` changent sa
-composition, et `listen` / `getSnapshot` la suivent :
+`form.array(name)` rend la liste. `rows` en liste les lignes (chacune avec un
+`id` et un `form`) ; `append()`, `remove(id)`, `move(from, to)` et `clear()`
+les changent ; `listen` / `getSnapshot` suivent ces changements :
 
 ```ts
 import { FormController, type FieldArray } from "slz-form";

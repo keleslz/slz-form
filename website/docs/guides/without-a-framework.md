@@ -165,9 +165,9 @@ On the form's snapshot: `hasFlag(...)` / `hasAny(...)` with the form's flags,
 ## Lists
 
 A [repeatable list](repeatable-fields.md) uses the same three gestures.
-`form.array(name)` returns the list; `rows` (each with an `id` and a `form`),
-`append()`, `remove(id)`, `move(from, to)` and `clear()` change its
-composition, and `listen` / `getSnapshot` follow it:
+`form.array(name)` returns the list. `rows` lists its rows (each with an `id`
+and a `form`); `append()`, `remove(id)`, `move(from, to)` and `clear()` change
+them; `listen` / `getSnapshot` follow those changes:
 
 ```ts
 import { FormController, type FieldArray } from "slz-form";

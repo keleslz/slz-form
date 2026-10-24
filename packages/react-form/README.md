@@ -58,9 +58,9 @@ function EmailField() {
 ```
 
 Ajouter un champ au formulaire, c'est monter ce composant — rien à enregistrer
-au-delà de sa ligne dans la map. Démonter le composant démonte le champ, ce qui retire sa valeur du
-payload. `EmailValidator` est un validator que vous écrivez ; `Spinner`, votre
-propre composant.
+au-delà de sa ligne dans la map. Démonter le composant démonte le champ, ce qui
+retire sa valeur du payload. `EmailValidator` est un validator que vous écrivez ;
+`Spinner`, votre propre composant.
 
 `useField` ne fait que brancher le cycle de vie React sur le controller et lire
 son snapshot via `useSyncExternalStore` : **aucun `useState` ne recopie l'état
@@ -88,7 +88,7 @@ lève `Missing getServerSnapshot`. À monter côté client uniquement pour l'ins
 **`react`** : deux copies cassent les hooks (« Invalid hook call »).
 
 **`slz-form`** : le moteur teste `result instanceof BehaviorState` pour appliquer
-la tranche d'état renvoyée par un behavior. Avec deux copies du core, un
+les flags qu'un behavior renvoie. Avec deux copies du core, un
 `BehaviorState` construit par l'une échoue le test dans l'autre — **les flags
 sont alors silencieusement ignorés**, sans erreur ni crash. Le champ arrête
 simplement de réagir.

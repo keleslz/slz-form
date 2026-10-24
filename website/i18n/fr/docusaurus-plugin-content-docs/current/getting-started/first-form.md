@@ -100,14 +100,14 @@ numériques :
 Le prix : ajouter un champ coûte une ligne dans la map en plus de celle dans la
 vue. En échange, noms de champs, valeurs et callbacks des helpers sont typés
 **sans aucun `as`**. Trois endroits ne sont pas typés par la map — deux que vous
-gérez sans cast, un que vous évitez pour l'instant : `form.values()` est un
-`Record<string, unknown>` — lisez une valeur typée avec `form.get(name)`
-([Soumettre un formulaire](../guides/submit.md#what-you-send-formvalues)) ; un
-formulaire pris dans le `FormRegister` n'est aujourd'hui pas typé — un écart
-connu ; en attendant le correctif, importez le module propre au formulaire
-([Les hooks](../react/hooks.md#formprovider-and-useformregister)) ;
-et une valeur lue avec `ctx.watched()` est `unknown` — affinez-la
+gérez sans cast, un que vous évitez pour l'instant. `form.values()` est un
+`Record<string, unknown>` : lisez une valeur typée avec `form.get(name)`
+([Soumettre un formulaire](../guides/submit.md#what-you-send-formvalues)). Une
+valeur lue avec `ctx.watched()` est `unknown` : affinez-la
 ([Champs répétables](../guides/repeatable-fields.md#a-rule-about-the-whole-list)).
+Et un formulaire pris dans le `FormRegister` n'est aujourd'hui pas typé — un
+écart connu ; en attendant le correctif, importez plutôt le module propre au
+formulaire ([Les hooks](../react/hooks.md#formprovider-and-useformregister)).
 
 ## Les behaviors prêts à l'emploi {#the-ready-made-behaviors}
 

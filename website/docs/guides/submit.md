@@ -118,11 +118,15 @@ that request is slow and must not be sent twice, keep track of it yourself.
 
 `useForm()` gives the same `submit`, `reset` and flags:
 
-```tsx
+```ts
 // src/form/signup-form.ts (continued)
 import { hooksFor } from "slz-react-form";
 
 export const { useField, useForm } = hooksFor(signupForm);
+```
+
+```tsx
+import { signupForm, useForm } from "./form/signup-form";
 
 function SubmitButton() {
     const { hasFlag, submit, reset } = useForm();
@@ -184,6 +188,7 @@ it:
 ```tsx
 import { ExternalValidator } from "slz-form";
 import { useField } from "./form/signup-form";
+import { EmailValidator } from "./form/validators";
 
 const emailTaken = new ExternalValidator<string>();
 
