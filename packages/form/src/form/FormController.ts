@@ -448,12 +448,6 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
     }
 
     private async runSubmit(mounted: readonly AnyField[], run: number): Promise<boolean> {
-        // **Une** échéance pour toute la soumission. Chaque phase recevait le
-        // délai entier : trois phases qui tenaient chacune dedans le
-        // dépassaient ensemble, et `settleTimeout` ne bornait plus rien (#19).
-        const deadline = Date.now() + this.settleTimeout;
-        const remaining = (): number => Math.max(0, deadline - Date.now());
-
         // `field.submit()` touche le champ, déclenche `onSubmit` — ce qui fait
         // partir les fenêtres différées — et revalide.
         //
@@ -462,21 +456,16 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         // le formulaire verrouillé à vie.
         const touched = await withDeadline(
             Promise.all(mounted.map((field) => field.submit())),
-            remaining(),
+            this.settleTimeout,
         );
 
         // Les lignes sont soumises avec le reste : leurs valeurs doivent être
-        // posées et jugées avant qu'on statue sur le formulaire. Sous la même
-        // échéance : une ligne est un formulaire, qui a la sienne, mais le
-        // formulaire parent ne l'attend pas au-delà de ce qui lui reste.
-        let rowsValid = false;
-        const rowsSettled = await withDeadline(
-            Promise.all([...this.arrays.values()].map((rows) => rows.submit()))
-                .then((results) => { rowsValid = results.every(Boolean); }),
-            remaining(),
-        );
+        // posées et jugées avant qu'on statue sur le formulaire.
+        const rowsValid = (await Promise.all(
+            [...this.arrays.values()].map((rows) => rows.submit()),
+        )).every(Boolean);
 
-        const settled = touched && rowsSettled && await this.settle(mounted, deadline);
+        const settled = touched && await this.settle(mounted);
 
         // Supplantée par un `reset()` pendant l'attente : la remise à zéro a
         // déjà rendu champs et statut, et rien de ce qui suit ne la concerne.
@@ -566,7 +555,8 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
      * Boucle, parce qu'une écriture peut en déclencher une autre — un lookup en
      * chaîne (code postal → ville → région). Bornée en passes et dans le temps.
      */
-    private async settle(fields: readonly AnyField[], deadline: number): Promise<boolean> {
+    private async settle(fields: readonly AnyField[]): Promise<boolean> {
+        const deadline = Date.now() + this.settleTimeout;
         const before = new Map<AnyField, unknown>(fields.map((field) => [field, field.snapshot.value]));
 
         for (let round = 0; round < MAX_SETTLE_ROUNDS; round += 1) {

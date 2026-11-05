@@ -52,7 +52,8 @@ In order:
    - step 3 and this wait each get `settleTimeout` (10 seconds by default), so
      up to about twice that in total;
    - the rows of each list are submitted in between, with their own wait;
-   - the second validation is not bounded — see [Settings](#settings).
+   - the second validation counts against the wait's `settleTimeout` — see
+     [Settings](#settings).
 5. **Judges.** It returns `true` only if everything settled in time and the form
    is `valid`. The status becomes `submitted` on success, `idle` on failure, and
    the fields lose the `submitting` flag and the lock that came with it.
@@ -219,12 +220,11 @@ new FormController<SignupFields>({ name: "signup", settleTimeout: 5_000 });
 `settleTimeout` is how long `submit()` waits for work in flight, in
 milliseconds. The rows of a list use their parent form's `settleTimeout`.
 
-`settleTimeout` bounds the whole submission with a single deadline: the first
-validation, the rows of a list, the work in flight, and the second validation
-of a value that changed during the wait.
-When it runs out, `submit()` returns `false` and the fields that were still
-`loading` are released. A rule whose promise never settles therefore costs one
-`settleTimeout`, not the form. Still give every network call in a validator a
+`settleTimeout` bounds each step on its own: the first validation, and then
+the wait together with the second validation of a value that changed during
+it. When one of them runs out, `submit()` returns `false` and the fields that
+were still `loading` are released. A rule whose promise never settles
+therefore costs a bounded wait, not the form. Still give every network call in a validator a
 timeout, for example `fetch(url, { signal: AbortSignal.timeout(5_000) })`: the
 user should not wait 10 seconds for a refusal.
 

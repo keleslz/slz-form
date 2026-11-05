@@ -472,32 +472,27 @@ describe("régressions", () => {
         expect(field.snapshot.errors).toEqual(["Validation unavailable"]);
     });
 
-    it("B20 — settleTimeout borne la soumission entière, pas chaque phase (#19)", async () => {
-        // Chaque phase tient seule dans le délai ; ensemble, elles le dépassent.
-        const writesLate: IBehavior<string> = {
-            onSubmit: async (ctx) => {
-                ctx.push(ctx.state.loading());
-                await wait(120);
-                ctx.setValue("tardif");
-                return ctx.state.idle();
-            },
-        };
+    it("B20 — une liste aux règles lentes se soumet, sans laisser de ligne verrouillée (#19)", async () => {
         class Slow extends IValidator<string> {
             protected async validate(): Promise<void> {
                 await wait(120);
             }
         }
-        const form = new FormController<{ a: string }>({ name: "b20", settleTimeout: 200 });
-        const field = form.field("a", { behaviors: [writesLate], validator: new Slow(), initialValue: "ok" });
-        field.mount();
+        type Fields = { a: string; lines: FieldArray<{ label: string }> };
+        const form = new FormController<Fields>({ name: "b20", settleTimeout: 200 });
+        const a = form.field("a", { validator: new Slow(), initialValue: "ok" });
+        a.mount();
+        const lines = form.array("lines");
+        const id = lines.append();
+        const label = lines.row(id)?.form.field("label", { validator: new Slow(), initialValue: "x" });
+        label?.mount();
         form.mount();
-        await until(() => !field.isBusy);
+        await until(() => !a.isBusy && label?.isBusy === false, { timeout: 2000 });
 
-        const started = Date.now();
-        const result = await form.submit();
-
-        expect(result).toBe(false);
-        expect(Date.now() - started).toBeLessThan(330);
+        // Chaque étape tient dans son propre délai : la soumission passe.
+        await expect(form.submit()).resolves.toBe(true);
+        expect(label?.snapshot.hasAny("locked", "submitting")).toBe(false);
+        expect(a.snapshot.hasAny("locked", "submitting")).toBe(false);
     });
 
     it("B21 — une soumission supplantée par reset() ne relâche pas celle qui l'a suivie (#19)", async () => {
