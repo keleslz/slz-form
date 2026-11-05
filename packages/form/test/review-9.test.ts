@@ -226,6 +226,70 @@ describe("neuvième tour de revue", () => {
         }
     });
 
+    it("une règle abandonnée ne récupère pas son verdict précédent, quelle que soit son écriture", async () => {
+        /** Accepte, jusqu'à ce que le test la fasse pendre : sa promesse ne retombe plus. */
+        class HangsOnDemand extends IValidator<string> {
+            hang = false;
+            protected validate(): void | Promise<void> {
+                if (this.hang) {
+                    return new Promise<void>(() => {});
+                }
+                return undefined;
+            }
+        }
+
+        for (const [label, wrap] of [
+            ["seul", (rule: HangsOnDemand) => rule],
+            ["composé", (rule: HangsOnDemand) => [rule, new Noop()]],
+            ["différé", (rule: HangsOnDemand) => new DebouncedValidator(rule, 5)],
+            ["différé et composé", (rule: HangsOnDemand) => [new DebouncedValidator(rule, 5), new Noop()]],
+        ] as const) {
+            const form = new FormController<{ a: string }>({ name: `n7c-${label}`, settleTimeout: 40 });
+            const rule = new HangsOnDemand();
+            const field = form.field("a", { validator: wrap(rule) });
+            field.mount();
+            form.mount();
+
+            field.change("ok");
+            await until(() => field.snapshot.ui.validity === "valid", { timeout: 2000 });
+
+            // La convergence expire, `recover()` abandonne la passe : le
+            // verdict d'avant a été rendu sur une autre valeur.
+            rule.hang = true;
+            field.change("jamais jugé");
+            await expect(form.submit(), label).resolves.toBe(false);
+
+            expect(field.isBusy, label).toBe(false);
+            expect(field.snapshot.errors.length > 0, label).toBe(true);
+            expect(form.snapshot.hasFlag("valid"), label).toBe(false);
+        }
+    });
+
+    it("une passe abandonnée garde le refus qu'elle avait déjà rendu", async () => {
+        class Refuses extends IValidator<string> {
+            protected validate(value: string, report: ValidationReport): void {
+                report.errorIf(value === "non", "refusé", { code: "refused" });
+            }
+        }
+        class Hangs extends IValidator<string> {
+            protected validate(): Promise<void> {
+                return new Promise<void>(() => {});
+            }
+        }
+        const form = new FormController<{ a: string }>({ name: "n7d", settleTimeout: 40 });
+        const field = form.field("a", { validator: [new Refuses(), new Hangs()] });
+        field.mount();
+        form.mount();
+
+        field.change("non");
+        await expect(form.submit()).resolves.toBe(false);
+
+        // Le refus vient d'une règle qui a conclu : c'est lui qu'on montre, et
+        // non un « non vérifié » qui le masquerait.
+        expect(field.isBusy).toBe(false);
+        expect(field.snapshot.errors).toEqual(["refusé"]);
+    });
+
     it("une remise à zéro invalide le jeton de run", async () => {
         const form = new FormController<{ a: string }>({ name: "n8" });
         class Late extends IValidator<string> {

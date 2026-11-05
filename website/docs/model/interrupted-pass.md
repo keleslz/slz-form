@@ -27,14 +27,14 @@ the previous verdict would be wrong too: it was given on *another* value.
 The crash itself is recorded in `form.engineErrors`, with `scope: "validator"`
 and the rule's name — see [Engine errors](../guides/engine-errors.md).
 
-:::caution Known gap in the current version
-One case does not follow the table yet:
+A rule whose promise **never settles** is an interrupted pass too. When
+`submit()` gives up waiting (`settleTimeout`), the pass is abandoned: the field
+keeps a refusal that another rule already gave in that pass, or gets the
+blocking `"unverified"` issue — never its previous verdict.
 
-**A rule whose promise never settles gets its previous verdict back** once
-`submit()` gives up waiting (`settleTimeout`). The submission is refused, but
-the field shows its old verdict until the next run. Worse, if the rule is
-re-validating a value that changed while `submit()` was waiting, `submit()`
-does not give up at all and never returns — see
+:::caution Known gap in the current version
+If the rule is re-validating a value that changed while `submit()` was waiting,
+`submit()` does not give up at all and never returns — see
 [Settings](../guides/submit.md#settings). Give network calls a timeout —
 `AbortSignal.timeout(ms)` — so they always settle.
 :::

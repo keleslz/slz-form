@@ -221,8 +221,12 @@ export abstract class IValidator<T = string> {
     private readonly staleListeners = new Set<ValidatorListener>();
     /** Jeton de run monotone — un résultat périmé ne doit pas écraser un plus frais. */
     private run = 0;
-    /** Statut d'avant l'entrée en `loading`, pour pouvoir y revenir. */
-    private beforeLoading: ValidatorStatus = "pristine";
+    /**
+     * Le rapport de la passe en vol, tant qu'elle attend une règle
+     * asynchrone. `abandon()` publie ce qu'il contient : c'est le seul endroit
+     * où vit ce que la passe a déjà conclu.
+     */
+    private inflight: ValidationReport | null = null;
 
     /**
      * Les règles propres au champ. Les constats passent par `report` ; renvoyer
@@ -255,11 +259,6 @@ export abstract class IValidator<T = string> {
 
     async handle(value: T | undefined, ctx: ValidationContext = detachedContext()): Promise<ValidatorState> {
         const run = ++this.run;
-        // Mémorisé avant la passe, et pas seulement à l'entrée en `loading` :
-        // une passe purement synchrone peut être interrompue elle aussi.
-        if (this.state.status !== "loading") {
-            this.beforeLoading = this.state.status;
-        }
         const report = new ValidationReport();
         const empty = this.isEmpty(value);
 
@@ -284,6 +283,7 @@ export abstract class IValidator<T = string> {
         }
         if (pending instanceof Promise) {
             this.setState(makeState("loading", this.state.issues));
+            this.inflight = report;
             try {
                 await pending;
             } catch (error) {
@@ -307,6 +307,7 @@ export abstract class IValidator<T = string> {
             return this.state;
         }
 
+        this.inflight = null;
         this.publish(report);
         return this.state;
     }
@@ -384,17 +385,25 @@ export abstract class IValidator<T = string> {
     }
 
     /**
-     * Abandonne une validation en vol : sort de `loading` en gardant le dernier
-     * verdict, et invalide le run pour que son résultat tardif soit écarté.
+     * Abandonne une validation en vol : sort de `loading`, et invalide le run
+     * pour que son résultat tardif soit écarté.
      *
      * Sans ça, une règle dont la promesse ne retombe jamais laissait le champ
      * occupé et condamnait toutes les soumissions suivantes — le pendant côté
      * behavior était traité, celui-ci non.
+     *
+     * Une passe abandonnée est une passe **interrompue** : elle publie ce
+     * qu'elle a déjà conclu — un refus, `required`, un membre synchrone —, et
+     * à défaut `unverified`, bloquant. Revenir au statut d'avant `loading`
+     * recollait à la valeur courante un verdict rendu sur une autre (#20).
      */
     abandon(): void {
         this.run += 1;
-        if (this.state.status === "loading") {
-            this.setState(makeState(this.beforeLoading, this.state.issues));
+        const report = this.inflight;
+        this.inflight = null;
+        if (this.state.status === "loading" && report) {
+            report.fail();
+            this.publish(report);
         }
     }
 
@@ -408,6 +417,7 @@ export abstract class IValidator<T = string> {
 
     reset(): void {
         this.run += 1;
+        this.inflight = null;
         this.setState(makeState("pristine", []));
     }
 
