@@ -472,7 +472,7 @@ describe("régressions", () => {
         expect(field.snapshot.errors).toEqual(["Validation unavailable"]);
     });
 
-    it("B20 — une liste aux règles lentes se soumet, sans laisser de ligne verrouillée (#19)", async () => {
+    it("B20 — garde-fou : une liste aux règles lentes se soumet, sans laisser de ligne verrouillée (pas d'échéance unique)", async () => {
         class Slow extends IValidator<string> {
             protected async validate(): Promise<void> {
                 await wait(120);
@@ -528,7 +528,7 @@ describe("régressions", () => {
         expect(field.snapshot.hasAny("locked", "submitting")).toBe(false);
     });
 
-    it("B22 — un champ retiré pendant la soumission n'y reste pas verrouillé (#19)", async () => {
+    it("B22 — garde-fou : un champ retiré pendant la soumission n'y reste pas verrouillé (jeton de soumission)", async () => {
         let release: () => void = () => {};
         const slow: IBehavior<string> = {
             onSubmit: async (ctx) => {
@@ -610,7 +610,7 @@ describe("régressions", () => {
         expect(row?.form.snapshot.status).toBe("idle");
     });
 
-    it("B24 — le rejugement a son propre settleTimeout, il ne prend pas le reste de l'attente (#19)", async () => {
+    it("B24 — garde-fou : le rejugement a son propre settleTimeout, il ne prend pas le reste de l'attente", async () => {
         // La valeur écrite tard est jugée vite à l'écriture, puis rejugée
         // lentement : l'attente finit juste avant son échéance, et le
         // rejugement, qui tient dans un délai entier, doit pouvoir aboutir.
@@ -639,5 +639,46 @@ describe("régressions", () => {
 
         await expect(form.submit()).resolves.toBe(true);
         expect(lateCalls).toBeGreaterThan(1);
+    });
+
+    it("B25 — un reset() synchrone au démarrage de submit() ne laisse aucun champ verrouillé (#19)", async () => {
+        // Depuis un abonné du champ : le `reset()` tombe au milieu du
+        // verrouillage des champs.
+        const form = new FormController<{ a: string; b: string }>({ name: "b25-field" });
+        const a = form.field("a", { initialValue: "x" });
+        const b = form.field("b", { initialValue: "y" });
+        a.mount();
+        b.mount();
+        form.mount();
+        let resetOnce = false;
+        a.listen(() => {
+            if (!resetOnce && a.snapshot.hasFlag("submitting")) {
+                resetOnce = true;
+                form.reset();
+            }
+        });
+
+        await expect(form.submit()).resolves.toBe(false);
+        expect(form.snapshot.status).toBe("idle");
+        expect(a.snapshot.hasAny("locked", "submitting")).toBe(false);
+        expect(b.snapshot.hasAny("locked", "submitting")).toBe(false);
+
+        // Depuis un abonné du formulaire : le `reset()` tombe au passage en
+        // « submitting », avant que la soumission ait pris son jeton.
+        const other = new FormController<{ c: string }>({ name: "b25-form" });
+        const c = other.field("c", { initialValue: "z" });
+        c.mount();
+        other.mount();
+        let resetOther = false;
+        other.listen(() => {
+            if (!resetOther && other.snapshot.status === "submitting") {
+                resetOther = true;
+                other.reset();
+            }
+        });
+
+        await expect(other.submit()).resolves.toBe(false);
+        expect(other.snapshot.status).toBe("idle");
+        expect(c.snapshot.hasAny("locked", "submitting")).toBe(false);
     });
 });

@@ -41,9 +41,12 @@ const ENGINE_ERROR_CAP = 50;
 export interface FormParams {
     name: string;
     /**
-     * Temps maximum accordé, à la soumission, pour que tout travail asynchrone
-     * en cours se termine. Dépassé, la soumission échoue au lieu de partir avec
-     * des valeurs incomplètes. Défaut : 10 s.
+     * Temps maximum accordé à **chaque étape** de la soumission : la première
+     * validation, l'attente du travail asynchrone en cours, et chaque
+     * rejugement d'une valeur écrite pendant cette attente. Les lignes d'une
+     * liste ont les leurs. Une étape qui le dépasse fait échouer la soumission
+     * au lieu de la laisser partir avec des valeurs incomplètes ; la durée
+     * totale peut donc atteindre plusieurs fois ce délai. Défaut : 10 s.
      */
     settleTimeout?: number;
 }
@@ -411,15 +414,27 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         if (this.status === "submitting") {
             return false;
         }
-        this.setStatus("submitting");
+        // Le jeton est pris **avant** toute notification : un abonné qui
+        // appelle `reset()` dès le passage en « submitting » doit trouver la
+        // soumission déjà identifiée, sinon il ne la supplante pas.
         const run = ++this.submitRun;
+        this.setStatus("submitting");
         const mounted = [...this.fields.values()].filter((field) => field.isMounted);
 
         for (const field of mounted) {
+            // Chaque verrou notifie, et un abonné peut remettre à zéro en
+            // pleine boucle : les champs suivants ne doivent pas être verrouillés
+            // après coup, personne ne les relâcherait plus.
+            if (run !== this.submitRun) {
+                break;
+            }
             field.setSubmitting(true);
         }
 
         try {
+            if (run !== this.submitRun) {
+                return false;
+            }
             return await this.runSubmit(mounted, run);
         } finally {
             // Sans ce `finally`, la moindre exception — y compris levée par une
