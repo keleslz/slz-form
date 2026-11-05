@@ -271,7 +271,17 @@ export abstract class IValidator<T = string> {
         // sur du vide doit l'être même quand `required` a déjà parlé. C'est le
         // cas d'un constat serveur « ce champ manque », qui porterait sinon sur
         // la saisie suivante.
-        const pending = this.runInto(value, report, ctx);
+        let pending: void | Promise<void> = undefined;
+        try {
+            pending = this.runInto(value, report, ctx);
+        } catch (error) {
+            // Une règle synchrone qui lève prend le même chemin qu'une règle
+            // asynchrone qui rejette. Laisser l'exception sortir d'ici sautait
+            // `publish` : le verdict rendu sur la valeur précédente restait
+            // affiché, et la valeur courante partait comme valide.
+            ctx.reportFailure?.(this.constructor.name, error);
+            report.fail();
+        }
         if (pending instanceof Promise) {
             this.setState(makeState("loading", this.state.issues));
             try {

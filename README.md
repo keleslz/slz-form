@@ -278,10 +278,9 @@ instance) and applies them without the value changing.
 Rules do not run on an empty value (that is what `required` is for), unless the
 validator opts in.
 
-A rule that crashes gives the field a blocking `"unverified"` issue — except,
-currently, a plain rule that throws synchronously: it keeps its previous
-verdict, so an invalid value can be submitted. See
-[the known gap](https://keleslz.github.io/slz-form/docs/model/interrupted-pass).
+A rule that crashes — it throws, or its promise rejects — gives the field a
+blocking `"unverified"` issue. See
+[An interrupted pass](https://keleslz.github.io/slz-form/docs/model/interrupted-pass).
 
 ## Cross-field dependencies
 
@@ -394,10 +393,7 @@ if (!(await form.submit())) {
 
 Each `EngineError` carries `scope`, `kind` (`"hook-error"` or
 `"guard-violation"`), `field`, `rule` (validator errors only), `error`, and
-`at`. Keeping the form working does not always mean judging correctly: a rule
-that throws synchronously currently keeps its previous verdict and is recorded
-with `scope: "behavior"` —
-[the known gap](https://keleslz.github.io/slz-form/docs/model/interrupted-pass).
+`at`.
 
 This is a **pull** surface — an accessor, not a subscription. An engine error is
 a crash the engine already recovered from: a diagnostic record, not a live event

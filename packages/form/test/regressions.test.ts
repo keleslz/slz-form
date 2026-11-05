@@ -405,4 +405,28 @@ describe("régressions", () => {
         expect(target.snapshot.hasFlag("error")).toBe(false);
         expect(target.snapshot.errors).toHaveLength(1);
     });
+
+    it("B17 — une règle synchrone qui lève ne garde pas son verdict précédent (#18)", async () => {
+        class UrlValidator extends IValidator<string> {
+            protected validate(value: string, report: ValidationReport): void {
+                const url = new URL(value);
+                report.errorIf(url.protocol !== "https:", "https only");
+            }
+        }
+        const form = new FormController<{ site: string }>({ name: "b17" });
+        const site = form.field("site", { required: true, validator: new UrlValidator() });
+        site.mount();
+        form.mount();
+
+        site.change("https://ok.example");
+        await until(() => site.snapshot.ui.validity === "valid");
+
+        site.change("not a url at all");
+        await wait(10);
+
+        expect(site.snapshot.errors.length > 0).toBe(true);
+        expect(await form.submit()).toBe(false);
+        const [reported] = form.engineErrors;
+        expect(reported).toMatchObject({ scope: "validator", field: "site", rule: "UrlValidator" });
+    });
 });

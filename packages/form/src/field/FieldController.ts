@@ -578,8 +578,9 @@ export class FieldController<T = string, M = never> {
      *
      * Presque tous ses appelants l'ignorent par `void` — un rejet deviendrait
      * une promesse non rattrapée, c'est-à-dire la fin du process sous Node. Une
-     * règle qui casse n'est pas un verdict : `handle` garde le dernier en date,
-     * et ce qui remonte jusqu'ici est signalé sans être propagé.
+     * règle qui casse, synchrone ou non, est absorbée par `handle`, qui publie
+     * `unverified` ; ce qui remonte encore jusqu'ici est signalé sans être
+     * propagé.
      */
     private async revalidate(): Promise<void> {
         try {

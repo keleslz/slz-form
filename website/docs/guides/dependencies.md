@@ -105,12 +105,10 @@ where it happens (see [Engine errors](engine-errors.md)):
 - in a validator that is one of an array of two or more: as a
   `guard-violation`, and the field gets the blocking `"unverified"` issue
   (or another member's refusal);
-- in any other validator: it is a rule that throws. If the rule is `async`, the
-  field gets `"unverified"` and the record has `scope: "validator"`,
-  `kind: "hook-error"` and the rule's name. If it is not, the field currently
-  keeps its previous verdict, and the record has `scope: "behavior"`,
-  `kind: "hook-error"` and no `rule` — see
-  [the known gap](../model/interrupted-pass.md).
+- in any other validator: it is a rule that throws. The field gets
+  `"unverified"` and the record has `scope: "validator"`,
+  `kind: "hook-error"` and the rule's name — see
+  [An interrupted pass](../model/interrupted-pass.md).
 
 :::caution `ctx.form` is not checked
 `ctx.form.field(name)` and `ctx.form.values()` can read **any** field, without
