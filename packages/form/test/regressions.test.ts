@@ -582,4 +582,62 @@ describe("régressions", () => {
         expect(form.snapshot.status).toBe("idle");
         expect(field.snapshot.hasAny("locked", "submitting")).toBe(false);
     });
+
+    it("B23 — une soumission supplantée par reset() ne soumet pas les lignes du formulaire remis à zéro (#19)", async () => {
+        class Slow extends IValidator<string> {
+            protected async validate(): Promise<void> {
+                await wait(50);
+            }
+        }
+        type Fields = { a: string; lines: FieldArray<{ label: string }> };
+        const form = new FormController<Fields>({ name: "b23" });
+        const a = form.field("a", { validator: new Slow(), initialValue: "ok" });
+        a.mount();
+        form.mount();
+        await until(() => !a.isBusy, { timeout: 2000 });
+
+        const stale = form.submit();
+        await wait(10);
+        form.reset();
+        // Une ligne ajoutée après la remise à zéro appartient au formulaire neuf.
+        const lines = form.array("lines");
+        const row = lines.row(lines.append());
+        const label = row?.form.field("label", { initialValue: "x" });
+        label?.mount();
+
+        await expect(stale).resolves.toBe(false);
+        expect(label?.snapshot.hasFlag("touched")).toBe(false);
+        expect(row?.form.snapshot.status).toBe("idle");
+    });
+
+    it("B24 — le rejugement a son propre settleTimeout, il ne prend pas le reste de l'attente (#19)", async () => {
+        // La valeur écrite tard est jugée vite à l'écriture, puis rejugée
+        // lentement : l'attente finit juste avant son échéance, et le
+        // rejugement, qui tient dans un délai entier, doit pouvoir aboutir.
+        const writesLate: IBehavior<string> = {
+            onSubmit: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(80);
+                ctx.setValue("tardif");
+                return ctx.state.idle();
+            },
+        };
+        let lateCalls = 0;
+        class SlowOnRejudge extends IValidator<string> {
+            protected async validate(value: string): Promise<void> {
+                if (value === "tardif") {
+                    lateCalls += 1;
+                    await wait(lateCalls > 1 ? 50 : 1);
+                }
+            }
+        }
+        const form = new FormController<{ a: string }>({ name: "b24", settleTimeout: 100 });
+        const field = form.field("a", { behaviors: [writesLate], validator: new SlowOnRejudge(), initialValue: "ok" });
+        field.mount();
+        form.mount();
+        await until(() => !field.isBusy);
+
+        await expect(form.submit()).resolves.toBe(true);
+        expect(lateCalls).toBeGreaterThan(1);
+    });
 });

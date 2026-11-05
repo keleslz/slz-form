@@ -348,7 +348,7 @@ In order, it:
 4. validates again what changed meanwhile;
 5. returns `true` only if that work finished in time and the form is valid.
 
-Steps 1–2 and 3–4 each get `settleTimeout`. `form.reset()` during a
+Steps 1–2, 3 and 4 each get their own `settleTimeout`. `form.reset()` during a
 submission releases the fields at once; the submission that was in flight no
 longer changes anything when it settles.
 

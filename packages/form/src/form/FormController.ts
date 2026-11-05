@@ -459,16 +459,24 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             this.settleTimeout,
         );
 
+        // Supplantée par un `reset()` : la remise à zéro a déjà rendu champs et
+        // statut. Vérifié **entre chaque étape**, et pas seulement à la fin :
+        // une soumission périmée qui continuait soumettait les lignes du
+        // formulaire neuf et rejugeait ses champs.
+        if (run !== this.submitRun) {
+            return false;
+        }
+
         // Les lignes sont soumises avec le reste : leurs valeurs doivent être
         // posées et jugées avant qu'on statue sur le formulaire.
         const rowsValid = (await Promise.all(
             [...this.arrays.values()].map((rows) => rows.submit()),
         )).every(Boolean);
+        if (run !== this.submitRun) {
+            return false;
+        }
 
-        const settled = touched && await this.settle(mounted);
-
-        // Supplantée par un `reset()` pendant l'attente : la remise à zéro a
-        // déjà rendu champs et statut, et rien de ce qui suit ne la concerne.
+        const settled = touched && await this.settle(mounted, run);
         if (run !== this.submitRun) {
             return false;
         }
@@ -555,13 +563,16 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
      * Boucle, parce qu'une écriture peut en déclencher une autre — un lookup en
      * chaîne (code postal → ville → région). Bornée en passes et dans le temps.
      */
-    private async settle(fields: readonly AnyField[]): Promise<boolean> {
+    private async settle(fields: readonly AnyField[], run: number): Promise<boolean> {
         const deadline = Date.now() + this.settleTimeout;
         const before = new Map<AnyField, unknown>(fields.map((field) => [field, field.snapshot.value]));
 
         for (let round = 0; round < MAX_SETTLE_ROUNDS; round += 1) {
             const wasBusy = fields.some((field) => field.isBusy);
             if (!(await this.waitIdle(fields, deadline))) {
+                return false;
+            }
+            if (run !== this.submitRun) {
                 return false;
             }
             // Rien n'était en vol au premier tour : `field.submit()` vient de
@@ -579,13 +590,14 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             for (const field of fields) {
                 before.set(field, field.snapshot.value);
             }
-            // Borné lui aussi, sur le **reste** du délai : une valeur écrite
-            // pendant l'attente — un lookup qui retombe — est rejugée par une
-            // règle qui peut ne jamais répondre. Hors deadline, `submit()` ne
-            // rendait plus jamais la main (#19).
+            // Borné lui aussi, par **son propre** `settleTimeout` : une valeur
+            // écrite pendant l'attente — un lookup qui retombe — est rejugée par
+            // une règle qui peut ne jamais répondre. Hors délai, `submit()` ne
+            // rendait plus jamais la main (#19). Pas le reste de l'attente : il
+            // peut valoir 0, et refuserait un rejugement que rien ne bornait.
             const rejudged = await withDeadline(
                 Promise.all(changed.map((field) => field.validateNow())),
-                Math.max(0, deadline - Date.now()),
+                this.settleTimeout,
             );
             if (!rejudged) {
                 return false;
