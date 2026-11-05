@@ -87,10 +87,8 @@ An engine refusal is an `EngineGuardError`, which is exported:
 :::caution Current classification
 Reading a field with `ctx.watched()` without declaring it in `watch` is an API
 misuse, but today it is recorded as a `hook-error` — except inside an array of
-validators, where it is a `guard-violation`. And a validation rule that throws
-**synchronously** is recorded with `scope: "behavior"` and no `rule` (see
-[An interrupted pass](../model/interrupted-pass.md)). Do not rely on `kind` or
-`scope` alone to find these.
+validators, where it is a `guard-violation`. Do not rely on `kind` alone to
+find these.
 :::
 
 ## A rule that crashes

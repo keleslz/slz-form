@@ -27,25 +27,16 @@ the previous verdict would be wrong too: it was given on *another* value.
 The crash itself is recorded in `form.engineErrors`, with `scope: "validator"`
 and the rule's name — see [Engine errors](../guides/engine-errors.md).
 
-:::caution Known gaps in the current version
-Two cases do not follow the table yet:
+:::caution Known gap in the current version
+One case does not follow the table yet:
 
-- **A rule that throws synchronously keeps the previous verdict.** If
-  `validate()` is not `async` and throws — `new URL(value)` on a malformed
-  string, `JSON.parse` — the field keeps whatever verdict it had before, and an
-  invalid value can be submitted. The crash is recorded with
-  `scope: "behavior"`. A rule declared `async`, or a member of an array of two
-  or more validators, is handled as documented — an array of one is unwrapped
-  to the plain rule, and has the gap. Until this is fixed, catch the error and
-  report it yourself (example below). Declaring the rule `async` also works,
-  but then the field shows `loading` on every run.
-- **A rule whose promise never settles gets its previous verdict back** once
-  `submit()` gives up waiting (`settleTimeout`). The submission is refused, but
-  the field shows its old verdict until the next run. Worse, if the rule is
-  re-validating a value that changed while `submit()` was waiting, `submit()`
-  does not give up at all and never returns — see
-  [Settings](../guides/submit.md#settings). Give network calls a timeout —
-  `AbortSignal.timeout(ms)` — so they always settle.
+**A rule whose promise never settles gets its previous verdict back** once
+`submit()` gives up waiting (`settleTimeout`). The submission is refused, but
+the field shows its old verdict until the next run. Worse, if the rule is
+re-validating a value that changed while `submit()` was waiting, `submit()`
+does not give up at all and never returns — see
+[Settings](../guides/submit.md#settings). Give network calls a timeout —
+`AbortSignal.timeout(ms)` — so they always settle.
 :::
 
 ## Choosing to tolerate a failure
@@ -69,7 +60,10 @@ class Available extends IValidator<string> {
 }
 ```
 
-The same pattern protects a synchronous rule from the gap above:
+A synchronous rule that throws — `new URL(value)` on a malformed string,
+`JSON.parse` — is an interrupted pass like any other: the value is blocked as
+`unverified`. To give the user a precise message instead, catch the error and
+report it:
 
 ```ts
 class HttpsOnly extends IValidator<string> {

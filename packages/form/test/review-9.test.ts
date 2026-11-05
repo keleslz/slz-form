@@ -186,6 +186,46 @@ describe("neuvième tour de revue", () => {
         await expect(form.submit()).resolves.toBe(false);
     });
 
+    it("une règle qui lève de façon synchrone bloque, quelle que soit son écriture", async () => {
+        /** Synchrone : accepte, jusqu'à ce que le test la casse. */
+        class ThrowsSyncOnDemand extends IValidator<string> {
+            broken = false;
+            protected validate(): void {
+                if (this.broken) {
+                    throw new TypeError("règle cassée");
+                }
+            }
+        }
+
+        for (const [label, wrap] of [
+            ["seul", (rule: ThrowsSyncOnDemand) => rule],
+            ["composé", (rule: ThrowsSyncOnDemand) => [rule, new Noop()]],
+            ["différé", (rule: ThrowsSyncOnDemand) => new DebouncedValidator(rule, 5)],
+            ["différé et composé", (rule: ThrowsSyncOnDemand) => [new DebouncedValidator(rule, 5), new Noop()]],
+        ] as const) {
+            const form = new FormController<{ a: string }>({ name: `n7b-${label}` });
+            const rule = new ThrowsSyncOnDemand();
+            const field = form.field("a", { validator: wrap(rule) });
+            field.mount();
+            form.mount();
+
+            field.change("ok");
+            await until(() => field.snapshot.ui.validity === "valid", { timeout: 2000 });
+
+            // Le verdict précédent a été rendu sur une autre valeur : il ne
+            // doit pas se recoller à celle que la règle n'a pas pu juger.
+            rule.broken = true;
+            field.change("cassé");
+            await until(() => !field.isBusy && field.snapshot.errors.length > 0, { timeout: 2000 });
+
+            await expect(form.submit(), label).resolves.toBe(false);
+            // `submit()` rejoue la règle, qui casse de nouveau : un constat par
+            // passe, tous rattachés au validator.
+            expect(form.engineErrors.length, label).toBeGreaterThan(0);
+            expect(form.engineErrors.every((entry) => entry.scope === "validator"), label).toBe(true);
+        }
+    });
+
     it("une remise à zéro invalide le jeton de run", async () => {
         const form = new FormController<{ a: string }>({ name: "n8" });
         class Late extends IValidator<string> {
