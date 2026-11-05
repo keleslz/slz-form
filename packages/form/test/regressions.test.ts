@@ -467,7 +467,96 @@ describe("régressions", () => {
         expect(Date.now() - started).toBeLessThan(1000);
         expect(lateCalls).toBeGreaterThan(1);
         expect(form.snapshot.hasFlag("submitting")).toBe(false);
+        expect(field.snapshot.hasAny("locked", "submitting", "loading")).toBe(false);
+        // La passe abandonnée n'est pas un verdict : la valeur est non vérifiée.
+        expect(field.snapshot.errors).toEqual(["Validation unavailable"]);
+    });
+
+    it("B20 — settleTimeout borne la soumission entière, pas chaque phase (#19)", async () => {
+        // Chaque phase tient seule dans le délai ; ensemble, elles le dépassent.
+        const writesLate: IBehavior<string> = {
+            onSubmit: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(120);
+                ctx.setValue("tardif");
+                return ctx.state.idle();
+            },
+        };
+        class Slow extends IValidator<string> {
+            protected async validate(): Promise<void> {
+                await wait(120);
+            }
+        }
+        const form = new FormController<{ a: string }>({ name: "b20", settleTimeout: 200 });
+        const field = form.field("a", { behaviors: [writesLate], validator: new Slow(), initialValue: "ok" });
+        field.mount();
+        form.mount();
+        await until(() => !field.isBusy);
+
+        const started = Date.now();
+        const result = await form.submit();
+
+        expect(result).toBe(false);
+        expect(Date.now() - started).toBeLessThan(330);
+    });
+
+    it("B21 — une soumission supplantée par reset() ne relâche pas celle qui l'a suivie (#19)", async () => {
+        const releases: (() => void)[] = [];
+        const slow: IBehavior<string> = {
+            onSubmit: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await new Promise<void>((resolve) => { releases.push(resolve); });
+                return ctx.state.idle();
+            },
+        };
+        const form = new FormController<{ a: string }>({ name: "b21", settleTimeout: 100 });
+        const field = form.field("a", { behaviors: [slow], initialValue: "x" });
+        field.mount();
+        form.mount();
+
+        // La première part, est supplantée par `reset()`, puis une deuxième
+        // part 60 ms plus tard : la première expire donc en pleine deuxième.
+        const first = form.submit();
+        await wait(60);
+        form.reset();
+        const second = form.submit();
+
+        await expect(first).resolves.toBe(false);
+        // Elle ne doit ni relâcher les verrous de la deuxième, ni remettre le
+        // formulaire à `idle` — ce qui laisserait partir une troisième.
+        expect(form.snapshot.status).toBe("submitting");
+        expect(field.snapshot.hasAny("locked", "submitting")).toBe(true);
+        await expect(form.submit()).resolves.toBe(false);
+
+        releases[1]?.();
+        await expect(second).resolves.toBe(true);
         expect(field.snapshot.hasAny("locked", "submitting")).toBe(false);
+    });
+
+    it("B22 — un champ retiré pendant la soumission n'y reste pas verrouillé (#19)", async () => {
+        let release: () => void = () => {};
+        const slow: IBehavior<string> = {
+            onSubmit: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await new Promise<void>((resolve) => { release = resolve; });
+                return ctx.state.idle();
+            },
+        };
+        const form = new FormController<{ a: string; b: string }>({ name: "b22" });
+        const a = form.field("a", { behaviors: [slow], initialValue: "x" });
+        const b = form.field("b", { initialValue: "y" });
+        a.mount();
+        b.mount();
+        form.mount();
+
+        const pending = form.submit();
+        await until(() => b.snapshot.hasFlag("submitting"));
+        form.remove("b");
+        form.reset();
+        release();
+        await pending;
+
+        expect(b.snapshot.hasAny("locked", "submitting")).toBe(false);
     });
 
     it("B19 — reset() pendant une soumission déverrouille les champs, et la soumission périmée ne réécrit rien (#19)", async () => {

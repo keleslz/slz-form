@@ -219,8 +219,9 @@ new FormController<SignupFields>({ name: "signup", settleTimeout: 5_000 });
 `settleTimeout` is how long `submit()` waits for work in flight, in
 milliseconds. The rows of a list use their parent form's `settleTimeout`.
 
-`settleTimeout` bounds the whole wait: the first validation, the work in
-flight, and the second validation of a value that changed during the wait.
+`settleTimeout` bounds the whole submission with a single deadline: the first
+validation, the rows of a list, the work in flight, and the second validation
+of a value that changed during the wait.
 When it runs out, `submit()` returns `false` and the fields that were still
 `loading` are released. A rule whose promise never settles therefore costs one
 `settleTimeout`, not the form. Still give every network call in a validator a
@@ -228,5 +229,6 @@ timeout, for example `fetch(url, { signal: AbortSignal.timeout(5_000) })`: the
 user should not wait 10 seconds for a refusal.
 
 `form.reset()` during a submission releases the fields at once. The submission
-that was in flight still resolves, but it no longer changes the form's status
-or its fields.
+that was in flight still resolves, with `false`, but it no longer changes the
+form's status or its fields. Resetting a single field with `field.reset()`
+does not release it: its form is still submitting.

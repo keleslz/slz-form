@@ -345,12 +345,12 @@ In order, it:
    error;
 2. runs the `onSubmit` hooks, and anything waiting on a debounce, now;
 3. waits for async work to finish, within `settleTimeout`;
-4. validates again what changed meanwhile, within what is left of
-   `settleTimeout`;
+4. validates again what changed meanwhile;
 5. returns `true` only if that work finished in time and the form is valid.
 
-`form.reset()` during a submission releases the fields at once; the
-submission that was in flight no longer changes anything when it settles.
+`settleTimeout` is one deadline for all of these steps. `form.reset()` during a
+submission releases the fields at once; the submission that was in flight no
+longer changes anything when it settles.
 
 ```ts
 if (await form.submit()) {
