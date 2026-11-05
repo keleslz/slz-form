@@ -429,4 +429,73 @@ describe("régressions", () => {
         const [reported] = form.engineErrors;
         expect(reported).toMatchObject({ scope: "validator", field: "site", rule: "UrlValidator" });
     });
+
+    it("B18 — le rejugement d'une valeur écrite pendant la soumission est borné par settleTimeout (#19)", async () => {
+        // Un lookup écrit pendant la soumission ; la règle juge cette valeur
+        // une première fois, puis ne répond plus quand `settle` la rejuge.
+        const writesLate: IBehavior<string> = {
+            onSubmit: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(20);
+                ctx.setValue("tardif");
+                return ctx.state.idle();
+            },
+        };
+        let lateCalls = 0;
+        class HangsOnRejudge extends IValidator<string> {
+            protected async validate(value: string): Promise<void> {
+                if (value === "tardif") {
+                    lateCalls += 1;
+                    if (lateCalls > 1) {
+                        return new Promise<void>(() => {});
+                    }
+                }
+                await wait(1);
+            }
+        }
+        const form = new FormController<{ a: string }>({ name: "b18", settleTimeout: 150 });
+        const field = form.field("a", { behaviors: [writesLate], validator: new HangsOnRejudge() });
+        field.mount();
+        form.mount();
+        field.change("ok");
+        await until(() => field.snapshot.ui.validity === "valid");
+
+        const started = Date.now();
+        const result = await Promise.race([form.submit(), wait(1500).then(() => "pendu" as const)]);
+
+        expect(result).toBe(false);
+        expect(Date.now() - started).toBeLessThan(1000);
+        expect(lateCalls).toBeGreaterThan(1);
+        expect(form.snapshot.hasFlag("submitting")).toBe(false);
+        expect(field.snapshot.hasAny("locked", "submitting")).toBe(false);
+    });
+
+    it("B19 — reset() pendant une soumission déverrouille les champs, et la soumission périmée ne réécrit rien (#19)", async () => {
+        let release: () => void = () => {};
+        const slow: IBehavior<string> = {
+            onSubmit: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await new Promise<void>((resolve) => { release = resolve; });
+                return ctx.state.idle();
+            },
+        };
+        const form = new FormController<{ a: string }>({ name: "b19" });
+        const field = form.field("a", { behaviors: [slow], initialValue: "x" });
+        field.mount();
+        form.mount();
+
+        const pending = form.submit();
+        await until(() => field.snapshot.hasFlag("submitting"));
+
+        form.reset();
+        expect(form.snapshot.status).toBe("idle");
+        expect(field.snapshot.hasAny("locked", "submitting")).toBe(false);
+
+        // La soumission d'avant la remise à zéro finit par retomber : elle ne
+        // doit ni marquer le formulaire « submitted », ni toucher aux verrous.
+        release();
+        await pending;
+        expect(form.snapshot.status).toBe("idle");
+        expect(field.snapshot.hasAny("locked", "submitting")).toBe(false);
+    });
 });

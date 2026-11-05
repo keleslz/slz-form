@@ -345,12 +345,12 @@ In order, it:
    error;
 2. runs the `onSubmit` hooks, and anything waiting on a debounce, now;
 3. waits for async work to finish, within `settleTimeout`;
-4. validates again what changed meanwhile;
+4. validates again what changed meanwhile, within what is left of
+   `settleTimeout`;
 5. returns `true` only if that work finished in time and the form is valid.
 
-> Known gap: a rule whose promise never settles during step 4 blocks
-> `submit()` for good. Give network calls a timeout — see
-> [Settings](https://keleslz.github.io/slz-form/docs/guides/submit#settings).
+`form.reset()` during a submission releases the fields at once; the
+submission that was in flight no longer changes anything when it settles.
 
 ```ts
 if (await form.submit()) {

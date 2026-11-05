@@ -69,6 +69,13 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
     private readonly graph = new DependencyGraph();
     private readonly listeners = new Set<Listener>();
     /**
+     * Jeton de soumission : `reset()` le fait avancer. Une soumission partie
+     * avant la remise à zéro peut retomber après elle ; elle ne doit plus rien
+     * écrire — ni statut, ni verrous, ni `recover()` —, la remise à zéro a déjà
+     * tout rendu.
+     */
+    private submitRun = 0;
+    /**
      * Le tampon des erreurs du moteur. **Hors du snapshot** (invariant 10) : le
      * consommateur les lit par `engineErrors`, jamais par la surface de rendu.
      * Un tampon, pas un canal d'abonnement : une erreur du moteur est un crash
@@ -401,6 +408,7 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             return false;
         }
         this.setStatus("submitting");
+        const run = ++this.submitRun;
         const mounted = [...this.fields.values()].filter((field) => field.isMounted);
 
         for (const field of mounted) {
@@ -408,7 +416,7 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         }
 
         try {
-            return await this.runSubmit(mounted);
+            return await this.runSubmit(mounted, run);
         } finally {
             // Sans ce `finally`, la moindre exception — y compris levée par une
             // garde du moteur — laissait le formulaire verrouillé sur
@@ -419,10 +427,12 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             // serait jamais relâché s'il fallait avoir été présent au départ ;
             // un champ retiré entre-temps n'est plus dans la map et resterait
             // verrouillé pour toujours.
-            for (const field of new Set([...mounted, ...this.fields.values()])) {
-                field.setSubmitting(false);
+            if (run === this.submitRun) {
+                for (const field of new Set([...mounted, ...this.fields.values()])) {
+                    field.setSubmitting(false);
+                }
+                this.leaveSubmitting();
             }
-            this.leaveSubmitting();
         }
     }
 
@@ -433,7 +443,7 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
         }
     }
 
-    private async runSubmit(mounted: readonly AnyField[]): Promise<boolean> {
+    private async runSubmit(mounted: readonly AnyField[], run: number): Promise<boolean> {
 
         // `field.submit()` touche le champ, déclenche `onSubmit` — ce qui fait
         // partir les fenêtres différées — et revalide.
@@ -454,6 +464,12 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
 
         const settled = touched && await this.settle(mounted);
 
+        // Supplantée par un `reset()` pendant l'attente : la remise à zéro a
+        // déjà rendu champs et statut, et rien de ce qui suit ne la concerne.
+        if (run !== this.submitRun) {
+            return false;
+        }
+
         if (!settled) {
             // La convergence a expiré : un champ est resté en vol. Sans ça il
             // garderait `loading` + `locked` indéfiniment, et **toutes** les
@@ -469,7 +485,13 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
     }
 
     reset(): void {
+        // Une soumission en vol est supplantée : elle ne relâchera plus les
+        // verrous en retombant, c'est donc ici qu'on les rend. Sans ça, une
+        // soumission restée pendue laissait les champs `locked` + `submitting`
+        // après la remise à zéro (#19).
+        this.submitRun += 1;
         for (const field of this.fields.values()) {
+            field.setSubmitting(false);
             field.reset();
         }
         for (const rows of this.arrays.values()) {
@@ -554,7 +576,17 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
             for (const field of fields) {
                 before.set(field, field.snapshot.value);
             }
-            await Promise.all(changed.map((field) => field.validateNow()));
+            // Borné lui aussi, sur le **reste** du délai : une valeur écrite
+            // pendant l'attente — un lookup qui retombe — est rejugée par une
+            // règle qui peut ne jamais répondre. Hors deadline, `submit()` ne
+            // rendait plus jamais la main (#19).
+            const rejudged = await withDeadline(
+                Promise.all(changed.map((field) => field.validateNow())),
+                Math.max(0, deadline - Date.now()),
+            );
+            if (!rejudged) {
+                return false;
+            }
             if (!fields.some((field) => field.isBusy)) {
                 return true;
             }
