@@ -681,4 +681,40 @@ describe("régressions", () => {
         expect(other.snapshot.status).toBe("idle");
         expect(c.snapshot.hasAny("locked", "submitting")).toBe(false);
     });
+
+    it("B26 — une soumission supplantée ne rejuge pas les champs du formulaire remis à zéro (#19)", async () => {
+        const slow: IBehavior<string> = {
+            onSubmit: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(60);
+                return ctx.state.idle();
+            },
+        };
+        let initCalls = 0;
+        class Counts extends IValidator<string> {
+            protected validate(value: string): void {
+                if (value === "init") {
+                    initCalls += 1;
+                }
+            }
+        }
+        const form = new FormController<{ a: string }>({ name: "b26" });
+        const field = form.field("a", { behaviors: [slow], validator: new Counts(), initialValue: "init" });
+        field.mount();
+        form.mount();
+        field.change("saisi");
+        await until(() => !field.isBusy);
+
+        const stale = form.submit();
+        await wait(20);
+        // La remise à zéro rend la valeur initiale et la juge, une fois.
+        form.reset();
+        const afterReset = initCalls;
+        await expect(stale).resolves.toBe(false);
+        await wait(20);
+
+        // La soumission périmée voit la valeur changer pendant son attente :
+        // elle ne doit pas la rejuger pour autant.
+        expect(initCalls).toBe(afterReset);
+    });
 });

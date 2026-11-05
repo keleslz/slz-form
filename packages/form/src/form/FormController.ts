@@ -42,8 +42,9 @@ export interface FormParams {
     name: string;
     /**
      * Temps maximum accordé à **chaque étape** de la soumission : la première
-     * validation, l'attente du travail asynchrone en cours, et chaque
-     * rejugement d'une valeur écrite pendant cette attente. Les lignes d'une
+     * validation, l'attente du travail asynchrone en cours (tous ses tours
+     * ensemble), et chaque rejugement d'une valeur écrite pendant cette
+     * attente. Les lignes d'une
      * liste ont les leurs. Une étape qui le dépasse fait échouer la soumission
      * au lieu de la laisser partir avec des valeurs incomplètes ; la durée
      * totale peut donc atteindre plusieurs fois ce délai. Défaut : 10 s.

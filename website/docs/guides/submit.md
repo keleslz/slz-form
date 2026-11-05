@@ -49,8 +49,9 @@ In order:
    before the form is judged, otherwise you would send a value that is not
    there yet. A field whose value changed while waiting is validated again.
    How long it can take:
-   - step 3, this wait, and each second validation get their own
-     `settleTimeout` (10 seconds by default);
+   - step 3 gets `settleTimeout` (10 seconds by default), and so does this
+     wait, all its rounds together;
+   - each second validation gets its own `settleTimeout` on top;
    - the rows of each list are submitted in between, with their own delays;
    - so the total can be several times `settleTimeout` — see
      [Settings](#settings).
@@ -220,15 +221,16 @@ new FormController<SignupFields>({ name: "signup", settleTimeout: 5_000 });
 `settleTimeout` is how long `submit()` waits for work in flight, in
 milliseconds. The rows of a list use their parent form's `settleTimeout`.
 
-`settleTimeout` bounds each step on its own: the first validation, the wait,
-and each second validation of a value that changed during the wait. When one
-of them runs out, `submit()` returns `false` and the fields that
+`settleTimeout` bounds each step on its own: the first validation, the wait
+for work in flight (all its rounds share that one delay), and each second
+validation of a value that changed during the wait. When one of them runs
+out, `submit()` returns `false` and the fields that
 were still `loading` are released. A rule whose promise never settles
 therefore costs a bounded wait, not the form. Still give every network call in a validator a
 timeout, for example `fetch(url, { signal: AbortSignal.timeout(5_000) })`: the
 user should not wait 10 seconds for a refusal.
 
 `form.reset()` during a submission releases the fields at once. The submission
-that was in flight still resolves, with `false`, but it no longer changes the
-form's status or its fields. Resetting a single field with `field.reset()`
+that was in flight still resolves, usually with `false`, but it no longer
+changes the form's status or its fields. Resetting a single field with `field.reset()`
 does not release it: its form is still submitting.
