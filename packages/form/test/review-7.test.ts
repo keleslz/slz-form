@@ -235,8 +235,11 @@ describe("septième tour — coûts et restitutions", () => {
         field.recover();
         await wait(120);
 
-        // Le run abandonné ne doit pas publier son verdict après coup.
-        expect(field.snapshot.errors).toEqual([]);
+        // Le run abandonné ne doit pas publier son verdict après coup. La
+        // valeur, elle, n'a été jugée par personne : non vérifiée, et non
+        // rendue au verdict d'avant (#20).
+        expect(field.snapshot.errors).not.toContain("verdict tardif");
+        expect(field.snapshot.errors).toEqual(["Validation unavailable"]);
         expect(field.snapshot.hasFlag("loading")).toBe(false);
     });
 });

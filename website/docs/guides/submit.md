@@ -66,7 +66,7 @@ verdict; and since it is mounted, its value **is** in `form.values()`.
 | Cause | What you see |
 |---|---|
 | a field or a row has a blocking issue | the errors are displayed (every field is touched now); `form.snapshot.errors` lists them by field |
-| the work in flight did not finish within `settleTimeout` | the fields that were still `loading` are released; `form.engineErrors` may tell why. A rule that was still running gets its previous verdict back, so the form can look `valid` until the next run — [a known gap](../model/interrupted-pass.md) |
+| the work in flight did not finish within `settleTimeout` | the fields that were still `loading` are released; `form.engineErrors` may tell why. A rule that was still running is [interrupted](../model/interrupted-pass.md): its field gets the blocking `"unverified"` issue, unless a rule already refused the value |
 | a submission was already running | nothing changes |
 
 ## What you send: `form.values()`
