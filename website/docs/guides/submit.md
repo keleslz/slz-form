@@ -49,10 +49,12 @@ In order:
    before the form is judged, otherwise you would send a value that is not
    there yet. A field whose value changed while waiting is validated again.
    How long it can take:
-   - step 3 and this wait each get `settleTimeout` (10 seconds by default), so
-     up to about twice that in total;
-   - the rows of each list are submitted in between, with their own wait;
-   - the second validation is not bounded — see [Settings](#settings).
+   - step 3 gets `settleTimeout` (10 seconds by default), and so does this
+     wait, all its rounds together;
+   - each second validation gets its own `settleTimeout` on top;
+   - the rows of each list are submitted in between, with their own delays;
+   - so the total can be several times `settleTimeout` — see
+     [Settings](#settings).
 5. **Judges.** It returns `true` only if everything settled in time and the form
    is `valid`. The status becomes `submitted` on success, `idle` on failure, and
    the fields lose the `submitting` flag and the lock that came with it.
@@ -219,11 +221,16 @@ new FormController<SignupFields>({ name: "signup", settleTimeout: 5_000 });
 `settleTimeout` is how long `submit()` waits for work in flight, in
 milliseconds. The rows of a list use their parent form's `settleTimeout`.
 
-:::caution A rule that never settles can block `submit()`
-`settleTimeout` bounds the first validation and the wait, but not the second
-validation of a value that changed during the wait. If a rule's promise never
-settles at that point, `submit()` never returns, and the form stays
-`submitting` with its fields locked — `reset()` does not unlock them. Give every
-network call in a validator a timeout, for example
-`fetch(url, { signal: AbortSignal.timeout(5_000) })`.
-:::
+`settleTimeout` bounds each step on its own: the first validation, the wait
+for work in flight (all its rounds share that one delay), and each second
+validation of a value that changed during the wait. When one of them runs
+out, `submit()` returns `false` and the fields that
+were still `loading` are released. A rule whose promise never settles
+therefore costs a bounded wait, not the form. Still give every network call in a validator a
+timeout, for example `fetch(url, { signal: AbortSignal.timeout(5_000) })`: the
+user should not wait 10 seconds for a refusal.
+
+`form.reset()` during a submission releases the fields at once. The submission
+that was in flight still resolves, usually with `false`, but it no longer
+changes the form's status or its fields. Resetting a single field with `field.reset()`
+does not release it: its form is still submitting.

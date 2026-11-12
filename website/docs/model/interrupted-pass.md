@@ -32,12 +32,10 @@ A rule whose promise **never settles** is an interrupted pass too. When
 keeps a refusal that another rule already gave in that pass, or gets the
 blocking `"unverified"` issue — never its previous verdict.
 
-:::caution Known gap in the current version
-If the rule is re-validating a value that changed while `submit()` was waiting,
-`submit()` does not give up at all and never returns — see
-[Settings](../guides/submit.md#settings). Give network calls a timeout —
-`AbortSignal.timeout(ms)` — so they always settle.
-:::
+That also holds when the rule is re-validating a value that changed while
+`submit()` was waiting — see [Settings](../guides/submit.md#settings). Give
+network calls a timeout (`AbortSignal.timeout(ms)`) so they settle long before
+`settleTimeout`.
 
 ## Choosing to tolerate a failure
 
