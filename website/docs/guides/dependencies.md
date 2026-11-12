@@ -83,10 +83,12 @@ would stay unlocked until `country` first changes.
 A validator's `watch` is a plain list of names: the rule is re-run when one of
 those fields' **value** changes.
 
-A list declared with `FieldArray` can be watched for its **value** only: the
+A list declared with `FieldArray` is watched like a field. Its **value** is the
 array of its rows' values, which changes when a row's value changes or a row is
-added, moved or removed. Today a list never notifies its validity or its
-activity, so `on: ["validity"]` and `on: ["activity"]` never fire for a list.
+added, moved or removed. Its **validity** is the verdict of all its rows
+(`valid` or `error`, never `pristine`), and its **activity** is `loading` while
+any row is busy: `on: ["validity"]` and `on: ["activity"]` fire when they
+change.
 
 ## Reading a watched field
 

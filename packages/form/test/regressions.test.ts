@@ -717,4 +717,77 @@ describe("régressions", () => {
         // elle ne doit pas la rejuger pour autant.
         expect(initCalls).toBe(afterReset);
     });
+
+    it("B27 — une liste réveille ceux qui observent sa validité (#22)", async () => {
+        type Fields = { total: number; lines: FieldArray<{ label: string }> };
+        const form = new FormController<Fields>({ name: "b27" });
+        let calls = 0;
+        const onValidity: IBehavior<number> = {
+            watch: [{ field: "lines", on: ["validity"] }],
+            onDependencyChanged: () => {
+                calls += 1;
+                return undefined;
+            },
+        };
+        form.field("total", { behaviors: [onValidity] }).mount();
+        const lines = form.array("lines");
+        form.mount();
+        const row = lines.row(lines.append());
+        const label = row?.form.field("label", { required: true });
+        label?.mount();
+        await until(() => lines.ui.validity === "error");
+        const whenInvalid = calls;
+        expect(whenInvalid).toBeGreaterThan(0);
+
+        label?.change("rempli");
+        await until(() => lines.ui.validity === "valid");
+        expect(calls).toBeGreaterThan(whenInvalid);
+    });
+
+    it("B28 — une liste réveille ceux qui observent son activité, et seulement eux (#22)", async () => {
+        type Fields = { total: number; lines: FieldArray<{ label: string }> };
+        const form = new FormController<Fields>({ name: "b28" });
+        let activityCalls = 0;
+        let valueCalls = 0;
+        const onActivity: IBehavior<number> = {
+            watch: [{ field: "lines", on: ["activity"] }],
+            onDependencyChanged: () => {
+                activityCalls += 1;
+                return undefined;
+            },
+        };
+        const onValue: IBehavior<number> = {
+            watch: ["lines"],
+            onDependencyChanged: () => {
+                valueCalls += 1;
+                return undefined;
+            },
+        };
+        form.field("total", { behaviors: [onActivity, onValue] }).mount();
+        const lines = form.array("lines");
+        form.mount();
+        // Une ligne qui travaille sans changer de valeur : le focus lance un
+        // appel, la valeur ne bouge pas.
+        const busyOnFocus: IBehavior<string> = {
+            onFocus: async (ctx) => {
+                ctx.push(ctx.state.loading());
+                await wait(20);
+                return ctx.state.idle();
+            },
+        };
+        const row = lines.row(lines.append());
+        const label = row?.form.field("label", { behaviors: [busyOnFocus], initialValue: "x" });
+        label?.mount();
+        await wait(10);
+        const valueBefore = valueCalls;
+        const activityBefore = activityCalls;
+
+        label?.focus();
+        await until(() => lines.ui.activity === "loading");
+        await until(() => lines.ui.activity === "idle");
+
+        expect(activityCalls - activityBefore).toBe(2);
+        // L'arbitrage 18 tient : ceux qui observent la valeur ne sont pas réveillés.
+        expect(valueCalls).toBe(valueBefore);
+    });
 });

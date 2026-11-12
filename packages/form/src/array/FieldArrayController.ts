@@ -1,3 +1,4 @@
+import type { FieldChanges } from "../behavior/IBehavior";
 import { UiState } from "../state";
 import type { FieldsShape } from "../field/Field";
 import type { FormController } from "../form/FormController";
@@ -13,8 +14,11 @@ export interface FieldArrayParams<TRow extends FieldsShape> {
      * s'importeraient mutuellement à l'exécution.
      */
     readonly createRow: (id: string) => FormController<TRow>;
-    /** Prévient le parent qu'il doit republier son instantané. */
-    readonly onChanged: (valuesChanged: boolean) => void;
+    /**
+     * Prévient le parent qu'il doit republier son instantané, avec les axes
+     * qui ont **réellement** bougé — comme un champ le fait au `commit()`.
+     */
+    readonly onChanged: (changes: FieldChanges) => void;
 }
 
 /**
@@ -33,7 +37,7 @@ export class FieldArrayController<TRow extends FieldsShape> {
     readonly name: string;
 
     private readonly createRow: (id: string) => FormController<TRow>;
-    private readonly onChanged: (valuesChanged: boolean) => void;
+    private readonly onChanged: (changes: FieldChanges) => void;
     private readonly listeners = new Set<Listener>();
     private entries: FieldArrayRow<TRow>[] = [];
     /**
@@ -48,6 +52,14 @@ export class FieldArrayController<TRow extends FieldsShape> {
     private nextId = 0;
     private mounted = false;
     private lastValues: readonly Readonly<Record<string, unknown>>[] = [];
+    /**
+     * Le verdict et l'activité publiés au dernier passage. Une liste s'observe
+     * comme un champ : `on: ["validity"]` ou `on: ["activity"]` doivent être
+     * réveillés quand ils bougent (#22). Une liste naît vide, donc valide et
+     * au repos.
+     */
+    private lastValidity: UiState["validity"] = "valid";
+    private lastActivity: UiState["activity"] = "idle";
 
     constructor(params: FieldArrayParams<TRow>) {
         this.name = params.name;
@@ -194,16 +206,17 @@ export class FieldArrayController<TRow extends FieldsShape> {
     };
 
     /**
-     * Une ligne a notifié. Ne remonter au parent que si ses **valeurs** ont
-     * bougé : monter un champ, le toucher ou le passer en `loading` n'en est
-     * pas une, et le signaler relancerait les appels qui observent la liste —
-     * jusqu'à pendant la soumission (arbitrage 18).
+     * Une ligne a notifié. La valeur n'est dite changée que si les **valeurs**
+     * ont bougé : monter un champ, le toucher ou le passer en `loading` n'en
+     * est pas une, et la signaler relancerait les appels qui observent la
+     * valeur de la liste — jusqu'à pendant la soumission (arbitrage 18). Le
+     * verdict et l'activité, eux, sont comparés par `emit`.
      */
     private publishContent(): void {
         const next = this.values();
         const changed = !sameValues(next, this.lastValues);
         this.lastValues = next;
-        this.onChanged(changed);
+        this.emit(changed);
     }
 
     /**
@@ -213,7 +226,7 @@ export class FieldArrayController<TRow extends FieldsShape> {
      * `append()` : une liste restée vide ne l'obtenait jamais.
      */
     private publishPresence(): void {
-        this.onChanged(false);
+        this.emit(false);
     }
 
     private publish(): void {
@@ -226,7 +239,26 @@ export class FieldArrayController<TRow extends FieldsShape> {
         }
         this.lastValues = this.values();
         // Ajouter, retirer ou déplacer une ligne change toujours le payload.
-        this.onChanged(true);
+        this.emit(true);
+    }
+
+    /**
+     * Remonte au parent ce qui a bougé, axe par axe. La valeur est dite par
+     * l'appelant ; le verdict et l'activité sont comparés ici au dernier
+     * passage. Un observateur n'est réveillé que par les axes qu'il a demandés,
+     * donc signaler la validité ne relance pas ceux qui observent la valeur
+     * (arbitrage 18).
+     */
+    private emit(valueChanged: boolean): void {
+        const { validity, activity } = this.ui;
+        const changes: FieldChanges = {
+            value: valueChanged,
+            validity: validity !== this.lastValidity,
+            activity: activity !== this.lastActivity,
+        };
+        this.lastValidity = validity;
+        this.lastActivity = activity;
+        this.onChanged(changes);
     }
 }
 

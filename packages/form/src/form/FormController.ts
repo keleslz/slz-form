@@ -175,14 +175,11 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
                 name: id,
                 settleTimeout: this.settleTimeout,
             }),
-            onChanged: (valuesChanged) => this.notifyFieldChanged(name, {
-                // Seule une vraie modification des **valeurs** propage. Un
-                // montage de champ, un `touched` ou un `loading` dans une ligne
-                // n'en est pas une : les signaler relancerait les appels réseau
-                // qui observent la liste, y compris pendant la soumission
-                // (arbitrage 18).
-                value: valuesChanged, validity: false, activity: false,
-            }),
+            // La liste dit ce qui a réellement bougé, axe par axe. Un
+            // observateur n'est réveillé que par les axes qu'il a déclarés :
+            // un `touched` ou un montage dans une ligne ne relance donc pas
+            // ceux qui observent la valeur (arbitrage 18).
+            onChanged: (changes) => this.notifyFieldChanged(name, changes),
         });
 
         this.arrays.set(name, controller as unknown as FieldArrayController<FieldsShape>);
