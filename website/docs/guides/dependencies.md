@@ -88,7 +88,8 @@ array of its rows' values, which changes when a row's value changes or a row is
 added, moved or removed. Its **validity** is the verdict of all its rows
 (`valid` or `error`, never `pristine`), and its **activity** is `loading` while
 any row is busy: `on: ["validity"]` and `on: ["activity"]` fire when they
-change.
+change. Rows are re-validated when the form is submitted, so a watcher on a
+list's activity also fires during `submit()`.
 
 ## Reading a watched field
 

@@ -741,7 +741,32 @@ describe("régressions", () => {
 
         label?.change("rempli");
         await until(() => lines.ui.validity === "valid");
-        expect(calls).toBeGreaterThan(whenInvalid);
+        expect(calls).toBe(whenInvalid + 1);
+
+        // Une frappe qui ne change pas le verdict ne réveille personne.
+        label?.change("autre");
+        await wait(10);
+        expect(calls).toBe(whenInvalid + 1);
+    });
+
+    it("B29 — lockUntilValid sur une liste suit son verdict (#22)", async () => {
+        type Fields = { total: number; lines: FieldArray<{ label: string }> };
+        const form = new FormController<Fields>({ name: "b29" });
+        const { lockUntilValid } = behaviorsFor(form);
+        const lines = form.array("lines");
+        const total = form.field("total", { behaviors: [lockUntilValid({ watch: ["lines"] })] });
+        total.mount();
+        form.mount();
+        await wait(10);
+        expect(total.snapshot.hasFlag("locked")).toBe(false);
+
+        const row = lines.row(lines.append());
+        const label = row?.form.field("label", { required: true });
+        label?.mount();
+        await until(() => total.snapshot.hasFlag("locked"));
+
+        label?.change("rempli");
+        await until(() => !total.snapshot.hasFlag("locked"));
     });
 
     it("B28 — une liste réveille ceux qui observent son activité, et seulement eux (#22)", async () => {
