@@ -592,7 +592,8 @@ export class FormController<TFields extends FieldsShape = FieldsShape> implement
                 return false;
             }
             // Rien n'était en vol au premier tour : `field.submit()` vient de
-            // valider, et aucune valeur n'a pu bouger depuis. Revalider ici
+            // valider, et le moteur n'a rien écrit depuis — une écriture externe
+            // pendant la soumission n'est pas refusée (arbitrage 39). Revalider ici
             // doublerait chaque appel réseau de validation, à chaque soumission.
             if (!wasBusy) {
                 return true;
