@@ -174,6 +174,10 @@ The vocabulary, and who is allowed to emit each flag:
 | `required` · `touched` · `focused` · `mounted` · `submitting` | cumulative | the Controller | interaction and lifecycle |
 | *your application's* | cumulative | Behaviors — `ctx.state.mark("skeleton")` | your own words |
 
+`locked` and `readonly` are display flags: the engine does not refuse a write on
+a field that carries them — `field.change()` goes through, even during
+`submit()`. Your input honours them (`disabled`, `readOnly`).
+
 The form answers the same two functions with the same words: `valid` · `error`
 (the verdict), `idle` · `submitting` · `submitted`, `loading`, `touched`.
 
